@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dependencies & Locks - Dev Manager</title>
+    <style>
+        :root {
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-elevated: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+            --brand-primary: #4ECDC4;
+            --color-locks: #ef4444;
+            --color-deps: #8b5cf6;
+            --color-blocks: #f59e0b;
+
+            /* Status colors */
+            --status-todo: #6366f1;
+            --status-in-progress: #f59e0b;
+            --status-review: #8b5cf6;
+            --status-done: #10b981;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 1.5rem;
+            gap: 1.5rem;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-icon {
+            width: 28px;
+            height: 28px;
+            stroke: var(--color-locks);
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .refresh-btn {
+            padding: 0.5rem 1rem;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-medium);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 150ms;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .refresh-btn:hover {
+            background: var(--surface-elevated);
+            color: var(--text-secondary);
+        }
+
+        .refresh-btn svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 1.5rem;
+            padding: 0.75rem 1rem;
+            background: var(--surface-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+        }
+
+        .stat-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* Locks Panel */
+        .locks-panel {
+            background: var(--surface-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: var(--surface-tertiary);
+            border-bottom: 1px solid var(--border-medium);
+        }
+
+        .panel-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .panel-title svg {
+            width: 16px;
+            height: 16px;
+            stroke: var(--color-locks);
+            fill: none;
+        }
+
+        .locks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .lock-card {
+            background: var(--surface-tertiary);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 150ms;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .lock-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--color-locks), #f97316);
+        }
+
+        .lock-card:hover {
+            border-color: var(--color-locks);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .lock-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .lock-task-id {
+            font-weight: 700;
+            color: var(--color-locks);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .lock-pulse {
+            width: 8px;
+            height: 8px;
+            background: var(--color-locks);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .lock-session {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-family: monospace;
+        }
+
+        .lock-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .lock-files {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+        }
+
+        .lock-file {
+            background: var(--surface-elevated);
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-family: monospace;
+            color: var(--text-secondary);
+        }
+
+        /* Dependencies Panel */
+        .deps-panel {
+            flex: 1;
+            background: var(--surface-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 300px;
+        }
+
+        .deps-container {
+            flex: 1;
+            padding: 1rem;
+            overflow: auto;
+        }
+
+        .dep-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .dep-group-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .dep-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            background: var(--surface-tertiary);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 150ms;
+        }
+
+        .dep-row:hover {
+            background: var(--surface-elevated);
+        }
+
+        .dep-task {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 120px;
+        }
+
+        .dep-task-id {
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .dep-task-id.source { color: var(--brand-primary); }
+        .dep-task-id.target { color: var(--text-secondary); }
+        .dep-task-id.done { color: var(--status-done); text-decoration: line-through; opacity: 0.7; }
+        .dep-task-id.locked { color: var(--color-locks); }
+
+        .dep-arrow {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .dep-arrow svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+        }
+
+        .dep-arrow.depends { color: var(--color-deps); }
+        .dep-arrow.blocks { color: var(--color-blocks); }
+
+        .dep-status {
+            font-size: 0.7rem;
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            margin-left: auto;
+        }
+
+        .dep-status.todo { background: rgba(99, 102, 241, 0.2); color: var(--status-todo); }
+        .dep-status.in-progress { background: rgba(245, 158, 11, 0.2); color: var(--status-in-progress); }
+        .dep-status.done { background: rgba(16, 185, 129, 0.2); color: var(--status-done); }
+
+        /* Empty states */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem 2rem;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .empty-state svg {
+            width: 48px;
+            height: 48px;
+            stroke: var(--text-muted);
+            opacity: 0.5;
+            margin-bottom: 1rem;
+            fill: none;
+        }
+
+        .empty-state p {
+            font-size: 0.9rem;
+        }
+
+        .empty-state .subtext {
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            opacity: 0.7;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-medium);
+            border-top-color: var(--brand-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.75rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 1.5rem;
+            padding: 0.75rem 1rem;
+            background: var(--surface-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* Connection indicator */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .connection-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--status-done);
+        }
+
+        .connection-dot.disconnected {
+            background: var(--color-locks);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <svg class="header-icon" viewBox="0 0 24 24">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <h1>Task Dependencies & Locks</h1>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="connection-status">
+                    <div class="connection-dot" id="connection-dot"></div>
+                    <span id="connection-text">Connected</span>
+                </div>
+                <button class="refresh-btn" onclick="refreshAll()">
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <path d="M23 4v6h-6"/>
+                        <path d="M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat">
+                <span class="stat-dot" style="background: var(--color-locks)"></span>
+                <span class="stat-value" id="stat-locks">0</span>
+                <span class="stat-label">Active Locks</span>
+            </div>
+            <div class="stat">
+                <span class="stat-dot" style="background: var(--color-blocks)"></span>
+                <span class="stat-value" id="stat-blocked">0</span>
+                <span class="stat-label">Blocked Tasks</span>
+            </div>
+            <div class="stat">
+                <span class="stat-dot" style="background: var(--color-deps)"></span>
+                <span class="stat-value" id="stat-deps">0</span>
+                <span class="stat-label">Dependencies</span>
+            </div>
+        </div>
+
+        <div class="locks-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Active Locks
+                </div>
+            </div>
+            <div class="locks-grid" id="locks-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading locks...
+                </div>
+            </div>
+        </div>
+
+        <div class="deps-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <circle cx="18" cy="5" r="3"/>
+                        <circle cx="6" cy="12" r="3"/>
+                        <circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                    Task Dependencies
+                </div>
+            </div>
+            <div class="deps-container" id="deps-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Loading dependencies...
+                </div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-dot" style="background: var(--color-locks)"></div>
+                <span>Locked (active session)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: var(--color-deps)"></div>
+                <span>Depends on</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: var(--color-blocks)"></div>
+                <span>Blocks</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-dot" style="background: var(--status-done)"></div>
+                <span>Completed</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let locks = [];
+        let dependencies = [];
+        let activeLockIds = new Set();
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', init);
+
+        async function init() {
+            await refreshAll();
+            setupSSE();
+        }
+
+        async function refreshAll() {
+            await Promise.all([
+                loadLocks(),
+                loadDependencies()
+            ]);
+        }
+
+        // Load active locks
+        async function loadLocks() {
+            try {
+                const response = await fetch('/api/locks?t=' + Date.now());
+                const data = await response.json();
+                locks = data.locks || [];
+                activeLockIds = new Set(locks.map(l => l.task_id));
+                renderLocks();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to load locks:', error);
+                document.getElementById('locks-container').innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <p>Failed to load locks</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Render locks grid
+        function renderLocks() {
+            const container = document.getElementById('locks-container');
+
+            if (locks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" stroke-width="1.5">
+                            <rect x="3" y="11" width="18" height="11" rx="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                        </svg>
+                        <p>No active locks</p>
+                        <p class="subtext">All tasks are available for work</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = locks.map(lock => `
+                <div class="lock-card" onclick="jumpToTask('${lock.task_id}')">
+                    <div class="lock-card-header">
+                        <div class="lock-task-id">
+                            <span class="lock-pulse"></span>
+                            ${lock.task_id}
+                        </div>
+                        <div class="lock-session">${lock.session_short}</div>
+                    </div>
+                    <div class="lock-meta">
+                        <span>Locked at: ${lock.locked_at}</span>
+                    </div>
+                    ${lock.files.length > 0 ? `
+                        <div class="lock-files">
+                            ${lock.files.map(f => `<span class="lock-file">${f}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Load dependencies from MASTER_PLAN
+        async function loadDependencies() {
+            try {
+                const response = await fetch('/api/master-plan?t=' + Date.now());
+                const data = await response.json();
+                dependencies = parseDependencies(data.content);
+                renderDependencies();
+                updateStats();
+            } catch (error) {
+                console.error('Failed to load dependencies:', error);
+                document.getElementById('deps-container').innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <p>Failed to load dependencies</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Parse dependencies from MASTER_PLAN content
+        function parseDependencies(content) {
+            const deps = [];
+            const lines = content.split('\n');
+
+            // Find dependency table
+            let inDepTable = false;
+            let headerParsed = false;
+            let colIndices = { id: -1, status: -1, depends: -1, blocks: -1 };
+
+            for (const line of lines) {
+                // Look for dependency table header (matches "| ID |" with "Dependencies" column)
+                if (line.includes('| ID |') && (line.includes('Depend') || line.includes('Status'))) {
+                    inDepTable = true;
+                    const cols = line.split('|').map(c => c.trim().toLowerCase());
+                    colIndices.id = cols.findIndex(c => c === 'id');
+                    colIndices.status = cols.findIndex(c => c === 'status');
+                    colIndices.depends = cols.findIndex(c => c.includes('depend'));
+                    colIndices.blocks = cols.findIndex(c => c.includes('block'));
+                    // If no blocks column, use depends column for both
+                    if (colIndices.blocks === -1) colIndices.blocks = colIndices.depends;
+                    continue;
+                }
+
+                // Skip separator line
+                if (inDepTable && line.match(/^\|\s*-+/)) {
+                    headerParsed = true;
+                    continue;
+                }
+
+                // Exit table on empty line or non-table content
+                if (inDepTable && headerParsed && (!line.startsWith('|') || line.trim() === '')) {
+                    inDepTable = false;
+                    headerParsed = false;
+                    continue;
+                }
+
+                // Parse table rows
+                if (inDepTable && headerParsed && line.startsWith('|')) {
+                    const cells = line.split('|').map(c => c.trim());
+
+                    if (cells.length > Math.max(colIndices.id, colIndices.depends, colIndices.blocks)) {
+                        const idCell = cells[colIndices.id] || '';
+                        const statusCell = cells[colIndices.status] || '';
+                        const dependsCell = cells[colIndices.depends] || '';
+                        const blocksCell = cells[colIndices.blocks] || '';
+
+                        // Extract task ID (handle strikethrough)
+                        const idMatch = idCell.match(/(~~)?(\*\*)?([A-Z]+-\d+)(\*\*)?(~~)?/);
+                        if (!idMatch) continue;
+
+                        const taskId = idMatch[3];
+                        const isDone = idCell.includes('~~') || statusCell.toLowerCase().includes('done');
+                        const isInProgress = statusCell.toLowerCase().includes('progress');
+
+                        // Parse depends on
+                        const dependsOn = extractTaskIds(dependsCell);
+                        for (const depId of dependsOn) {
+                            deps.push({
+                                source: taskId,
+                                target: depId,
+                                type: 'depends',
+                                sourceDone: isDone,
+                                sourceInProgress: isInProgress,
+                                targetDone: depId.includes('~~') || dependsCell.includes('~~' + depId)
+                            });
+                        }
+
+                        // Parse blocks
+                        const blocks = extractTaskIds(blocksCell);
+                        for (const blockId of blocks) {
+                            deps.push({
+                                source: taskId,
+                                target: blockId,
+                                type: 'blocks',
+                                sourceDone: isDone,
+                                sourceInProgress: isInProgress,
+                                targetDone: blockId.includes('~~') || blocksCell.includes('~~' + blockId)
+                            });
+                        }
+                    }
+                }
+            }
+
+            return deps;
+        }
+
+        // Extract task IDs from a cell
+        function extractTaskIds(cell) {
+            if (!cell || cell === '-' || cell.trim() === '') return [];
+            const matches = cell.match(/(?:~~)?([A-Z]+-\d+)(?:~~)?/g) || [];
+            return matches.map(m => m.replace(/~~/g, ''));
+        }
+
+        // Render dependencies
+        function renderDependencies() {
+            const container = document.getElementById('deps-container');
+
+            // Filter out completed dependencies and group by type
+            const activeDeps = dependencies.filter(d => !d.sourceDone || !d.targetDone);
+            const dependsOn = activeDeps.filter(d => d.type === 'depends');
+            const blocks = activeDeps.filter(d => d.type === 'blocks');
+
+            if (dependencies.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" stroke-width="1.5">
+                            <circle cx="18" cy="5" r="3"/>
+                            <circle cx="6" cy="12" r="3"/>
+                            <circle cx="18" cy="19" r="3"/>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                        </svg>
+                        <p>No active dependencies found</p>
+                        <p class="subtext">Dependencies are defined in MASTER_PLAN.md dependency table</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+
+            // Render "depends on" relationships
+            if (dependsOn.length > 0) {
+                html += `
+                    <div class="dep-group">
+                        <div class="dep-group-title">
+                            <svg viewBox="0 0 24 24" width="14" height="14" stroke="var(--color-deps)" fill="none" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"/>
+                            </svg>
+                            Depends On (${dependsOn.length})
+                        </div>
+                        ${dependsOn.map(d => renderDepRow(d)).join('')}
+                    </div>
+                `;
+            }
+
+            // Render "blocks" relationships
+            if (blocks.length > 0) {
+                html += `
+                    <div class="dep-group">
+                        <div class="dep-group-title">
+                            <svg viewBox="0 0 24 24" width="14" height="14" stroke="var(--color-blocks)" fill="none" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                            Blocks (${blocks.length})
+                        </div>
+                        ${blocks.map(d => renderDepRow(d)).join('')}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Render a single dependency row
+        function renderDepRow(dep) {
+            const sourceClass = dep.sourceDone ? 'done' : (activeLockIds.has(dep.source) ? 'locked' : 'source');
+            const targetClass = dep.targetDone ? 'done' : (activeLockIds.has(dep.target) ? 'locked' : 'target');
+            const arrowClass = dep.type === 'depends' ? 'depends' : 'blocks';
+            const arrowLabel = dep.type === 'depends' ? 'depends on' : 'blocks';
+
+            // Status indicator
+            let status = '';
+            if (dep.sourceDone && dep.targetDone) {
+                status = '<span class="dep-status done">Both done</span>';
+            } else if (dep.targetDone && dep.type === 'depends') {
+                status = '<span class="dep-status done">Ready</span>';
+            } else if (activeLockIds.has(dep.source)) {
+                status = '<span class="dep-status in-progress">Locked</span>';
+            } else if (dep.sourceInProgress) {
+                status = '<span class="dep-status in-progress">In progress</span>';
+            }
+
+            return `
+                <div class="dep-row" onclick="jumpToTask('${dep.source}')">
+                    <div class="dep-task">
+                        <span class="dep-task-id ${sourceClass}">${dep.source}</span>
+                    </div>
+                    <div class="dep-arrow ${arrowClass}">
+                        <svg viewBox="0 0 24 24" stroke-width="2">
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                            <polyline points="12 5 19 12 12 19"/>
+                        </svg>
+                        <span>${arrowLabel}</span>
+                    </div>
+                    <div class="dep-task">
+                        <span class="dep-task-id ${targetClass}">${dep.target}</span>
+                    </div>
+                    ${status}
+                </div>
+            `;
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('stat-locks').textContent = locks.length;
+            document.getElementById('stat-blocked').textContent = dependencies.filter(d => d.type === 'blocks' && !d.sourceDone).length;
+            document.getElementById('stat-deps').textContent = dependencies.length;
+        }
+
+        // Jump to task in kanban
+        function jumpToTask(taskId) {
+            // Send message to parent to switch to kanban and highlight task
+            window.parent.postMessage({ type: 'jump-to-task', taskId }, '*');
+
+            // Also try to scroll in kanban if same-origin
+            try {
+                const kanbanFrame = window.parent.document.querySelector('iframe[data-src*="kanban"]');
+                if (kanbanFrame && kanbanFrame.contentWindow) {
+                    kanbanFrame.contentWindow.postMessage({ type: 'highlight-task', taskId }, '*');
+                }
+            } catch (e) {
+                // Cross-origin, ignore
+            }
+        }
+
+        // Setup SSE for real-time updates
+        function setupSSE() {
+            const eventSource = new EventSource('/api/events');
+
+            eventSource.onopen = () => {
+                document.getElementById('connection-dot').classList.remove('disconnected');
+                document.getElementById('connection-text').textContent = 'Connected';
+            };
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'locks-changed') {
+                    console.log('Locks changed, reloading...');
+                    loadLocks();
+                }
+
+                if (data.type === 'file-changed') {
+                    console.log('File changed, reloading dependencies...');
+                    loadDependencies();
+                }
+            };
+
+            eventSource.onerror = () => {
+                document.getElementById('connection-dot').classList.add('disconnected');
+                document.getElementById('connection-text').textContent = 'Reconnecting...';
+            };
+        }
+
+        // Listen for tab activation
+        window.addEventListener('message', (event) => {
+            if (event.data?.type === 'tab-activated') {
+                refreshAll();
+            }
+        });
+    </script>
+</body>
+</html>

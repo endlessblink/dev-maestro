@@ -1,0 +1,973 @@
+{
+  "nodes": [
+    {
+      "id": "skill-0",
+      "name": "arch-planning",
+      "title": "Systematic Project Planning",
+      "description": "Invoke this skill when the user:",
+      "category": "architecture",
+      "color": "#3b82f6",
+      "usage": 0
+    },
+    {
+      "id": "skill-1",
+      "name": "arch-undo-redo-systems",
+      "title": "Undo/Redo Systems Architecture",
+      "description": "Always use the Command Pattern for undo/redo functionality:",
+      "category": "architecture",
+      "color": "#3b82f6",
+      "usage": 0
+    },
+    {
+      "id": "skill-2",
+      "name": "dev-debug-cache",
+      "title": "Vue 3 Cache Troubleshooting Expert",
+      "description": "Systematic troubleshooting for Vue 3 development cache issues that persist even after disabling browser cache and attempting hard refresh (Ctrl+R/Cmd+R). Use this when the developer has already tried ...",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-3",
+      "name": "dev-debug-canvas",
+      "title": "Debug Canvas Issues",
+      "description": "When canvas interactions aren't working, systematically debug:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-4",
+      "name": "dev-debug-reactivity",
+      "title": "dev-debug-reactivity",
+      "description": "",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-5",
+      "name": "dev-debugging",
+      "title": "Comprehensive Debugging",
+      "description": "Always follow systematic debugging methodology:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-6",
+      "name": "dev-fix-keyboard",
+      "title": "Fix Keyboard Shortcuts",
+      "description": "When keyboard shortcuts aren't working, systematically debug:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-7",
+      "name": "dev-fix-pinia",
+      "title": "dev-fix-pinia",
+      "description": "",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-8",
+      "name": "dev-fix-task-store",
+      "title": "Fix Task Store Issues",
+      "description": "When task operations don't work correctly, systematically debug:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-9",
+      "name": "dev-fix-timer",
+      "title": "Fix Timer State Bugs",
+      "description": "When Pomodoro timer behavior is incorrect, systematically debug:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-10",
+      "name": "dev-implement-ui-ux",
+      "title": "Implement UI/UX Fixes",
+      "description": "Systematically implement UI/UX fixes identified in audits. This skill provides step-by-step implementation guidance for design system compliance, component consistency, accessibility improvements, and...",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-11",
+      "name": "dev-optimize-performance",
+      "title": "Optimize Performance",
+      "description": "When Vue applications are slow or memory usage is high, systematically optimize:",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-12",
+      "name": "dev-refactoring",
+      "title": "Systematic Code Refactoring",
+      "description": "This skill AUTOMATICALLY activates when:",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-13",
+      "name": "dev-storybook",
+      "title": "dev-storybook",
+      "description": "BUILD Storybook stories for Vue 3 components with TypeScript. Document components, create interactive demos, and handle common Storybook patterns. Use when creating component documentation, fixing sto...",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-14",
+      "name": "dev-undo-redo",
+      "title": "FlowState Undo/Redo Unification",
+      "description": "```typescript",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-15",
+      "name": "dev-vue",
+      "title": "Vue.js Development",
+      "description": "Always use this structure for Vue 3 components in this project:",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-16",
+      "name": "dev-vueuse",
+      "title": "VueUse Development",
+      "description": "Always use VueUse composables when working with browser APIs, complex event handling, or performance optimizations:",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-17",
+      "name": "meta-skill-router",
+      "title": "Skill Router",
+      "description": "The Skill Router is an intelligent system that automatically selects the most appropriate skill based on user input, project context, and established quality requirements. It eliminates the need to ma...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-18",
+      "name": "ops-port-manager",
+      "title": "Port Manager",
+      "description": "- **Main Application**: Port 5546 (NEVER change)",
+      "category": "operations",
+      "color": "#f59e0b",
+      "usage": 0
+    },
+    {
+      "id": "skill-19",
+      "name": "qa-testing",
+      "title": "Comprehensive Testing",
+      "description": "ALWAYS follow this sequence before claiming any feature works:",
+      "category": "testing",
+      "color": "#06b6d4",
+      "usage": 0
+    },
+    {
+      "id": "skill-20",
+      "name": "qa-verify",
+      "title": "Verify Before Claiming Skill",
+      "description": "Prevents Claude from making false claims about functionality working without proper testing and verification.",
+      "category": "testing",
+      "color": "#06b6d4",
+      "usage": 0
+    },
+    {
+      "id": "skill-21",
+      "name": "skill-creator",
+      "title": "Skill Creator",
+      "description": "This skill provides guidance for creating effective skills.",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-22",
+      "name": "truthfulness-enforcer",
+      "title": "🛡️ Truthfulness Enforcer",
+      "description": "- Before any technical work on critical systems",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-23",
+      "name": "↩️ dev-undo-redo",
+      "title": "FlowState Undo/Redo Unification",
+      "description": "```typescript",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-24",
+      "name": "⌨️ dev-fix-keyboard",
+      "title": "Fix Keyboard Shortcuts",
+      "description": "When keyboard shortcuts aren't working, systematically debug:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-25",
+      "name": "⏰ calendar-scheduling-fixer",
+      "title": "Calendar Scheduling Fixer Skill",
+      "description": "This skill provides a comprehensive approach to fixing Vue.js calendar task scheduling issues, specifically addressing the problem where tasks with due dates incorrectly appear in calendar grid slots ...",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-26",
+      "name": "⏱️ dev-fix-timer",
+      "title": "Fix Timer State Bugs",
+      "description": "When Pomodoro timer behavior is incorrect, systematically debug:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-27",
+      "name": "⚖️ ai-truthfulness-enforcer",
+      "title": "AI Truthfulness Enforcer (ATES)",
+      "description": "This skill AUTO-ACTIVATES when Claude attempts to:",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-28",
+      "name": "⚡ dev-refactoring",
+      "title": "Systematic Code Refactoring",
+      "description": "This skill AUTOMATICALLY activates when:",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-29",
+      "name": "🎛️ skills-manager",
+      "title": "Skills Manager Skill - Universal Consolidation & Audit for Claude Code",
+      "description": "This skill MUST analyze your actual project state, codebase, and usage patterns before making any decisions about skills. It verifies system reality, validates usage data, and applies conservative saf...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-30",
+      "name": "🎛️ vue-filter-manager",
+      "title": "Vue Filter Manager Skill",
+      "description": "FlowState has a sophisticated filtering system but suffers from multiple issues:",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-31",
+      "name": "🎨 css-design-token-enforcer",
+      "title": "CSS Design Token Enforcer",
+      "description": "This skill provides a comprehensive workflow for eliminating hardcoded hex values and enforcing consistent CSS design token usage across the entire FlowState codebase. It addresses the critical color ...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-32",
+      "name": "🎯 chief-architect",
+      "title": "Personal App Architect - Strategic Development Orchestrator",
+      "description": "A strategic meta-skill designed for personal productivity application development. This skill orchestrates architectural decisions for single-developer projects, delegates to specialized skills, manag...",
+      "category": "architecture",
+      "color": "#3b82f6",
+      "usage": 0
+    },
+    {
+      "id": "skill-33",
+      "name": "🎯 dev-implement-ui-ux",
+      "title": "Implement UI/UX Fixes",
+      "description": "Systematically implement UI/UX fixes identified in audits. This skill provides step-by-step implementation guidance for design system compliance, component consistency, accessibility improvements, and...",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-34",
+      "name": "🏥 skill-creator-doctor",
+      "title": "Skill Creator Doctor",
+      "description": "This skill provides comprehensive skill lifecycle management: creation, repair, and maintenance.",
+      "category": "documentation",
+      "color": "#8b5cf6",
+      "usage": 0
+    },
+    {
+      "id": "skill-35",
+      "name": "🐛 dev-debugging",
+      "title": "Comprehensive Debugging",
+      "description": "Always follow systematic debugging methodology:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-36",
+      "name": "👁️ view-by-view-filter-analyzer",
+      "title": "View-by-View Filter Analyzer",
+      "description": "This skill performs comprehensive, view-by-view analysis of filter controls to identify and eliminate duplicates with visual proof. It goes through every single view in the application to ensure no du...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-37",
+      "name": "👤 user-flow-testing-skills",
+      "title": "User Flow Testing Skill",
+      "description": "Comprehensive user flow testing skill for FlowState Vue.js application using Playwright with intelligent reporting and fix recommendations.",
+      "category": "testing",
+      "color": "#06b6d4",
+      "usage": 0
+    },
+    {
+      "id": "skill-38",
+      "name": "💡 idea-issue-creator",
+      "title": "💡 Idea-Issue Creator - Simple Workflow",
+      "description": "Transforms simple bullet points into enhanced, prioritized items for your master plan.",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-39",
+      "name": "💡 idea-issue-creator.backup-20251127-163633",
+      "title": "💡 Idea-Issue Creator - Enhanced Ideas & Issues Management",
+      "description": "Every operation is **protected**:",
+      "category": "data",
+      "color": "#ec4899",
+      "usage": 0
+    },
+    {
+      "id": "skill-40",
+      "name": "💾 indexeddb-backup-debugger",
+      "title": "IndexedDB Backup Debugger",
+      "description": "Debug IndexedDB backup synchronization issues in Vue.js/Pinia applications by systematically analyzing database state, tracing data flow, and identifying synchronization problems between UI components...",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-41",
+      "name": "📁 safe-project-organizer",
+      "title": "Safe Project Organizer",
+      "description": "This skill enables Claude Code to analyze project structure and suggest safe organizational improvements like moving files, removing unused directories, and restructuring folders. It prioritizes safet...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-42",
+      "name": "📄 document-sync",
+      "title": "Document Sync Skill for Claude Code",
+      "description": "This skill provides comprehensive documentation synchronization by analyzing your actual codebase, tech stack, configuration, and architecture to ensure all documentation remains current and accurate....",
+      "category": "operations",
+      "color": "#f59e0b",
+      "usage": 0
+    },
+    {
+      "id": "skill-43",
+      "name": "📅 calendar-inbox-sync",
+      "title": "📅 calendar-inbox-sync",
+      "description": "",
+      "category": "operations",
+      "color": "#f59e0b",
+      "usage": 0
+    },
+    {
+      "id": "skill-44",
+      "name": "📆 calendar-interface-architect",
+      "title": "TypeScript Calendar Interface Architect",
+      "description": "This skill provides comprehensive architectural resolution of calendar interface and temporal type system issues in the FlowState application.",
+      "category": "architecture",
+      "color": "#3b82f6",
+      "usage": 0
+    },
+    {
+      "id": "skill-45",
+      "name": "📊 comprehensive-auditor",
+      "title": "Comprehensive Honest Project Auditor - Maximum Coverage Edition",
+      "description": "An exhaustive multi-dimensional project auditor that covers **code, runtime behavior, infrastructure, security, performance, business logic, and human processes**. Provides confidence-tracked findings...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-46",
+      "name": "📋 master-plan-manager",
+      "title": "Master Plan Manager - Intelligent Document Maintenance",
+      "description": "A specialized skill for safe and intelligent master-plan file management. This skill reads entire master-plan documents, analyzes current content vs. needed updates, and applies changes only when mean...",
+      "category": "architecture",
+      "color": "#3b82f6",
+      "usage": 0
+    },
+    {
+      "id": "skill-47",
+      "name": "📚 dev-storybook",
+      "title": "dev-storybook",
+      "description": "BUILD Storybook stories for Vue 3 components with TypeScript. Document components, create interactive demos, and handle common Storybook patterns. Use when creating component documentation, fixing sto...",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-48",
+      "name": "📚 smart-doc-manager",
+      "title": "Smart Documentation Manager (SDM)",
+      "description": "This skill MUST analyze actual codebase, dependencies, and implementation to understand current technology before evaluating documentation. No deletions, merges, or reorganization without explicit ver...",
+      "category": "documentation",
+      "color": "#8b5cf6",
+      "usage": 0
+    },
+    {
+      "id": "skill-49",
+      "name": "📚 storybook-master",
+      "title": "Storybook Master Skill — Universal Component Documentation & Testing Assistant",
+      "description": "Create a skill that seamlessly automates, validates, and enriches Storybook documentation for any modern JavaScript/TypeScript design system or component library. This skill guarantees all present and...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-50",
+      "name": "🔄 couchdb-cross-device-sync",
+      "title": "CouchDB Cross-Device Sync Skill",
+      "description": "This skill enables seamless cross-device synchronization using CouchDB (server) and PouchDB (client) for offline-first applications. Perfect for Vue 3 apps requiring real-time data sync across devices...",
+      "category": "operations",
+      "color": "#f59e0b",
+      "usage": 0
+    },
+    {
+      "id": "skill-51",
+      "name": "🔄 meta-skill-router",
+      "title": "Meta Skill Router",
+      "description": "- Analyze user requests and route to appropriate skills",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-52",
+      "name": "🔌 dev-vueuse",
+      "title": "VueUse Development",
+      "description": "Always use VueUse composables when working with browser APIs, complex event handling, or performance optimizations:",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-53",
+      "name": "🔌 ops-port-manager",
+      "title": "Port Manager",
+      "description": "- **Main Application**: Port 5546 (NEVER change)",
+      "category": "operations",
+      "color": "#f59e0b",
+      "usage": 0
+    },
+    {
+      "id": "skill-54",
+      "name": "🔍 comprehensive-system-analyzer",
+      "title": "Comprehensive System Analyzer",
+      "description": "This skill provides **brutally honest** system analysis with:",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-55",
+      "name": "🔍 visual-inconsistency-detector",
+      "title": "Visual UI/UX Inconsistency Detector",
+      "description": "This skill provides comprehensive visual analysis and inconsistency detection for Vue.js applications, focusing on design system compliance, accessibility standards, and cross-view UI consistency that...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-56",
+      "name": "🔍-detect-competing-systems",
+      "title": "🔍 Detect Competing Systems",
+      "description": "A comprehensive skill for identifying duplicate, conflicting, and competing systems in Vue 3 + TypeScript + Pinia projects. This skill helps detect architectural conflicts, duplicate implementations, ...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-57",
+      "name": "🔧 dev-fix-task-store",
+      "title": "Fix Task Store Issues",
+      "description": "When task operations don't work correctly, systematically debug:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-58",
+      "name": "🔧 persistence-type-fixer",
+      "title": "TypeScript Persistence Type System Fixer",
+      "description": "This skill provides comprehensive resolution of generic type system issues in the persistence and backup layers of the FlowState application.",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-59",
+      "name": "🔧 skill-creator",
+      "title": "Skill Creator",
+      "description": "- Template-based skill generation",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-60",
+      "name": "🔧 ts-foundation-restorer",
+      "title": "TypeScript Foundation Restoration",
+      "description": "This skill provides systematic TypeScript foundation restoration for the FlowState application when compilation fails due to missing interface properties, store methods, or type definitions.",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-61",
+      "name": "🚀 production-debugging-framework",
+      "title": "Production Debugging Framework",
+      "description": "A comprehensive debugging and verification framework that provides systematic workflows for resolving Vue 3 + TypeScript compilation and runtime errors. This skill transforms chaotic debugging session...",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-62",
+      "name": "🚨 crisis-debugging-advisor",
+      "title": "Crisis Debugging Advisor",
+      "description": "Use this advisor when you experience:",
+      "category": "debugging",
+      "color": "#ef4444",
+      "usage": 0
+    },
+    {
+      "id": "skill-63",
+      "name": "🛡️-data-safety-auditor",
+      "title": "Data Safety Auditor",
+      "description": "This skill provides **rigorous data safety analysis** with:",
+      "category": "data",
+      "color": "#ec4899",
+      "usage": 0
+    },
+    {
+      "id": "skill-64",
+      "name": "🟢 dev-vue",
+      "title": "Tier 1: Metadata",
+      "description": "This skill provides Vue 3 component development with Composition API and TypeScript for the FlowState productivity application.",
+      "category": "development",
+      "color": "#10b981",
+      "usage": 0
+    },
+    {
+      "id": "skill-65",
+      "name": "🧪 qa-testing",
+      "title": "Comprehensive Testing",
+      "description": "ALWAYS follow this sequence before claiming any feature works:",
+      "category": "testing",
+      "color": "#06b6d4",
+      "usage": 0
+    },
+    {
+      "id": "skill-66",
+      "name": "🧹 legacy-tech-remover",
+      "title": "Legacy Tech Remover Skill — Automated Audit & Clean-up",
+      "description": "Provide a safe, automated method to audit your entire codebase for **abandoned/dead libraries, legacy tech stacks, and deprecated development directions**. Generate actionable removal and migration pl...",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-67",
+      "name": "🧹 root-project-cleaner",
+      "title": "Root Project File Cleaner Skill",
+      "description": "- ✅ **Cleans**: `node_modules/.cache`, `dist`, `.vite`, `*.tmp`, `*.log` in root",
+      "category": "other",
+      "color": "#94a3b8",
+      "usage": 0
+    },
+    {
+      "id": "skill-68",
+      "name": "🧹 ts-architectural-cleanup",
+      "title": "TypeScript Architectural Cleanup Specialist",
+      "description": "This skill provides comprehensive architectural cleanup and duplicate detection using advanced AST analysis and systematic refactoring strategies.",
+      "category": "architecture",
+      "color": "#3b82f6",
+      "usage": 0
+    },
+    {
+      "id": "category-architecture",
+      "title": "Architecture",
+      "category": "architecture",
+      "isCategory": true,
+      "color": "#3b82f6"
+    },
+    {
+      "id": "category-debugging",
+      "title": "Debugging",
+      "category": "debugging",
+      "isCategory": true,
+      "color": "#ef4444"
+    },
+    {
+      "id": "category-development",
+      "title": "Development",
+      "category": "development",
+      "isCategory": true,
+      "color": "#10b981"
+    },
+    {
+      "id": "category-other",
+      "title": "Other",
+      "category": "other",
+      "isCategory": true,
+      "color": "#94a3b8"
+    },
+    {
+      "id": "category-operations",
+      "title": "Operations",
+      "category": "operations",
+      "isCategory": true,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "category-testing",
+      "title": "Testing",
+      "category": "testing",
+      "isCategory": true,
+      "color": "#06b6d4"
+    },
+    {
+      "id": "category-documentation",
+      "title": "Documentation",
+      "category": "documentation",
+      "isCategory": true,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "category-data",
+      "title": "Data",
+      "category": "data",
+      "isCategory": true,
+      "color": "#ec4899"
+    }
+  ],
+  "links": [
+    {
+      "source": "category-architecture",
+      "target": "skill-0"
+    },
+    {
+      "source": "category-architecture",
+      "target": "skill-1"
+    },
+    {
+      "source": "category-architecture",
+      "target": "skill-32"
+    },
+    {
+      "source": "category-architecture",
+      "target": "skill-44"
+    },
+    {
+      "source": "category-architecture",
+      "target": "skill-46"
+    },
+    {
+      "source": "category-architecture",
+      "target": "skill-68"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-2"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-3"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-4"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-5"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-6"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-7"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-8"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-9"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-24"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-25"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-26"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-35"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-40"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-57"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-58"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-61"
+    },
+    {
+      "source": "category-debugging",
+      "target": "skill-62"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-10"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-11"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-12"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-13"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-14"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-15"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-16"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-23"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-28"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-30"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-33"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-47"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-52"
+    },
+    {
+      "source": "category-development",
+      "target": "skill-64"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-17"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-21"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-22"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-27"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-29"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-31"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-36"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-38"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-41"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-45"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-49"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-51"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-54"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-55"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-56"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-59"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-60"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-66"
+    },
+    {
+      "source": "category-other",
+      "target": "skill-67"
+    },
+    {
+      "source": "category-operations",
+      "target": "skill-18"
+    },
+    {
+      "source": "category-operations",
+      "target": "skill-42"
+    },
+    {
+      "source": "category-operations",
+      "target": "skill-43"
+    },
+    {
+      "source": "category-operations",
+      "target": "skill-50"
+    },
+    {
+      "source": "category-operations",
+      "target": "skill-53"
+    },
+    {
+      "source": "category-testing",
+      "target": "skill-19"
+    },
+    {
+      "source": "category-testing",
+      "target": "skill-20"
+    },
+    {
+      "source": "category-testing",
+      "target": "skill-37"
+    },
+    {
+      "source": "category-testing",
+      "target": "skill-65"
+    },
+    {
+      "source": "category-documentation",
+      "target": "skill-34"
+    },
+    {
+      "source": "category-documentation",
+      "target": "skill-48"
+    },
+    {
+      "source": "category-data",
+      "target": "skill-39"
+    },
+    {
+      "source": "category-data",
+      "target": "skill-63"
+    }
+  ],
+  "generated": "2025-12-05T19:39:37.850Z",
+  "stats": {
+    "totalSkills": 69,
+    "categories": [
+      "architecture",
+      "debugging",
+      "development",
+      "other",
+      "operations",
+      "testing",
+      "documentation",
+      "data"
+    ]
+  }
+}

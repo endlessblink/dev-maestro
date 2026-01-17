@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reproduction</title>
+  <style>
+    :root {
+      --surface-tertiary: #161b22;
+      --brand-primary: #4ECDC4;
+      --surface-elevated: #21262d;
+      --surface-secondary: #0d1117;
+      --border-subtle: #1a1a1a;
+      --text-primary: #e6edf3;
+      --text-muted: #8b949e;
+      --text-subtle: #6e7681;
+    }
+    body { background: #000; color: #fff; font-family: sans-serif; }
+    .task-card {
+      background: var(--surface-tertiary);
+      border-left: 4px solid var(--brand-primary);
+      padding: 16px 16px 28px 16px;
+      border-radius: 10px;
+      width: 300px;
+      margin: 20px;
+    }
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .task-id {
+      font-weight: 600;
+      color: var(--brand-primary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .task-priority {
+      font-weight: 600;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .task-priority.low { background: #10b981; color: white; }
+    .task-priority.medium { background: #f59e0b; color: white; }
+    .task-priority.high { background: #dc2626; color: white; }
+
+    .task-status {
+      font-weight: 600;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-left: 4px;
+    }
+    .task-status.todo { background: #6b7280; color: white; }
+    .task-status.in-progress { background: #3b82f6; color: white; }
+
+    .expand-toggle {
+      background: none; border: none; color: #888; cursor: pointer;
+    }
+    .badge-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+  <h3>TASK-065 (Works)</h3>
+  <div class="task-card">
+    <div class="task-header">
+      <button class="expand-toggle">▶</button>
+      <div class="task-id">TASK-065</div>
+      <div class="badge-wrapper">
+        <div class="task-status todo">TODO</div>
+      </div>
+      <div class="badge-wrapper">
+        <div class="task-priority low">P2-LOW</div>
+      </div>
+    </div>
+    <div class="task-title">Prepare for GitHub Public Release</div>
+  </div>
+
+  <h3>TASK-093 (Issue - Missing Priority)</h3>
+  <div class="task-card">
+    <div class="task-header">
+      <button class="expand-toggle">▶</button>
+      <div class="task-id">TASK-093</div>
+      <div class="badge-wrapper">
+        <div class="task-status todo">TODO</div>
+      </div>
+      <!-- Missing Priority Wrapper -->
+    </div>
+    <div class="task-title">Database Engine Migration</div>
+  </div>
+
+  <h3>TASK-093 (With Priority - Simulated)</h3>
+  <div class="task-card">
+    <div class="task-header">
+      <button class="expand-toggle">▶</button>
+      <div class="task-id">TASK-093</div>
+      <div class="badge-wrapper">
+        <div class="task-status todo">TODO</div>
+      </div>
+      <div class="badge-wrapper">
+        <div class="task-priority high">P1-HIGH</div>
+      </div>
+    </div>
+    <div class="task-title">Database Engine Migration</div>
+  </div>
+
+    <h3>TASK-093 (With Long Status + Priority)</h3>
+  <div class="task-card">
+    <div class="task-header">
+      <button class="expand-toggle">▶</button>
+      <div class="task-id">TASK-093</div>
+      <div class="badge-wrapper">
+        <div class="task-status in-progress">IN PROGRESS</div>
+      </div>
+      <div class="badge-wrapper">
+        <div class="task-priority high">P1-HIGH</div>
+      </div>
+    </div>
+    <div class="task-title">Database Engine Migration</div>
+  </div>
+
+</body>
+</html>
