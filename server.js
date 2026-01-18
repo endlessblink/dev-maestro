@@ -2437,7 +2437,6 @@ You are working in an isolated git worktree. Your changes will be reviewed befor
 
     const agentProcess = spawn(CLAUDE_BINARY, [
         '--dangerously-skip-permissions',
-        '--output-format', 'stream-json',
         '--max-turns', '30',
         '-p', prompt
     ], {
