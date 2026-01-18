@@ -9,6 +9,9 @@ REPO_URL="https://github.com/endlessblink/dev-maestro.git"
 INSTALL_DIR="${DEV_MAESTRO_DIR:-$HOME/.dev-maestro}"
 BRANCH="${DEV_MAESTRO_BRANCH:-main}"
 
+# Expand ~ to $HOME if present
+INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
