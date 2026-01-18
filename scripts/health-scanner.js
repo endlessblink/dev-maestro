@@ -1,5 +1,5 @@
 /**
- * Health Scanner - Parallel code quality scanner for dev-manager
+ * Health Scanner - Parallel code quality scanner for Dev Maestro
  *
  * Runs multiple health checks in parallel and returns aggregated results:
  * - TypeScript errors (vue-tsc)
@@ -15,7 +15,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Project root (dev-manager is in a subdirectory)
+// Project root (dev-maestro is in a subdirectory)
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
 // Scanner timeout (60 seconds per scanner)

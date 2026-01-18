@@ -6910,7 +6910,7 @@
         }
       } catch (error) {
         console.error(`[Modal] Error:`, error);
-        showSyncStatus('error', `✗ Server not running. Start with: cd dev-manager && npm start`);
+        showSyncStatus('error', `✗ Server not running. Start with: cd ~/.dev-maestro && npm start`);
       }
     }
 
@@ -6953,7 +6953,7 @@
           showSyncStatus('error', `✗ ${result.error || 'Failed to update priority'}`);
         }
       } catch (error) {
-        showSyncStatus('error', `✗ Server not running. Start with: cd dev-manager && npm start`);
+        showSyncStatus('error', `✗ Server not running. Start with: cd ~/.dev-maestro && npm start`);
       }
     }
 
@@ -6994,7 +6994,7 @@
           showSyncStatus('error', `✗ ${result.error || 'Failed to update complexity'}`);
         }
       } catch (error) {
-        showSyncStatus('error', `✗ Server not running. Start with: cd dev-manager && npm start`);
+        showSyncStatus('error', `✗ Server not running. Start with: cd ~/.dev-maestro && npm start`);
       }
     }
 
@@ -7143,7 +7143,7 @@
       } catch (error) {
         console.error(`[InlineStatus] Error:`, error);
         badge.textContent = originalText;
-        showToast('✗ Server not running. Start with: cd dev-manager && npm start', 'error');
+        showToast('✗ Server not running. Start with: cd ~/.dev-maestro && npm start', 'error');
       }
     }
 
@@ -7178,7 +7178,7 @@
         }
       } catch (error) {
         badge.textContent = originalText;
-        showToast('✗ Server not running. Start with: cd dev-manager && npm start', 'error');
+        showToast('✗ Server not running. Start with: cd ~/.dev-maestro && npm start', 'error');
       }
     }
 

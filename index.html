@@ -299,7 +299,7 @@
 
 <body>
     <header class="header">
-        <div class="logo">Dev Manager</div>
+        <div class="logo">Dev Maestro</div>
 
         <nav class="tabs">
             <button class="tab kanban active" data-panel="kanban">
@@ -419,7 +419,7 @@
         const panels = document.querySelectorAll('.panel');
 
         // Restore saved tab
-        const savedTab = localStorage.getItem('dev-manager-tab');
+        const savedTab = localStorage.getItem('dev-maestro-tab');
         if (savedTab) {
             switchTab(savedTab);
         }
@@ -428,7 +428,7 @@
             tab.addEventListener('click', () => {
                 const panelId = tab.dataset.panel;
                 switchTab(panelId);
-                localStorage.setItem('dev-manager-tab', panelId);
+                localStorage.setItem('dev-maestro-tab', panelId);
             });
         });
 
