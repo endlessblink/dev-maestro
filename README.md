@@ -91,6 +91,50 @@ MASTER_PLAN_PATH=/path/to/your/project/docs/MASTER_PLAN.md
 - **Health scanning** with 8+ code quality metrics
 - **Dark theme** optimized for developers
 
+## Claude Code Integration
+
+Help Claude Code understand your MASTER_PLAN.md format for seamless task management:
+
+### Quick Setup
+
+1. **Copy the instructions template** to your project:
+   ```bash
+   # Option A: Add to your CLAUDE.md
+   cat ~/.dev-maestro/templates/CLAUDE_INSTRUCTIONS.md >> /path/to/your/project/CLAUDE.md
+
+   # Option B: Add to Claude Code settings
+   cat ~/.dev-maestro/templates/CLAUDE_INSTRUCTIONS.md >> /path/to/your/project/.claude/settings/instructions.md
+   ```
+
+2. **Optionally, use the starter template** for a new MASTER_PLAN.md:
+   ```bash
+   cp ~/.dev-maestro/templates/MASTER_PLAN.md.template /path/to/your/project/docs/MASTER_PLAN.md
+   ```
+
+### What's Included
+
+| Template | Purpose |
+|----------|---------|
+| `templates/CLAUDE_INSTRUCTIONS.md` | Parsing rules, format examples, and step-by-step guides for Claude Code |
+| `templates/MASTER_PLAN.md.template` | Starter MASTER_PLAN with correct structure and example tasks |
+
+### Task Format Quick Reference
+
+```markdown
+### TASK-XXX: Task Title (STATUS_EMOJI STATUS)
+**Status**: Todo | In Progress | Done
+**Priority**: High | Medium | Low
+
+Description...
+```
+
+**Status markers:**
+- No marker → Backlog
+- `(🔄 IN PROGRESS)` → In Progress
+- `(⏸️ PAUSED)` → Blocked
+- `(👀 REVIEW)` → Review
+- `~~TASK-XXX~~ (✅ DONE)` → Done (requires strikethrough on ID)
+
 ## Shell Alias (Optional)
 
 Add to `~/.bashrc` or `~/.zshrc`:
