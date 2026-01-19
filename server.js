@@ -93,6 +93,26 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 // Serve static files from current directory
 app.use(express.static(__dirname));
 
+// Status API - for Claude to detect if Dev Maestro is running
+app.get('/api/status', (req, res) => {
+    const pkg = require('./package.json');
+    const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
+    const masterPlanPath = process.env.MASTER_PLAN_PATH
+        ? path.resolve(process.env.MASTER_PLAN_PATH)
+        : defaultPath;
+
+    res.json({
+        running: true,
+        name: 'Dev Maestro',
+        version: pkg.version,
+        port: PORT,
+        project: path.dirname(masterPlanPath),
+        masterPlanPath: masterPlanPath,
+        uptime: process.uptime(),
+        url: `http://localhost:${PORT}`
+    });
+});
+
 // API Endpoint to get MASTER_PLAN.md content
 app.get('/api/master-plan', (req, res) => {
     // Default to ../docs/MASTER_PLAN.md relative to this script

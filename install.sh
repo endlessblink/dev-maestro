@@ -73,21 +73,105 @@ if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     echo -e "${GREEN}✓ Created .env from template${NC}"
 fi
 
+# Project integration (if PROJECT_ROOT is set or we can detect it)
+PROJECT_ROOT="${PROJECT_ROOT:-}"
+
+# Try to detect project root from MASTER_PLAN_PATH in .env
+if [ -z "$PROJECT_ROOT" ] && [ -f ".env" ]; then
+    MASTER_PLAN_PATH=$(grep -E "^MASTER_PLAN_PATH=" .env | cut -d= -f2 | tr -d '"' | tr -d "'")
+    if [ -n "$MASTER_PLAN_PATH" ]; then
+        # Resolve to absolute path and get parent directory
+        if [[ "$MASTER_PLAN_PATH" = /* ]]; then
+            PROJECT_ROOT=$(dirname "$(dirname "$MASTER_PLAN_PATH")")
+        fi
+    fi
+fi
+
+# Create project integration files if PROJECT_ROOT is set
+if [ -n "$PROJECT_ROOT" ] && [ -d "$PROJECT_ROOT" ]; then
+    echo -e "${BLUE}Setting up project integration in $PROJECT_ROOT...${NC}"
+
+    # 1. Create .dev-maestro.json marker file
+    cat > "$PROJECT_ROOT/.dev-maestro.json" << EOF
+{
+  "installed": true,
+  "installDir": "$INSTALL_DIR",
+  "port": 6010,
+  "startCommand": "cd $INSTALL_DIR && npm start",
+  "url": "http://localhost:6010",
+  "apiStatus": "http://localhost:6010/api/status"
+}
+EOF
+    echo -e "${GREEN}✓ Created .dev-maestro.json marker${NC}"
+
+    # 2. Create maestro.sh launcher script
+    cat > "$PROJECT_ROOT/maestro.sh" << 'LAUNCHER'
+#!/bin/bash
+# Dev Maestro Launcher
+# Starts Dev Maestro with this project's MASTER_PLAN.md
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="$HOME/.dev-maestro"
+
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo "Dev Maestro not installed. Installing..."
+    curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh | bash
+fi
+
+# Export project root so Dev Maestro knows where to find MASTER_PLAN.md
+export MASTER_PLAN_PATH="$SCRIPT_DIR/docs/MASTER_PLAN.md"
+
+cd "$INSTALL_DIR" && npm start
+LAUNCHER
+    chmod +x "$PROJECT_ROOT/maestro.sh"
+    echo -e "${GREEN}✓ Created maestro.sh launcher${NC}"
+
+    # 3. Append to CLAUDE.md if not already present
+    CLAUDE_MD="$PROJECT_ROOT/CLAUDE.md"
+    if [ -f "$CLAUDE_MD" ]; then
+        if ! grep -q "## Dev Maestro" "$CLAUDE_MD"; then
+            cat >> "$CLAUDE_MD" << 'CLAUDEMD'
+
+## Dev Maestro
+
+**AI Agent Orchestration Platform** - Kanban board for MASTER_PLAN.md tasks.
+
+| Item | Value |
+|------|-------|
+| URL | http://localhost:6010 |
+| Start | `./maestro.sh` or `cd ~/.dev-maestro && npm start` |
+| Status API | `curl -s localhost:6010/api/status` |
+
+**Views**: Kanban, Orchestrator, Skills, Docs, Stats, Timeline, Health
+
+To check if running: `curl -s localhost:6010/api/status | jq .running`
+CLAUDEMD
+            echo -e "${GREEN}✓ Added Dev Maestro section to CLAUDE.md${NC}"
+        else
+            echo -e "${YELLOW}Dev Maestro section already in CLAUDE.md${NC}"
+        fi
+    fi
+fi
+
 # Show version info
 VERSION=$(git log -1 --format="%h %s" 2>/dev/null || echo "unknown")
 echo ""
-echo -e "${GREEN}╔════════════════════════════════════════════════════════╗"
-echo -e "║           INSTALLATION COMPLETE                         ║"
-echo -e "╠════════════════════════════════════════════════════════╣"
+echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗"
+echo -e "║              INSTALLATION COMPLETE                          ║"
+echo -e "╠════════════════════════════════════════════════════════════╣"
 echo -e "║  Location: $INSTALL_DIR"
 echo -e "║  Version:  $VERSION"
-echo -e "║                                                        ║"
-echo -e "║  To start:                                             ║"
-echo -e "║    cd $INSTALL_DIR && npm start"
-echo -e "║                                                        ║"
-echo -e "║  Or add alias to ~/.bashrc:                            ║"
-echo -e "║    alias dev-maestro='node $INSTALL_DIR/server.js'"
-echo -e "╚════════════════════════════════════════════════════════╝${NC}"
+echo -e "║                                                            ║"
+echo -e "║  To start:                                                 ║"
+echo -e "║    cd $INSTALL_DIR && npm start                            ║"
+echo -e "║                                                            ║"
+echo -e "║  Or add alias to ~/.bashrc:                                ║"
+echo -e "║    alias dev-maestro='cd $INSTALL_DIR && npm start'        ║"
+echo -e "║                                                            ║"
+echo -e "║  Project integration:                                      ║"
+echo -e "║    Set PROJECT_ROOT to create launcher in your project:    ║"
+echo -e "║    PROJECT_ROOT=/path/to/project ./install.sh              ║"
+echo -e "╚════════════════════════════════════════════════════════════╝${NC}"
 
 # Optional: Start the server
 if [ "$1" = "--start" ]; then
