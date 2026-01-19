@@ -13,7 +13,11 @@ curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/instal
 **Non-interactive install (for AI agents/scripts):**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh | bash -s -- -m /path/to/docs/MASTER_PLAN.md
+# Download first (avoids terminal line-wrap issues)
+curl -sSL "https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh" -o /tmp/dm-install.sh
+
+# Install with MASTER_PLAN.md path
+bash /tmp/dm-install.sh -m /path/to/docs/MASTER_PLAN.md
 ```
 
 This installs to `~/.dev-maestro/`. To customize the location:
@@ -42,15 +46,21 @@ npm install
 ## Starting the Server
 
 ```bash
-cd ~/.dev-maestro
-npm start
+cd ~/.dev-maestro && npm start
 # Open http://localhost:6010
 ```
 
-Or with install + start:
+**With custom port:**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh | bash -s -- --start
+cd ~/.dev-maestro && PORT=8080 npm start
+# Open http://localhost:8080
+```
+
+**With custom port and MASTER_PLAN path:**
+
+```bash
+cd ~/.dev-maestro && PORT=8080 MASTER_PLAN_PATH=/path/to/MASTER_PLAN.md npm start &
 ```
 
 ## Configuration
