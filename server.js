@@ -614,8 +614,15 @@ app.post('/api/task/:id/complexity', (req, res) => {
 });
 
 // API Endpoint to update task properties (priority, etc)
-app.post('/api/task/:id', (req, res) => {
+// NOTE: This must come AFTER /api/task/add in route order, or use next() for 'add'
+app.post('/api/task/:id', (req, res, next) => {
     const { id } = req.params;
+
+    // Skip to next route if this is the /add endpoint
+    if (id === 'add') {
+        return next();
+    }
+
     const { property, value } = req.body;
     const masterPlanPath = getMasterPlanPath();
     console.log(`[API] Updating task ${id} property ${property} to ${value}`);
