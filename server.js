@@ -678,6 +678,104 @@ app.post('/api/task/:id', (req, res) => {
     });
 });
 
+// ============================================================================
+// TASK CREATION API
+// ============================================================================
+
+// POST /api/task/add - Add a new task to MASTER_PLAN.md
+app.post('/api/task/add', (req, res) => {
+    const { title, type = 'TASK', priority = 'Medium', description = '' } = req.body;
+    const masterPlanPath = getMasterPlanPath();
+
+    if (!title) {
+        return res.status(400).json({ error: 'Missing required field: title' });
+    }
+
+    // Validate type
+    const validTypes = ['TASK', 'BUG', 'FEATURE', 'ROAD', 'IDEA'];
+    const taskType = type.toUpperCase();
+    if (!validTypes.includes(taskType)) {
+        return res.status(400).json({
+            error: `Invalid type: ${type}. Valid types: ${validTypes.join(', ')}`
+        });
+    }
+
+    console.log(`[API] Adding new ${taskType}: ${title}`);
+
+    fs.readFile(masterPlanPath, 'utf8', (err, data) => {
+        if (err) {
+            console.error(`[API] Error reading MASTER_PLAN.md: ${err.message}`);
+            return res.status(500).json({ error: 'Failed to read MASTER_PLAN.md' });
+        }
+
+        // Get next ID
+        const nextId = getNextId(data, taskType);
+        console.log(`[API] Generated ID: ${nextId}`);
+
+        // Build task block
+        const taskBlock = `
+### ${nextId}: ${title}
+
+**Priority**: ${priority}
+**Status**: Backlog
+${description ? `\n${description}\n` : ''}
+`;
+
+        // Find where to insert (look for "## Active Tasks" or "## Backlog" section)
+        let insertPoint = -1;
+        const lines = data.split('\n');
+
+        // Try to find appropriate section
+        const sectionMarkers = ['## Active Tasks', '## Backlog', '## Tasks', '## Roadmap'];
+        for (const marker of sectionMarkers) {
+            const idx = lines.findIndex(line => line.trim().startsWith(marker));
+            if (idx !== -1) {
+                // Find the next ### or ## after this section header
+                for (let i = idx + 1; i < lines.length; i++) {
+                    if (lines[i].startsWith('### ') || (lines[i].startsWith('## ') && i > idx)) {
+                        insertPoint = i;
+                        break;
+                    }
+                }
+                if (insertPoint === -1) {
+                    // Section exists but no tasks yet, insert after header
+                    insertPoint = idx + 1;
+                }
+                break;
+            }
+        }
+
+        let newContent;
+        if (insertPoint !== -1) {
+            // Insert at found position
+            lines.splice(insertPoint, 0, taskBlock);
+            newContent = lines.join('\n');
+        } else {
+            // Append to end of file
+            newContent = data + '\n' + taskBlock;
+        }
+
+        fs.writeFile(masterPlanPath, newContent, 'utf8', (err) => {
+            if (err) {
+                console.error(`[API] Error writing MASTER_PLAN.md: ${err.message}`);
+                return res.status(500).json({ error: 'Failed to write MASTER_PLAN.md' });
+            }
+
+            console.log(`[API] Successfully added ${nextId}`);
+            res.json({
+                success: true,
+                task: {
+                    id: nextId,
+                    title,
+                    type: taskType,
+                    priority,
+                    status: 'Backlog'
+                }
+            });
+        });
+    });
+});
+
 // Health API Endpoints
 
 // GET /api/health - Full health scan (slow, ~30-60s)
