@@ -10,6 +10,12 @@ Install Dev Maestro on any system with one command:
 curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh | bash
 ```
 
+**Non-interactive install (for AI agents/scripts):**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh | bash -s -- -m /path/to/docs/MASTER_PLAN.md
+```
+
 This installs to `~/.dev-maestro/`. To customize the location:
 
 ```bash
@@ -93,43 +99,23 @@ MASTER_PLAN_PATH=/path/to/your/project/docs/MASTER_PLAN.md
 
 ## Claude Code Integration
 
-### MCP Server (Recommended)
+### REST API (Recommended)
 
-Add Dev Maestro as an MCP server to give Claude Code direct access to task management tools:
+Use curl commands to interact with Dev Maestro:
 
-**1. Create `.mcp.json` in your project root:**
-
-```json
-{
-  "mcpServers": {
-    "dev-maestro": {
-      "command": "node",
-      "args": ["/home/YOUR_USER/.dev-maestro/mcp-server.js"],
-      "env": {
-        "DEV_MAESTRO_URL": "http://localhost:6010"
-      }
-    }
-  }
-}
-```
-
-Or run the setup command:
 ```bash
-~/.dev-maestro/scripts/setup-mcp.sh /path/to/your/project
+# Check status
+curl -s http://localhost:6010/api/status
+
+# Get tasks
+curl -s http://localhost:6010/api/master-plan
+
+# Add task
+curl -X POST http://localhost:6010/api/task/add -H "Content-Type: application/json" -d '{"title":"New task"}'
+
+# Health check
+curl -s http://localhost:6010/api/health/quick
 ```
-
-**2. Available Tools:**
-
-| Tool | Description |
-|------|-------------|
-| `maestro_get_tasks` | Get all tasks (optionally filter by status) |
-| `maestro_get_task` | Get a specific task by ID |
-| `maestro_update_status` | Update task status (backlog, in_progress, blocked, review, done) |
-| `maestro_next_id` | Get next available task ID |
-| `maestro_health` | Get project health report |
-| `maestro_master_plan` | Get raw MASTER_PLAN.md content |
-
-**Note:** Dev Maestro server must be running (`npm start`) for MCP tools to work.
 
 ### Instructions Template
 
