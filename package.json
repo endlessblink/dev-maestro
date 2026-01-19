@@ -8,7 +8,12 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "setup": "bash scripts/setup-project.sh",
+    "status": "curl -s http://localhost:6010/api/status 2>/dev/null || echo '{\"running\":false}'",
+    "tasks": "curl -s http://localhost:6010/api/tasks 2>/dev/null",
+    "config": "curl -s http://localhost:6010/api/config 2>/dev/null",
+    "reconfigure": "bash install.sh --reconfigure"
   },
   "dependencies": {
     "cors": "^2.8.5",

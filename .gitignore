@@ -6,3 +6,6 @@
 
 # Orchestrator data (contains user session data)
 data/orchestrations.json
+
+# Local user customizations (preserved across updates)
+local/

@@ -93,9 +93,47 @@ MASTER_PLAN_PATH=/path/to/your/project/docs/MASTER_PLAN.md
 
 ## Claude Code Integration
 
-Help Claude Code understand your MASTER_PLAN.md format for seamless task management:
+### MCP Server (Recommended)
 
-### Quick Setup
+Add Dev Maestro as an MCP server to give Claude Code direct access to task management tools:
+
+**1. Create `.mcp.json` in your project root:**
+
+```json
+{
+  "mcpServers": {
+    "dev-maestro": {
+      "command": "node",
+      "args": ["/home/YOUR_USER/.dev-maestro/mcp-server.js"],
+      "env": {
+        "DEV_MAESTRO_URL": "http://localhost:6010"
+      }
+    }
+  }
+}
+```
+
+Or run the setup command:
+```bash
+~/.dev-maestro/scripts/setup-mcp.sh /path/to/your/project
+```
+
+**2. Available Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `maestro_get_tasks` | Get all tasks (optionally filter by status) |
+| `maestro_get_task` | Get a specific task by ID |
+| `maestro_update_status` | Update task status (backlog, in_progress, blocked, review, done) |
+| `maestro_next_id` | Get next available task ID |
+| `maestro_health` | Get project health report |
+| `maestro_master_plan` | Get raw MASTER_PLAN.md content |
+
+**Note:** Dev Maestro server must be running (`npm start`) for MCP tools to work.
+
+### Instructions Template
+
+Help Claude Code understand your MASTER_PLAN.md format:
 
 1. **Copy the instructions template** to your project:
    ```bash

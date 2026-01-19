@@ -5,6 +5,36 @@ const path = require('path');
 const { execSync } = require('child_process');
 require('dotenv').config();
 
+// ============================================================================
+// LOCAL OVERRIDES SYSTEM
+// Load user customizations from local/ directory (preserved across updates)
+// ============================================================================
+const localDir = path.join(__dirname, 'local');
+const localConfigPath = path.join(localDir, 'config.json');
+const localIconsDir = path.join(localDir, 'icons');
+const localCssDir = path.join(localDir, 'css');
+const localViewsDir = path.join(localDir, 'views');
+
+// Load local config with defaults
+let localConfig = {
+    port: 6010,
+    autoUpdate: true,
+    updateBranch: 'main',
+    showUpdateNotifications: true
+};
+
+if (fs.existsSync(localConfigPath)) {
+    try {
+        const userConfig = JSON.parse(fs.readFileSync(localConfigPath, 'utf8'));
+        localConfig = { ...localConfig, ...userConfig };
+        console.log('[Config] Loaded local configuration from local/config.json');
+    } catch (e) {
+        console.warn('[Config] ⚠️ Invalid local/config.json, using defaults:', e.message);
+    }
+} else {
+    console.log('[Config] No local/config.json found, using defaults');
+}
+
 // Find Claude binary path - check multiple locations
 function findClaudeBinary() {
     // 1. Check environment variable
@@ -63,7 +93,8 @@ const CLAUDE_BINARY = findClaudeBinary();
 const healthScanner = require('./scripts/health-scanner');
 
 const app = express();
-const PORT = process.env.PORT || 6010;
+// Use port from: 1) env var, 2) local config, 3) default 6010
+const PORT = process.env.PORT || localConfig.port || 6010;
 
 // Orchestrations persistence file
 const ORCHESTRATIONS_FILE = path.join(__dirname, 'data', 'orchestrations.json');
@@ -87,10 +118,68 @@ const broadcastLog = (message) => {
 // Enable CORS
 app.use(cors());
 
-// Handle favicon requests (prevents CSP errors)
-app.get('/favicon.ico', (req, res) => res.status(204).end());
+// ============================================================================
+// LAYERED STATIC FILE SERVING (local/ overrides first, then defaults)
+// ============================================================================
 
-// Serve static files from current directory
+// 1. Serve local icons (highest priority for favicon)
+if (fs.existsSync(localIconsDir)) {
+    // Custom favicon handler - check local first
+    app.get('/favicon.ico', (req, res, next) => {
+        const localFavicon = path.join(localIconsDir, 'favicon.ico');
+        if (fs.existsSync(localFavicon)) {
+            return res.sendFile(localFavicon);
+        }
+        next();
+    });
+    app.get('/favicon.svg', (req, res, next) => {
+        const localFavicon = path.join(localIconsDir, 'favicon.svg');
+        if (fs.existsSync(localFavicon)) {
+            return res.sendFile(localFavicon);
+        }
+        next();
+    });
+}
+
+// 2. Serve local view overrides (e.g., local/views/kanban/index.html -> /kanban/index.html)
+if (fs.existsSync(localViewsDir)) {
+    app.use((req, res, next) => {
+        // Only handle HTML file requests for views
+        const reqPath = req.path;
+        // Map request to local views directory
+        let localPath;
+        if (reqPath.endsWith('/')) {
+            localPath = path.join(localViewsDir, reqPath, 'index.html');
+        } else if (reqPath.endsWith('.html')) {
+            localPath = path.join(localViewsDir, reqPath);
+        } else {
+            // Try adding /index.html for directory-style requests
+            localPath = path.join(localViewsDir, reqPath, 'index.html');
+        }
+
+        if (fs.existsSync(localPath)) {
+            console.log(`[Override] Serving local view: ${localPath}`);
+            return res.sendFile(localPath);
+        }
+        next();
+    });
+}
+
+// 3. Serve local CSS at /css/custom.css endpoint
+if (fs.existsSync(localCssDir)) {
+    app.use('/css', express.static(localCssDir));
+}
+
+// 4. Handle favicon requests (fallback - prevents CSP errors)
+app.get('/favicon.ico', (req, res, next) => {
+    const defaultFavicon = path.join(__dirname, 'favicon.ico');
+    if (fs.existsSync(defaultFavicon)) {
+        return res.sendFile(defaultFavicon);
+    }
+    res.status(204).end();
+});
+
+// 5. Serve default static files from current directory (fallback)
 app.use(express.static(__dirname));
 
 // Status API - for Claude to detect if Dev Maestro is running
@@ -110,6 +199,163 @@ app.get('/api/status', (req, res) => {
         masterPlanPath: masterPlanPath,
         uptime: process.uptime(),
         url: `http://localhost:${PORT}`
+    });
+});
+
+// ============================================================================
+// RUNTIME CONFIG API - For AI agents to configure Dev Maestro without restart
+// ============================================================================
+
+// Helper: Find MASTER_PLAN.md in a directory
+const findMasterPlan = (projectRoot) => {
+    const locations = [
+        path.join(projectRoot, 'MASTER_PLAN.md'),
+        path.join(projectRoot, 'docs', 'MASTER_PLAN.md'),
+        path.join(projectRoot, 'planning', 'MASTER_PLAN.md'),
+        path.join(projectRoot, '.github', 'MASTER_PLAN.md'),
+        path.join(projectRoot, 'doc', 'MASTER_PLAN.md')
+    ];
+
+    for (const loc of locations) {
+        if (fs.existsSync(loc)) {
+            return loc;
+        }
+    }
+    return null;
+};
+
+// Helper: Get project root from MASTER_PLAN.md path
+const getProjectRoot = (planPath) => {
+    const planDir = path.dirname(planPath);
+    const planDirname = path.basename(planDir);
+
+    if (['docs', 'doc', 'planning', '.github'].includes(planDirname)) {
+        return path.dirname(planDir);
+    }
+    return planDir;
+};
+
+// Helper: Update .env file
+const updateEnvFile = (key, value) => {
+    const envPath = path.join(__dirname, '.env');
+    let content = '';
+
+    if (fs.existsSync(envPath)) {
+        content = fs.readFileSync(envPath, 'utf8');
+        const regex = new RegExp(`^${key}=.*`, 'm');
+        if (regex.test(content)) {
+            content = content.replace(regex, `${key}=${value}`);
+        } else {
+            content += `\n${key}=${value}`;
+        }
+    } else {
+        content = `${key}=${value}\n`;
+    }
+
+    fs.writeFileSync(envPath, content);
+};
+
+// GET /api/config - Get current configuration
+app.get('/api/config', (req, res) => {
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : '';
+
+    res.json({
+        masterPlanPath: masterPlanPath,
+        projectRoot: projectRoot,
+        port: PORT,
+        localConfig: localConfig,
+        installDir: __dirname
+    });
+});
+
+// POST /api/config/project - Change project at runtime
+// Body: { "path": "/path/to/project" } or { "path": "/path/to/MASTER_PLAN.md" }
+app.post('/api/config/project', (req, res) => {
+    const { path: inputPath } = req.body;
+
+    if (!inputPath) {
+        return res.status(400).json({
+            error: 'Missing required field: path',
+            usage: 'POST /api/config/project with { "path": "/path/to/project" }'
+        });
+    }
+
+    // Resolve and validate the path
+    const resolvedPath = path.resolve(inputPath);
+    let masterPlanPath = '';
+    let projectRoot = '';
+
+    if (fs.existsSync(resolvedPath)) {
+        const stats = fs.statSync(resolvedPath);
+
+        if (stats.isFile()) {
+            // Direct path to a file (should be MASTER_PLAN.md)
+            if (path.basename(resolvedPath) !== 'MASTER_PLAN.md') {
+                return res.status(400).json({
+                    error: 'File must be named MASTER_PLAN.md',
+                    provided: path.basename(resolvedPath)
+                });
+            }
+            masterPlanPath = resolvedPath;
+            projectRoot = getProjectRoot(masterPlanPath);
+        } else if (stats.isDirectory()) {
+            // Directory - search for MASTER_PLAN.md
+            projectRoot = resolvedPath;
+            masterPlanPath = findMasterPlan(projectRoot);
+
+            if (!masterPlanPath) {
+                return res.status(404).json({
+                    error: 'Could not find MASTER_PLAN.md in project',
+                    searched: [
+                        'MASTER_PLAN.md',
+                        'docs/MASTER_PLAN.md',
+                        'planning/MASTER_PLAN.md'
+                    ],
+                    projectRoot: projectRoot
+                });
+            }
+        }
+    } else {
+        return res.status(404).json({
+            error: 'Path not found',
+            path: resolvedPath
+        });
+    }
+
+    // Update runtime environment
+    process.env.MASTER_PLAN_PATH = masterPlanPath;
+
+    // Persist to .env file
+    updateEnvFile('MASTER_PLAN_PATH', masterPlanPath);
+
+    console.log(`[Config] Project changed to: ${masterPlanPath}`);
+
+    res.json({
+        status: 'ok',
+        message: 'Project configured successfully',
+        masterPlanPath: masterPlanPath,
+        projectRoot: projectRoot
+    });
+});
+
+// POST /api/config/reload - Reload configuration from .env file
+app.post('/api/config/reload', (req, res) => {
+    const envPath = path.join(__dirname, '.env');
+
+    if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        const match = content.match(/^MASTER_PLAN_PATH=(.+)$/m);
+
+        if (match) {
+            process.env.MASTER_PLAN_PATH = match[1].trim().replace(/["']/g, '');
+            console.log(`[Config] Reloaded MASTER_PLAN_PATH: ${process.env.MASTER_PLAN_PATH}`);
+        }
+    }
+
+    res.json({
+        status: 'ok',
+        masterPlanPath: process.env.MASTER_PLAN_PATH || null
     });
 });
 
