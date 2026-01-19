@@ -122,37 +122,9 @@ To move a task between Kanban columns, update the status marker in the title:
 
 ## Claude Code Integration
 
-### Option 1: MCP Server (Recommended)
+### REST API
 
-Create `.mcp.json` in your project root:
-
-```json
-{
-  "mcpServers": {
-    "dev-maestro": {
-      "command": "node",
-      "args": ["/home/YOUR_USER/.dev-maestro/mcp-server.js"],
-      "env": {
-        "DEV_MAESTRO_URL": "http://localhost:6010"
-      }
-    }
-  }
-}
-```
-
-Or run: `~/.dev-maestro/scripts/setup-mcp.sh /path/to/project`
-
-This gives you these tools:
-- `maestro_get_tasks` - Get all tasks (optionally filter by status)
-- `maestro_get_task` - Get a specific task by ID
-- `maestro_update_status` - Update task status
-- `maestro_next_id` - Get next available task ID
-- `maestro_health` - Get project health report
-- `maestro_master_plan` - Get raw MASTER_PLAN.md content
-
-### Option 2: Direct API Usage
-
-If MCP is not available, Claude Code can interact with Dev Maestro via HTTP:
+Claude Code can interact with Dev Maestro via HTTP:
 
 ```bash
 # Get all tasks
