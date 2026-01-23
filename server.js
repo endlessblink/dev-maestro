@@ -115,6 +115,62 @@ const broadcastLog = (message) => {
     });
 };
 
+// Helper to broadcast lock changes to SSE clients
+const broadcastLocksChanged = () => {
+    const payload = JSON.stringify({ type: 'locks-changed' });
+    clients.forEach(client => {
+        client.write(`data: ${payload}\n\n`);
+    });
+    console.log(`[SSE] Broadcast locks-changed to ${clients.length} clients`);
+};
+
+// Helper to broadcast deferred queue changes
+const broadcastDeferredChanged = () => {
+    const payload = JSON.stringify({ type: 'deferred-changed' });
+    clients.forEach(client => {
+        client.write(`data: ${payload}\n\n`);
+    });
+    console.log(`[SSE] Broadcast deferred-changed to ${clients.length} clients`);
+};
+
+// Setup file watchers for real-time updates (after getMasterPlanPath is called)
+let locksWatcher = null;
+let deferredWatcher = null;
+
+const setupFileWatchers = (projectRoot) => {
+    // Watch locks directory
+    const locksDir = path.join(projectRoot, '.claude', 'locks');
+    if (fs.existsSync(locksDir) && !locksWatcher) {
+        try {
+            locksWatcher = fs.watch(locksDir, { persistent: false }, (eventType, filename) => {
+                if (filename && filename.endsWith('.lock')) {
+                    console.log(`[Watch] Lock file ${eventType}: ${filename}`);
+                    broadcastLocksChanged();
+                }
+            });
+            console.log(`[Watch] Watching locks directory: ${locksDir}`);
+        } catch (err) {
+            console.log(`[Watch] Could not watch locks directory: ${err.message}`);
+        }
+    }
+
+    // Watch deferred queue directory
+    const deferredDir = path.join(projectRoot, '.claude', 'deferred-queue');
+    if (fs.existsSync(deferredDir) && !deferredWatcher) {
+        try {
+            deferredWatcher = fs.watch(deferredDir, { persistent: false }, (eventType, filename) => {
+                if (filename && filename.endsWith('.json')) {
+                    console.log(`[Watch] Deferred queue ${eventType}: ${filename}`);
+                    broadcastDeferredChanged();
+                }
+            });
+            console.log(`[Watch] Watching deferred queue: ${deferredDir}`);
+        } catch (err) {
+            console.log(`[Watch] Could not watch deferred queue: ${err.message}`);
+        }
+    }
+};
+
 // Enable CORS
 app.use(cors());
 
@@ -950,7 +1006,9 @@ app.get('/api/health/report/json', async (req, res) => {
 
 // GET /api/skills - Dynamically scan .claude/skills/ directory
 app.get('/api/skills', (req, res) => {
-    const skillsDir = path.join(__dirname, '../.claude/skills');
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+    const skillsDir = path.join(projectRoot, '.claude/skills');
 
     try {
         if (!fs.existsSync(skillsDir)) {
@@ -1656,6 +1714,104 @@ function broadcastAgentOutput(taskId, data) {
     });
 }
 
+// ============================================================================
+// ORCHESTRATOR SUB-AGENT OUTPUT HANDLING (TASK-319)
+// ============================================================================
+
+// Ensure logs directory exists
+const logsDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+    console.log('[Orchestrator] Created logs directory:', logsDir);
+}
+
+// Append to agent log file
+function appendAgentLog(taskId, message) {
+    const logFile = path.join(logsDir, `agent-${taskId}.log`);
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logFile, `[${timestamp}] ${message}\n`);
+}
+
+// Parse and broadcast orchestrator sub-agent output (stream-json format)
+// Similar to parseAndBroadcastAgentOutput but uses broadcastOrchestration
+function parseAndBroadcastOrchOutput(orchId, taskId, rawData, subAgentData, jsonBuffer = '') {
+    jsonBuffer += rawData;
+    const lines = jsonBuffer.split('\n');
+    const remainingBuffer = lines.pop(); // Keep incomplete line
+
+    for (const line of lines) {
+        if (!line.trim()) continue;
+
+        try {
+            const event = JSON.parse(line);
+
+            // Parse different event types from stream-json format
+            if (event.type === 'assistant' && event.message?.content) {
+                for (const block of event.message.content) {
+                    if (block.type === 'text' && block.text?.trim()) {
+                        const text = block.text.trim();
+                        subAgentData.output.push({ type: 'assistant', text, time: Date.now() });
+                        appendAgentLog(taskId, `[ASSISTANT] ${text.substring(0, 200)}`);
+                        broadcastOrchestration(orchId, {
+                            type: 'agent_output',
+                            taskId,
+                            outputType: 'assistant',
+                            text: text.substring(0, 500) // Limit broadcast size
+                        });
+                    } else if (block.type === 'tool_use') {
+                        const toolText = `🔧 ${block.name}: ${JSON.stringify(block.input || {}).substring(0, 100)}`;
+                        subAgentData.output.push({ type: 'tool', text: toolText, tool: block.name, time: Date.now() });
+                        appendAgentLog(taskId, `[TOOL] ${block.name}`);
+                        broadcastOrchestration(orchId, {
+                            type: 'agent_output',
+                            taskId,
+                            outputType: 'tool',
+                            tool: block.name,
+                            text: toolText
+                        });
+                    }
+                }
+            } else if (event.type === 'content_block_delta' && event.delta?.text) {
+                const text = event.delta.text;
+                if (text.trim()) {
+                    subAgentData.output.push({ type: 'delta', text, time: Date.now() });
+                    // Don't broadcast deltas to reduce noise, but log them
+                    appendAgentLog(taskId, `[DELTA] ${text.substring(0, 100)}`);
+                }
+            } else if (event.type === 'result') {
+                const text = event.subtype === 'success'
+                    ? '✅ Task completed successfully!'
+                    : `⚠️ Task ended: ${event.subtype}`;
+                subAgentData.output.push({ type: 'result', text, time: Date.now() });
+                appendAgentLog(taskId, `[RESULT] ${text}`);
+                broadcastOrchestration(orchId, {
+                    type: 'agent_output',
+                    taskId,
+                    outputType: 'result',
+                    text
+                });
+            } else if (event.type === 'system') {
+                // Skip noisy system messages
+                const skipSubtypes = ['init', 'hook_response', 'config'];
+                if (skipSubtypes.includes(event.subtype)) continue;
+                if (event.message && typeof event.message === 'string') {
+                    subAgentData.output.push({ type: 'system', text: event.message, time: Date.now() });
+                    appendAgentLog(taskId, `[SYSTEM] ${event.message}`);
+                }
+            }
+        } catch (e) {
+            // Not JSON - log meaningful non-JSON output
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('{') && trimmed.length < 500) {
+                subAgentData.output.push({ type: 'stdout', text: trimmed, time: Date.now() });
+                appendAgentLog(taskId, `[STDOUT] ${trimmed}`);
+            }
+        }
+    }
+
+    return remainingBuffer;
+}
+
 // GET /api/beads/agents - List all running agents
 app.get('/api/beads/agents', (req, res) => {
     const agents = [];
@@ -1675,6 +1831,29 @@ app.get('/api/beads/agents', (req, res) => {
     }
 
     res.json({ agents });
+});
+
+// GET /api/orchestrator/logs/:taskId - Get agent log file (TASK-319)
+app.get('/api/orchestrator/logs/:taskId', (req, res) => {
+    const taskId = req.params.taskId;
+    const logFile = path.join(logsDir, `agent-${taskId}.log`);
+
+    if (!fs.existsSync(logFile)) {
+        return res.status(404).json({ error: 'Log file not found', taskId });
+    }
+
+    try {
+        const content = fs.readFileSync(logFile, 'utf8');
+        const lines = content.split('\n').filter(l => l.trim());
+        res.json({
+            taskId,
+            logFile,
+            lineCount: lines.length,
+            content: lines.slice(-100) // Last 100 lines
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // POST /api/beads/merge/:id - Merge agent's branch to main
@@ -2155,6 +2334,99 @@ function useFallbackQuestions(orch, reason) {
     debouncedSave();
 }
 
+// Helper: Detect project tech stack from package.json and codebase
+function detectProjectContext(projectPath) {
+    const context = {
+        framework: null,
+        uiLibrary: null,
+        stateManagement: null,
+        database: null,
+        testing: [],
+        buildTool: null,
+        components: [],
+        rawDeps: {}
+    };
+
+    try {
+        // Read package.json
+        const pkgPath = path.join(projectPath, 'package.json');
+        if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+            context.rawDeps = deps;
+
+            // Detect framework
+            if (deps['vue'] || deps['vue-router']) context.framework = 'Vue 3';
+            else if (deps['react'] || deps['react-dom']) context.framework = 'React';
+            else if (deps['svelte']) context.framework = 'Svelte';
+            else if (deps['@angular/core']) context.framework = 'Angular';
+
+            // Detect UI library
+            if (deps['naive-ui']) context.uiLibrary = 'Naive UI';
+            else if (deps['@mui/material']) context.uiLibrary = 'Material UI';
+            else if (deps['@chakra-ui/react']) context.uiLibrary = 'Chakra UI';
+            else if (deps['vuetify']) context.uiLibrary = 'Vuetify';
+            else if (deps['element-plus']) context.uiLibrary = 'Element Plus';
+            else if (deps['ant-design-vue'] || deps['antd']) context.uiLibrary = 'Ant Design';
+
+            // Detect state management
+            if (deps['pinia']) context.stateManagement = 'Pinia';
+            else if (deps['vuex']) context.stateManagement = 'Vuex';
+            else if (deps['redux'] || deps['@reduxjs/toolkit']) context.stateManagement = 'Redux';
+            else if (deps['zustand']) context.stateManagement = 'Zustand';
+            else if (deps['mobx']) context.stateManagement = 'MobX';
+
+            // Detect database/backend
+            if (deps['@supabase/supabase-js']) context.database = 'Supabase';
+            else if (deps['firebase']) context.database = 'Firebase';
+            else if (deps['prisma'] || deps['@prisma/client']) context.database = 'Prisma';
+
+            // Detect testing
+            if (deps['vitest']) context.testing.push('Vitest');
+            if (deps['jest']) context.testing.push('Jest');
+            if (deps['@playwright/test'] || deps['playwright']) context.testing.push('Playwright');
+            if (deps['cypress']) context.testing.push('Cypress');
+
+            // Detect build tool
+            if (deps['vite']) context.buildTool = 'Vite';
+            else if (deps['webpack']) context.buildTool = 'Webpack';
+            else if (deps['esbuild']) context.buildTool = 'esbuild';
+
+            // Detect common components/libraries
+            if (deps['@vueflow/core'] || deps['vue-flow']) context.components.push('Vue Flow (canvas)');
+            if (deps['@tiptap/vue-3'] || deps['tiptap']) context.components.push('TipTap (rich text editor)');
+            if (deps['vuedraggable']) context.components.push('Vue Draggable');
+            if (deps['tailwindcss']) context.components.push('Tailwind CSS');
+        }
+
+        // Check for existing modals/components
+        const srcPath = path.join(projectPath, 'src');
+        if (fs.existsSync(srcPath)) {
+            const checkPaths = [
+                { pattern: 'components/**/Modal*.vue', name: 'Custom modals' },
+                { pattern: 'components/**/Dialog*.vue', name: 'Custom dialogs' },
+                { pattern: 'composables/use*.ts', name: 'Custom composables' }
+            ];
+
+            // Simple check for common component patterns
+            try {
+                const componentsPath = path.join(srcPath, 'components');
+                if (fs.existsSync(componentsPath)) {
+                    const files = fs.readdirSync(componentsPath, { recursive: true });
+                    const hasModals = files.some(f => f.toString().toLowerCase().includes('modal'));
+                    const hasDialogs = files.some(f => f.toString().toLowerCase().includes('dialog'));
+                    if (hasModals || hasDialogs) context.components.push('Custom modal/dialog components');
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+    } catch (err) {
+        console.error('[Orchestrator] Error detecting project context:', err.message);
+    }
+
+    return context;
+}
+
 // Helper: Generate clarifying questions based on goal
 async function generateClarifyingQuestions(orch) {
     console.log(`[Orchestrator] generateClarifyingQuestions called for ${orch.id}`);
@@ -2169,16 +2441,44 @@ async function generateClarifyingQuestions(orch) {
         return;
     }
 
+    // Auto-detect project context
+    const projectPath = path.join(__dirname, '..');
+    const detectedContext = detectProjectContext(projectPath);
+    orch.detectedContext = detectedContext; // Store for later use
+
+    console.log('[Orchestrator] Detected project context:', JSON.stringify(detectedContext, null, 2));
+
+    // Build context string for prompt
+    const contextLines = [];
+    if (detectedContext.framework) contextLines.push(`- Framework: ${detectedContext.framework}`);
+    if (detectedContext.uiLibrary) contextLines.push(`- UI Library: ${detectedContext.uiLibrary} (has modal/dialog components)`);
+    if (detectedContext.stateManagement) contextLines.push(`- State Management: ${detectedContext.stateManagement}`);
+    if (detectedContext.database) contextLines.push(`- Database/Backend: ${detectedContext.database}`);
+    if (detectedContext.testing.length) contextLines.push(`- Testing: ${detectedContext.testing.join(', ')}`);
+    if (detectedContext.buildTool) contextLines.push(`- Build Tool: ${detectedContext.buildTool}`);
+    if (detectedContext.components.length) contextLines.push(`- Components: ${detectedContext.components.join(', ')}`);
+
+    const contextBlock = contextLines.length > 0
+        ? `\n\n**DETECTED PROJECT CONTEXT (DO NOT ASK ABOUT THESE - ALREADY KNOWN):**\n${contextLines.join('\n')}\n`
+        : '';
+
     const prompt = `You are an expert requirements analyst. The user wants to build:
 
 "${orch.goal}"
+${contextBlock}
+Generate 2-4 clarifying questions to understand their requirements better.
 
-Generate 3-5 clarifying questions to understand their requirements better.
+**CRITICAL RULES:**
+1. DO NOT ask about framework, UI library, state management, database, or build tools - these are already detected above
+2. DO NOT ask generic questions like "What framework?" or "Do you have a modal system?" - CHECK THE DETECTED CONTEXT
+3. ONLY ask about things NOT listed in the detected context
+4. Focus on the SPECIFIC FEATURE they want to build, not the tech stack
+
 Focus on:
-1. Technical preferences (frameworks, languages, architecture)
-2. Scope clarification (what features are essential vs nice-to-have)
-3. Constraints (timeline expectations, existing code to integrate with)
-4. Quality requirements (testing, accessibility, security needs)
+1. Implementation details specific to the feature (where exactly should this appear, what triggers it)
+2. User experience (animations, transitions, behavior on cancel/save)
+3. Edge cases (what if user is mid-edit, what about unsaved changes)
+4. Integration with existing features (should this work with existing task system, etc.)
 
 Output ONLY a JSON array of questions, each with:
 - "id": unique string (e.g., "q1", "q2")
@@ -2187,24 +2487,11 @@ Output ONLY a JSON array of questions, each with:
 - "type": "choice", "multiselect", or "text"
 - "multiSelect": boolean (true for questions where multiple options can be selected)
 
-Use multiSelect: true for questions about:
-- Features to include (users often want multiple)
-- Technologies/libraries to use together
-- Quality requirements (testing, accessibility, security)
-- Integrations needed
-- Target platforms or browsers
-
-Use multiSelect: false (single choice) for:
-- Framework choice (usually pick one)
-- Primary architecture pattern
-- Priority decisions
-
-Example:
+Example for a "long press to edit" feature:
 [
-  {"id": "q1", "question": "What framework should we use?", "options": ["Vue 3", "React", "Svelte", "Angular"], "type": "choice", "multiSelect": false},
-  {"id": "q2", "question": "Which features are must-haves?", "options": ["Authentication", "Dark mode", "Offline support", "Real-time sync", "Accessibility"], "type": "multiselect", "multiSelect": true},
-  {"id": "q3", "question": "What quality requirements matter most?", "options": ["Unit tests", "E2E tests", "WCAG compliance", "Performance optimization"], "type": "multiselect", "multiSelect": true},
-  {"id": "q4", "question": "Any specific integration requirements?", "type": "text"}
+  {"id": "q1", "question": "What should the long-press duration be?", "options": ["300ms (quick)", "500ms (standard)", "800ms (deliberate)"], "type": "choice", "multiSelect": false},
+  {"id": "q2", "question": "Should there be visual feedback during the long press?", "options": ["Progress ring animation", "Subtle scale/pulse", "Haptic feedback only", "No feedback needed"], "type": "choice", "multiSelect": false},
+  {"id": "q3", "question": "What happens if user is offline during edit?", "options": ["Queue changes for sync", "Show warning but allow edit", "Block editing until online"], "type": "choice", "multiSelect": false}
 ]`;
 
     broadcastOrchestration(orch.id, {
@@ -2806,7 +3093,11 @@ You are working in an isolated git worktree. Your changes will be reviewed befor
 
     console.log(`[Orchestrator] Spawning Claude agent for task ${task.id} in ${worktreePath}`);
 
+    // TASK-319: Add stream-json output format for proper parsing
     const agentProcess = spawn(CLAUDE_BINARY, [
+        '--print',
+        '--verbose',
+        '--output-format', 'stream-json',
         '--dangerously-skip-permissions',
         '--max-turns', '30',
         '-p', prompt
@@ -2825,26 +3116,31 @@ You are working in an isolated git worktree. Your changes will be reviewed befor
 
     subAgentData.process = agentProcess;
     subAgentData.stderrBuffer = '';  // Track stderr for debugging
+    subAgentData.jsonBuffer = '';    // TASK-319: Buffer for JSON parsing
 
+    // Initialize log file for this agent
+    appendAgentLog(task.id, `=== Agent started for: ${task.title} ===`);
+    appendAgentLog(task.id, `Worktree: ${worktreePath}`);
+
+    // TASK-319: Parse stream-json output and broadcast real-time
     agentProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        subAgentData.output.push(output);
-        console.log(`[Orchestrator] Task ${task.id} stdout: ${output.slice(0, 200)}...`);
+        subAgentData.jsonBuffer = parseAndBroadcastOrchOutput(
+            orch.id,
+            task.id,
+            data.toString(),
+            subAgentData,
+            subAgentData.jsonBuffer
+        );
 
-        // Send periodic summaries instead of raw output
-        if (subAgentData.output.length % 10 === 0) {
-            broadcastOrchestration(orch.id, {
-                type: 'progress',
-                taskId: task.id,
-                message: `Working on ${task.title}... (${subAgentData.output.length} updates)`
-            });
-        }
+        // Also log raw chunk count for debugging
+        console.log(`[Orchestrator] Task ${task.id} output chunks: ${subAgentData.output.length}`);
     });
 
     agentProcess.stderr.on('data', (data) => {
         const error = data.toString();
-        subAgentData.output.push(`[ERROR] ${error}`);
+        subAgentData.output.push({ type: 'stderr', text: error, time: Date.now() });
         subAgentData.stderrBuffer += error;
+        appendAgentLog(task.id, `[STDERR] ${error}`);
         console.log(`[Orchestrator] Task ${task.id} stderr: ${error}`);
     });
 
@@ -3691,7 +3987,9 @@ Create 1-5 new tasks to address this feedback. Output as JSON array:
 
 // GET /api/locks - List active task locks
 app.get('/api/locks', (req, res) => {
-    const locksDir = path.join(__dirname, '../.claude/locks');
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : '';
+    const locksDir = path.join(projectRoot, '.claude', 'locks');
 
     try {
         if (!fs.existsSync(locksDir)) {
@@ -3712,7 +4010,7 @@ app.get('/api/locks', (req, res) => {
                     session_id: lock.session_id || 'unknown',
                     session_short: (lock.session_id || '').slice(0, 8),
                     locked_at: lock.locked_at || new Date(lock.timestamp * 1000).toLocaleString(),
-                    files: lock.files || []
+                    files: lock.files_touched || lock.files || []
                 });
             } catch (e) {
                 // Skip invalid lock files
@@ -3722,6 +4020,51 @@ app.get('/api/locks', (req, res) => {
         res.json({ locks });
     } catch (err) {
         res.json({ locks: [], error: err.message });
+    }
+});
+
+// GET /api/deferred - List deferred edits queue
+app.get('/api/deferred', (req, res) => {
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : '';
+    const deferredDir = path.join(projectRoot, '.claude', 'deferred-queue');
+
+    try {
+        if (!fs.existsSync(deferredDir)) {
+            return res.json({ sessions: [], total: 0 });
+        }
+
+        const files = fs.readdirSync(deferredDir).filter(f => f.endsWith('.json'));
+        const sessions = [];
+        let total = 0;
+
+        for (const file of files) {
+            try {
+                const content = fs.readFileSync(path.join(deferredDir, file), 'utf8');
+                const queue = JSON.parse(content);
+                const sessionId = file.replace('.json', '');
+
+                if (queue.deferred_edits && queue.deferred_edits.length > 0) {
+                    sessions.push({
+                        session_id: sessionId,
+                        session_short: sessionId.slice(0, 8),
+                        edits: queue.deferred_edits.map(e => ({
+                            file: e.file,
+                            blocked_by: e.blocked_by_task,
+                            timestamp: e.timestamp,
+                            waiting_since: new Date(e.timestamp * 1000).toLocaleString()
+                        }))
+                    });
+                    total += queue.deferred_edits.length;
+                }
+            } catch (e) {
+                // Skip invalid queue files
+            }
+        }
+
+        res.json({ sessions, total });
+    } catch (err) {
+        res.json({ sessions: [], total: 0, error: err.message });
     }
 });
 
@@ -3753,4 +4096,13 @@ app.get('/api/events', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Dev Maestro running at http://localhost:${PORT}`);
     console.log(`Serving static files from: ${__dirname}`);
+
+    // Setup file watchers for real-time lock monitoring
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    if (masterPlanPath) {
+        const projectRoot = getProjectRoot(masterPlanPath);
+        if (projectRoot) {
+            setupFileWatchers(projectRoot);
+        }
+    }
 });
