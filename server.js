@@ -4095,8 +4095,10 @@ app.get('/api/events', (req, res) => {
 
 app.listen(PORT, () => {
     const url = `http://localhost:${PORT}`;
-    // Use ANSI escape codes to make URL clickable in terminals that support it (iTerm2, VS Code, etc.)
-    console.log(`Dev Maestro running at \x1b]8;;${url}\x1b\\${url}\x1b]8;;\x1b\\`);
+    // Cyan + underline + OSC 8 hyperlink for maximum terminal compatibility
+    // OSC 8: \x1b]8;;URL\x1b\\ ... \x1b]8;;\x1b\\
+    // Cyan: \x1b[36m, Underline: \x1b[4m, Reset: \x1b[0m
+    console.log(`Dev Maestro running at \x1b]8;;${url}\x1b\\\x1b[36m\x1b[4m${url}\x1b[0m\x1b]8;;\x1b\\`);
     console.log(`Serving static files from: ${__dirname}`);
 
     // Setup file watchers for real-time lock monitoring
