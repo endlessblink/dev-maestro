@@ -5335,6 +5335,16 @@
             currentSubSection = '';
             continue;
           }
+          if (trimmed.startsWith('## Active Bugs') || trimmed.startsWith('## Active Tasks')) {
+            currentSection = 'activeWork';
+            currentSubSection = '';
+            continue;
+          }
+          if (trimmed.startsWith('## Planned Tasks')) {
+            currentSection = 'activeWork';
+            currentSubSection = 'planned';
+            continue;
+          }
           if (trimmed.startsWith('## Known Issues')) {
             currentSection = 'issues';
             currentSubSection = '';
