@@ -39,6 +39,8 @@
             /* Health green */
             --color-orchestrator: #a855f7;
             /* Orchestrator purple */
+            --color-happy: #ec4899;
+            /* Happy pink */
 
             /* Transitions */
             --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -244,6 +246,11 @@
         .tab.health:hover .icon svg,
         .tab.health.active .icon svg {
             stroke: var(--color-health);
+        }
+
+        .tab.happy:hover .icon svg,
+        .tab.happy.active .icon svg {
+            stroke: var(--color-happy);
         }
 
         .tab.active.orchestrator::after {
@@ -491,6 +498,15 @@
                 </span>
                 <span>Health</span>
             </button>
+            <button class="tab happy" data-panel="happy">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                        <line x1="12" y1="18" x2="12.01" y2="18" />
+                    </svg>
+                </span>
+                <span>Happy</span>
+            </button>
         </nav>
 
         <div class="spacer"></div>
@@ -549,6 +565,10 @@
         <div id="health" class="panel">
             <!-- Lazy load: src set on first tab activation -->
             <iframe data-src="health/index.html" title="Health Dashboard"></iframe>
+        </div>
+        <div id="happy" class="panel">
+            <!-- Lazy load: src set on first tab activation -->
+            <iframe data-src="views/happy/index.html" title="Happy Remote Control"></iframe>
         </div>
     </main>
 

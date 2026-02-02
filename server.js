@@ -1338,6 +1338,152 @@ function cleanupWorktree(taskId) {
     }
 }
 
+// Helper: Clean up ALL stale worktrees (older than maxAgeHours)
+// BUG-1113: Prevents context bloat in Claude Code
+function cleanupStaleWorktrees(maxAgeHours = 24, customProjectRoot = null) {
+    // Use provided projectRoot, or derive from MASTER_PLAN_PATH, or fallback to parent dir
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = customProjectRoot || (masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..'));
+    const worktreesDir = path.join(projectRoot, '.agent-worktrees');
+    const results = { cleaned: [], failed: [], skipped: [] };
+
+    try {
+        if (!fs.existsSync(worktreesDir)) {
+            console.log('[Cleanup] No .agent-worktrees directory found');
+            return results;
+        }
+
+        const entries = fs.readdirSync(worktreesDir, { withFileTypes: true });
+        const now = Date.now();
+        const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
+
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+
+            const worktreePath = path.join(worktreesDir, entry.name);
+
+            try {
+                const stats = fs.statSync(worktreePath);
+                const ageMs = now - stats.mtimeMs;
+                const ageHours = Math.round(ageMs / (60 * 60 * 1000));
+
+                if (ageMs > maxAgeMs) {
+                    // Remove the worktree via git
+                    try {
+                        execSync(`git worktree remove "${worktreePath}" --force`, {
+                            cwd: projectRoot,
+                            encoding: 'utf8',
+                            stdio: 'pipe'
+                        });
+                        results.cleaned.push({ name: entry.name, ageHours });
+                        console.log(`[Cleanup] Removed stale worktree: ${entry.name} (${ageHours}h old)`);
+                    } catch (gitErr) {
+                        // If git worktree remove fails, try direct removal
+                        try {
+                            fs.rmSync(worktreePath, { recursive: true, force: true });
+                            results.cleaned.push({ name: entry.name, ageHours, method: 'direct' });
+                            console.log(`[Cleanup] Force-removed stale worktree: ${entry.name}`);
+                        } catch (rmErr) {
+                            results.failed.push({ name: entry.name, error: rmErr.message });
+                            console.error(`[Cleanup] Failed to remove ${entry.name}: ${rmErr.message}`);
+                        }
+                    }
+                } else {
+                    results.skipped.push({ name: entry.name, ageHours });
+                }
+            } catch (statErr) {
+                results.failed.push({ name: entry.name, error: statErr.message });
+            }
+        }
+
+        // Prune git's worktree list to remove stale entries
+        try {
+            execSync('git worktree prune', { cwd: projectRoot, encoding: 'utf8', stdio: 'pipe' });
+            console.log('[Cleanup] Pruned git worktree list');
+        } catch (pruneErr) {
+            console.warn('[Cleanup] Could not prune worktree list:', pruneErr.message);
+        }
+
+        // Also clean up orphaned branches (bd-* branches without worktrees)
+        try {
+            const branches = execSync('git branch', { cwd: projectRoot, encoding: 'utf8' })
+                .split('\n')
+                .map(b => b.trim().replace('* ', ''))
+                .filter(b => b.startsWith('bd-'));
+
+            for (const branch of branches) {
+                // Check if corresponding worktree exists
+                const taskId = branch.replace('bd-', '');
+                const worktreePath = path.join(worktreesDir, taskId);
+                const orchWorktreePath = path.join(worktreesDir, `orch-${taskId}`);
+
+                if (!fs.existsSync(worktreePath) && !fs.existsSync(orchWorktreePath)) {
+                    try {
+                        execSync(`git branch -D ${branch}`, { cwd: projectRoot, encoding: 'utf8', stdio: 'pipe' });
+                        console.log(`[Cleanup] Deleted orphaned branch: ${branch}`);
+                    } catch (branchErr) {
+                        // Ignore branch deletion errors
+                    }
+                }
+            }
+        } catch (branchListErr) {
+            // Ignore branch listing errors
+        }
+
+        console.log(`[Cleanup] Summary: ${results.cleaned.length} cleaned, ${results.skipped.length} skipped, ${results.failed.length} failed`);
+        return results;
+    } catch (err) {
+        console.error('[Cleanup] Error during stale worktree cleanup:', err.message);
+        return results;
+    }
+}
+
+// GET /api/cleanup-worktrees - Manual worktree cleanup endpoint
+// BUG-1113: Allows manual trigger of stale worktree cleanup
+app.get('/api/cleanup-worktrees', (req, res) => {
+    const maxAgeHours = parseInt(req.query.maxAgeHours) || 24;
+    const customProjectRoot = req.query.projectRoot || null;
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = customProjectRoot || (masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..'));
+
+    const results = cleanupStaleWorktrees(maxAgeHours, customProjectRoot);
+    res.json({
+        success: true,
+        maxAgeHours,
+        projectRoot,
+        worktreesDir: path.join(projectRoot, '.agent-worktrees'),
+        ...results
+    });
+});
+
+// POST /api/cleanup-worktrees - Force cleanup all worktrees (maxAge=0)
+app.post('/api/cleanup-worktrees', (req, res) => {
+    const { maxAgeHours = 0, force = false, projectRoot: customProjectRoot = null } = req.body;
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = customProjectRoot || (masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..'));
+
+    if (force) {
+        // Force cleanup: remove ALL worktrees regardless of age
+        const results = cleanupStaleWorktrees(0, customProjectRoot);
+        res.json({
+            success: true,
+            forced: true,
+            projectRoot,
+            worktreesDir: path.join(projectRoot, '.agent-worktrees'),
+            ...results
+        });
+    } else {
+        const results = cleanupStaleWorktrees(maxAgeHours, customProjectRoot);
+        res.json({
+            success: true,
+            maxAgeHours,
+            projectRoot,
+            worktreesDir: path.join(projectRoot, '.agent-worktrees'),
+            ...results
+        });
+    }
+});
+
 // GET /api/beads/supervisors - List available supervisors
 app.get('/api/beads/supervisors', (req, res) => {
     try {
@@ -2995,6 +3141,9 @@ function getOrchestrationStats(orch) {
 
 // Helper: Execute next available tasks
 function executeNextTasks(orch) {
+    // Auto-cleanup stale worktrees before starting new tasks (1 hour threshold)
+    cleanupStaleWorktrees(1);
+
     // Find tasks that are ready (dependencies completed)
     const completedIds = orch.subAgents
         .filter(a => a.status === 'completed')
@@ -3195,6 +3344,11 @@ You are working in an isolated git worktree. Your changes will be reviewed befor
                 },
                 message: `✅ Completed: ${task.title} (${filesChanged} files changed)`
             });
+
+            // Cleanup worktree after successful completion
+            if (subAgentData.worktreePath) {
+                cleanupWorktree(`orch-${task.id}`);
+            }
         } else {
             // Failed - check retries
             if (subAgentData.retries < orch.maxRetries) {
@@ -4068,6 +4222,377 @@ app.get('/api/deferred', (req, res) => {
     }
 });
 
+// ============================================================================
+// HAPPY CODER INTEGRATION - Remote Claude Code control via mobile
+// ============================================================================
+
+const { getHappyManager } = require('./modules/happy-manager');
+const { getHappySafety } = require('./modules/happy-safety');
+
+// Initialize Happy modules
+const happyManager = getHappyManager({ dataDir: path.join(__dirname, 'data') });
+const happySafety = getHappySafety({
+    configDir: path.join(__dirname, 'local'),
+    dataDir: path.join(__dirname, 'data')
+});
+
+// SSE clients specifically for Happy updates
+let happyClients = [];
+
+// Helper to broadcast Happy events
+const broadcastHappyEvent = (event) => {
+    const payload = JSON.stringify(event);
+    happyClients.forEach(client => {
+        client.write(`data: ${payload}\n\n`);
+    });
+    // Also send to main event stream
+    clients.forEach(client => {
+        client.write(`data: ${payload}\n\n`);
+    });
+};
+
+// Wire up Happy manager events
+happyManager.on('session-started', (data) => {
+    broadcastHappyEvent({ type: 'happy-session-started', ...data });
+    console.log(`[Happy] Session started: ${data.sessionId}`);
+});
+
+happyManager.on('session-stopped', (data) => {
+    broadcastHappyEvent({ type: 'happy-session-stopped', ...data });
+    console.log(`[Happy] Session stopped: ${data.sessionId}`);
+});
+
+happyManager.on('session-connected', (data) => {
+    broadcastHappyEvent({ type: 'happy-session-connected', ...data });
+    console.log(`[Happy] Session connected: ${data.sessionId}`);
+});
+
+happyManager.on('session-qr-ready', (data) => {
+    broadcastHappyEvent({ type: 'happy-qr-ready', ...data });
+    console.log(`[Happy] QR ready for session: ${data.sessionId}`);
+});
+
+happyManager.on('session-error', (data) => {
+    broadcastHappyEvent({ type: 'happy-session-error', ...data });
+    console.error(`[Happy] Session error: ${data.sessionId} - ${data.error}`);
+});
+
+// Wire up Happy safety events
+happySafety.on('command-queued', (data) => {
+    broadcastHappyEvent({ type: 'happy-command-queued', ...data });
+    console.log(`[Happy] Command queued for approval: ${data.id}`);
+});
+
+happySafety.on('command-approved', (data) => {
+    broadcastHappyEvent({ type: 'happy-command-approved', ...data });
+    console.log(`[Happy] Command approved: ${data.id}`);
+});
+
+happySafety.on('command-denied', (data) => {
+    broadcastHappyEvent({ type: 'happy-command-denied', ...data });
+    console.log(`[Happy] Command denied: ${data.id}`);
+});
+
+// GET /api/happy/status - Check Happy CLI installation status
+app.get('/api/happy/status', async (req, res) => {
+    try {
+        const installation = await happyManager.checkInstallation();
+        const safetyStatus = happySafety.getStatus();
+
+        res.json({
+            happy: installation,
+            safety: safetyStatus,
+            activeSessions: happyManager.getSessions().filter(s =>
+                s.status === 'running' || s.status === 'connected' || s.status === 'awaiting-pairing'
+            ).length
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/happy/sessions - List all Happy sessions
+app.get('/api/happy/sessions', (req, res) => {
+    try {
+        const sessions = happyManager.getSessions();
+        res.json({ sessions });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/happy/start - Start a new Happy session
+app.post('/api/happy/start', async (req, res) => {
+    try {
+        const { projectPath, model, permissionMode, env } = req.body;
+
+        // Check if Happy is installed
+        const installation = await happyManager.checkInstallation();
+        if (!installation.installed) {
+            return res.status(400).json({
+                error: 'Happy CLI not installed',
+                installCommand: 'npm install -g happy-coder'
+            });
+        }
+
+        // Start the session
+        const session = await happyManager.startSession({
+            projectPath: projectPath || process.env.MASTER_PLAN_PATH?.replace('/docs/MASTER_PLAN.md', '') || process.cwd(),
+            model: model || 'sonnet',
+            permissionMode: permissionMode || 'default',
+            env
+        });
+
+        res.json(session);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/happy/stop/:id - Stop a Happy session
+app.post('/api/happy/stop/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { force } = req.body;
+
+        const result = happyManager.stopSession(id, force === true);
+        if (result.success) {
+            res.json(result);
+        } else {
+            res.status(400).json(result);
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/happy/session/:id - Get session details
+app.get('/api/happy/session/:id', (req, res) => {
+    try {
+        const { id } = req.params;
+        const session = happyManager.getSession(id);
+
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        res.json(session);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/happy/session/:id/output - Get session output
+app.get('/api/happy/session/:id/output', (req, res) => {
+    try {
+        const { id } = req.params;
+        const lines = parseInt(req.query.lines) || 100;
+
+        const output = happyManager.getSessionOutput(id, lines);
+        res.json({ output });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/happy/stream/:id - SSE stream for session output
+app.get('/api/happy/stream/:id', (req, res) => {
+    const { id } = req.params;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Send initial state
+    const session = happyManager.getSession(id);
+    if (!session) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'Session not found' })}\n\n`);
+        return res.end();
+    }
+
+    res.write(`data: ${JSON.stringify({ type: 'session', session })}\n\n`);
+
+    // Handler for session output
+    const outputHandler = (data) => {
+        if (data.sessionId === id) {
+            res.write(`data: ${JSON.stringify({ type: 'output', ...data })}\n\n`);
+        }
+    };
+
+    // Handler for session stop
+    const stopHandler = (data) => {
+        if (data.sessionId === id) {
+            res.write(`data: ${JSON.stringify({ type: 'stopped', ...data })}\n\n`);
+            cleanup();
+            res.end();
+        }
+    };
+
+    happyManager.on('session-output', outputHandler);
+    happyManager.on('session-stopped', stopHandler);
+
+    const cleanup = () => {
+        happyManager.off('session-output', outputHandler);
+        happyManager.off('session-stopped', stopHandler);
+    };
+
+    // Keep alive
+    const keepAlive = setInterval(() => {
+        res.write(`: keep-alive\n\n`);
+    }, 15000);
+
+    req.on('close', () => {
+        clearInterval(keepAlive);
+        cleanup();
+    });
+});
+
+// GET /api/happy/queue - Get pending command approvals
+app.get('/api/happy/queue', (req, res) => {
+    try {
+        const pending = happySafety.getPendingCommands();
+        res.json({ pending, count: pending.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/happy/queue/:id/approve - Approve a queued command
+app.post('/api/happy/queue/:id/approve', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { approvedBy } = req.body;
+
+        const result = happySafety.approveCommand(id, approvedBy || 'dashboard');
+        if (result.success) {
+            res.json(result);
+        } else {
+            res.status(400).json(result);
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/happy/queue/:id/deny - Deny a queued command
+app.post('/api/happy/queue/:id/deny', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { deniedBy, reason } = req.body;
+
+        const result = happySafety.denyCommand(id, deniedBy || 'dashboard', reason || '');
+        if (result.success) {
+            res.json(result);
+        } else {
+            res.status(400).json(result);
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/happy/queue/stream - SSE stream for command queue updates
+app.get('/api/happy/queue/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Send current queue
+    const pending = happySafety.getPendingCommands();
+    res.write(`data: ${JSON.stringify({ type: 'queue', pending })}\n\n`);
+
+    // Add to Happy SSE clients
+    happyClients.push(res);
+
+    const keepAlive = setInterval(() => {
+        res.write(`: keep-alive\n\n`);
+    }, 15000);
+
+    req.on('close', () => {
+        clearInterval(keepAlive);
+        happyClients = happyClients.filter(c => c !== res);
+    });
+});
+
+// GET /api/happy/audit - Get audit log entries
+app.get('/api/happy/audit', (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 100;
+        const sessionId = req.query.sessionId;
+        const status = req.query.status;
+
+        const entries = happySafety.readAuditLog({ limit, sessionId, status });
+        res.json({ entries, count: entries.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/happy/config - Get safety configuration
+app.get('/api/happy/config', (req, res) => {
+    try {
+        const config = happySafety.getConfig();
+        res.json(config);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/happy/config - Update safety configuration
+app.post('/api/happy/config', (req, res) => {
+    try {
+        const updates = req.body;
+        happySafety.updateConfig(updates);
+        res.json({ success: true, config: happySafety.getConfig() });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/happy/check - Check if a command is allowed (for testing)
+app.post('/api/happy/check', async (req, res) => {
+    try {
+        const { command, sessionId, source, type } = req.body;
+
+        if (!command) {
+            return res.status(400).json({ error: 'Command is required' });
+        }
+
+        const result = await happySafety.checkCommand({
+            command,
+            sessionId: sessionId || 'test',
+            source: source || 'api',
+            type: type || 'unknown'
+        });
+
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/happy/events - SSE stream for all Happy events
+app.get('/api/happy/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+    happyClients.push(res);
+    console.log(`[Happy] SSE client connected. (Total: ${happyClients.length})`);
+
+    const keepAlive = setInterval(() => {
+        res.write(`: keep-alive\n\n`);
+    }, 15000);
+
+    req.on('close', () => {
+        console.log(`[Happy] SSE client disconnected.`);
+        clearInterval(keepAlive);
+        happyClients = happyClients.filter(c => c !== res);
+    });
+});
+
 // SSE Endpoint for live updates
 app.get('/api/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -4100,6 +4625,19 @@ app.listen(PORT, () => {
     // Cyan: \x1b[36m, Underline: \x1b[4m, Reset: \x1b[0m
     console.log(`Dev Maestro running at \x1b]8;;${url}\x1b\\\x1b[36m\x1b[4m${url}\x1b[0m\x1b]8;;\x1b\\`);
     console.log(`Serving static files from: ${__dirname}`);
+
+    // BUG-1113: Clean up stale worktrees on startup (older than 24h)
+    console.log('[Startup] Checking for stale worktrees...');
+    const cleanupResults = cleanupStaleWorktrees(24);
+    if (cleanupResults.cleaned.length > 0) {
+        console.log(`[Startup] Cleaned ${cleanupResults.cleaned.length} stale worktrees`);
+    }
+
+    // BUG-1113: Periodic cleanup every 1 hour (reduced from 4 hours)
+    setInterval(() => {
+        console.log('[Periodic] Running worktree cleanup...');
+        cleanupStaleWorktrees(4); // 4 hour threshold (reduced from 24)
+    }, 60 * 60 * 1000); // 1 hour
 
     // Setup file watchers for real-time lock monitoring
     const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
