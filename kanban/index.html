@@ -757,6 +757,80 @@
       flex-shrink: 0;
     }
 
+    .task-copy-btn {
+      position: absolute;
+      left: 12px;
+      bottom: 8px;
+      width: 24px;
+      height: 24px;
+      border: 1px solid var(--brand-primary);
+      border-radius: 6px;
+      background: rgba(13, 17, 23, 0.95);
+      color: var(--brand-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      z-index: 2;
+      opacity: 1;
+      box-shadow: 0 0 0 1px rgba(78, 205, 196, 0.25);
+    }
+
+    .task-copy-btn:hover {
+      color: var(--brand-primary);
+      border-color: var(--brand-primary);
+      background: var(--brand-subtle);
+    }
+
+    .task-copy-btn.copied {
+      color: var(--color-success);
+      border-color: var(--color-success);
+      animation: copyPulse 260ms ease-out;
+    }
+
+    .task-copy-btn.copied::after {
+      content: 'Copied';
+      position: absolute;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      color: #0f172a;
+      background: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.85);
+      border-radius: 999px;
+      padding: 2px 7px;
+      white-space: nowrap;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+      animation: copiedLabel 900ms ease-out forwards;
+    }
+
+    .task-copy-btn svg {
+      width: 12px;
+      height: 12px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    @keyframes copyPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.14); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes copiedLabel {
+      0% { opacity: 0; transform: translateX(-50%) translateY(4px); }
+      15% { opacity: 1; transform: translateX(-50%) translateY(0); }
+      75% { opacity: 1; transform: translateX(-50%) translateY(-1px); }
+      100% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+    }
+
     .task-card:hover {
       background: var(--surface-elevated);
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
@@ -1309,75 +1383,106 @@
       border: 1px solid var(--brand-subtle);
     }
 
-    /* ============== BEADS VIEW - Clean Agent Orchestration ============== */
-    .beads-layout {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 0;
-      height: 100%;
-      background: var(--surface-primary);
-    }
-
-    /* SIDEBAR */
-    .beads-sidebar {
-      background: var(--surface-secondary);
-      border-right: 1px solid var(--border-subtle);
+    /* ============== BEADS VIEW - Project Status Dashboard ============== */
+    .beads-dashboard {
       display: flex;
       flex-direction: column;
+      height: 100%;
+      background: var(--surface-primary);
       overflow-y: auto;
     }
 
-    .sidebar-section {
-      padding: 16px;
-      overflow: hidden;
-      transition: max-height 0.25s ease, padding 0.25s ease;
-    }
-
-    .sidebar-section.collapsed {
-      max-height: 48px;
-      padding-bottom: 0;
-    }
-
-    .sidebar-section.collapsed .task-list,
-    .sidebar-section.collapsed .agent-list {
-      opacity: 0;
-      visibility: hidden;
-    }
-
-    .section-header {
+    /* Stats Bar */
+    .beads-stats {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .section-header:hover .section-title {
-      color: var(--text-secondary);
-    }
-
-    .section-toggle {
-      width: 16px;
-      height: 16px;
-      color: var(--text-muted);
-      transition: transform 0.2s ease;
+      gap: 12px;
+      padding: 16px 20px;
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--border-subtle);
       flex-shrink: 0;
     }
 
-    .sidebar-section.collapsed .section-toggle {
-      transform: rotate(-90deg);
+    .stat-card {
+      flex: 1;
+      padding: 12px 16px;
+      background: var(--surface-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      text-align: center;
+      transition: border-color 0.2s ease;
     }
 
-    .section-title {
-      font-size: 11px;
+    .stat-card:hover {
+      border-color: var(--border-medium);
+    }
+
+    .stat-card .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .stat-label {
+      font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--text-muted);
     }
 
-    .section-count {
+    .stat-card.open .stat-value { color: var(--brand-primary); }
+    .stat-card.in-progress .stat-value { color: var(--color-warning); }
+    .stat-card.blocked .stat-value { color: var(--color-danger); }
+    .stat-card.done .stat-value { color: var(--color-success); }
+    .stat-card.total .stat-value { color: var(--text-secondary); }
+
+    /* Content Grid: task lists + graph */
+    .beads-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Task Lists Column */
+    .beads-task-lists {
+      overflow-y: auto;
+      border-right: 1px solid var(--border-subtle);
+      padding: 16px;
+    }
+
+    .task-section {
+      margin-bottom: 20px;
+    }
+
+    .task-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .task-section-header:hover .task-section-title {
+      color: var(--text-secondary);
+    }
+
+    .task-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .task-section-count {
       font-size: 11px;
       font-weight: 600;
       padding: 2px 8px;
@@ -1386,54 +1491,322 @@
       color: var(--text-secondary);
     }
 
-    .section-count.active {
-      background: var(--brand-primary);
-      color: #000;
+    .task-section-count.teal { background: var(--brand-subtle); color: var(--brand-primary); }
+    .task-section-count.orange { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+    .task-section-count.red { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
+    .task-section-count.green { background: rgba(16, 185, 129, 0.15); color: var(--color-success); }
+
+    .task-section-toggle {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
     }
 
-    .section-count.warning {
-      background: var(--color-warning);
-      color: #000;
+    .task-section.collapsed .task-section-toggle {
+      transform: rotate(-90deg);
     }
 
-    .sidebar-divider {
-      height: 1px;
-      background: var(--border-subtle);
-      margin: 0 16px;
+    .task-section.collapsed .task-section-body {
+      display: none;
     }
 
-    .task-list {
+    .task-section-body {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
 
-    .empty-state-small {
+    .task-list-empty {
       font-size: 12px;
       color: var(--text-muted);
       text-align: center;
-      padding: 16px;
+      padding: 12px;
     }
 
-    /* MAIN AREA */
-    .beads-main {
+    /* Graph Column */
+    .beads-graph-column {
+      overflow: hidden;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
     }
 
-    /* Agent Tabs */
+    .beads-graph-header {
+      padding: 16px 16px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    /* Bead Cards */
+    .bead-card {
+      background: var(--surface-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 10px 12px;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .bead-card:hover {
+      border-color: var(--brand-primary);
+      transform: translateY(-1px);
+    }
+
+    .bead-card.in-progress {
+      border-left: 3px solid var(--color-warning);
+    }
+
+    .bead-card.blocked-card {
+      border-left: 3px solid var(--color-danger);
+    }
+
+    .bead-card.done-card {
+      opacity: 0.6;
+      border-left: 3px solid var(--color-success);
+    }
+
+    .bead-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .bead-card-id {
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      color: var(--text-muted);
+      background: var(--surface-primary);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .bead-card-priority {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .bead-card-priority.p1 { background: var(--color-danger); color: #fff; }
+    .bead-card-priority.p2 { background: var(--color-warning); color: #000; }
+    .bead-card-priority.p3 { background: var(--color-info); color: #fff; }
+    .bead-card-priority.p4 { background: var(--color-success); color: #fff; }
+
+    .bead-card-title {
+      font-size: 13px;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+
+    .bead-card-title.strikethrough {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    .bead-card-type {
+      display: inline-block;
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: var(--surface-primary);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .bead-card-blocker {
+      font-size: 11px;
+      color: var(--color-danger);
+      margin-top: 6px;
+      padding: 4px 8px;
+      background: rgba(239, 68, 68, 0.08);
+      border-radius: 4px;
+    }
+
+    .bead-card-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+    }
+
+    .bead-btn {
+      flex: 1;
+      padding: 5px 10px;
+      font-size: 11px;
+      border-radius: 4px;
+      border: 1px solid var(--border-medium);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .bead-btn:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
+    .bead-btn.primary { background: var(--brand-primary); border-color: var(--brand-primary); color: #000; }
+    .bead-btn.primary:hover { background: var(--brand-hover); }
+    .bead-btn.success { background: var(--color-success); border-color: var(--color-success); color: #000; }
+    .bead-btn.danger { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+
+    .supervisor-select {
+      padding: 4px 8px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      background: var(--surface-tertiary);
+      color: var(--text-primary);
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .bead-card-supervisor {
+      font-size: 10px;
+      background: var(--surface-tertiary);
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: var(--text-secondary);
+      text-transform: capitalize;
+    }
+
+    .bead-card-branch {
+      font-size: 10px;
+      font-family: 'SF Mono', monospace;
+      color: var(--text-muted);
+      margin: 4px 0;
+    }
+
+    .bead-card-status { margin: 4px 0; }
+
+    .status-running {
+      color: var(--brand-primary);
+      font-size: 11px;
+      animation: pulse 1.5s infinite;
+    }
+
+    .status-complete { color: var(--color-success); font-size: 11px; font-weight: 500; }
+    .status-review { color: var(--color-warning); font-size: 11px; }
+
+    .bead-card.running { border-left: 3px solid var(--brand-primary); }
+    .bead-card.complete { border-left: 3px solid var(--color-success); }
+
+    .beads-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .beads-empty .icon {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    /* D3 Graph */
+    .beads-graph {
+      flex: 1;
+      min-height: 300px;
+    }
+
+    .beads-graph svg { width: 100%; height: 100%; }
+
+    .beads-graph .node circle {
+      stroke: var(--border-strong);
+      stroke-width: 2px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .beads-graph .node circle:hover {
+      stroke: var(--brand-primary);
+      stroke-width: 3px;
+    }
+
+    .beads-graph .node text {
+      font-size: 10px;
+      fill: var(--text-secondary);
+      pointer-events: none;
+    }
+
+    .beads-graph .node .node-label {
+      font-size: 11px;
+      font-weight: 500;
+      fill: var(--text-primary);
+    }
+
+    .beads-graph .link {
+      stroke: var(--border-medium);
+      stroke-opacity: 0.6;
+      fill: none;
+    }
+
+    .beads-graph .link.blocks {
+      stroke: var(--color-warning);
+      stroke-dasharray: 5, 3;
+    }
+
+    /* Agents Panel (collapsible, bottom) */
+    .agents-panel {
+      border-top: 1px solid var(--border-subtle);
+      background: var(--surface-secondary);
+      flex-shrink: 0;
+    }
+
+    .agents-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .agents-panel-header:hover { background: var(--surface-hover); }
+
+    .agents-panel-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .agents-panel-toggle {
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+    }
+
+    .agents-panel.collapsed .agents-panel-toggle {
+      transform: rotate(-90deg);
+    }
+
+    .agents-panel.collapsed .agents-panel-body {
+      display: none;
+    }
+
+    .agents-panel-body {
+      display: flex;
+      flex-direction: column;
+      max-height: 350px;
+    }
+
     .agent-tabs {
       display: flex;
       gap: 4px;
-      padding: 12px 16px;
-      background: var(--surface-secondary);
+      padding: 8px 16px;
       border-bottom: 1px solid var(--border-subtle);
       overflow-x: auto;
     }
 
     .agent-tab {
-      padding: 8px 16px;
+      padding: 6px 12px;
       font-size: 12px;
       font-weight: 500;
       color: var(--text-secondary);
@@ -1444,18 +1817,11 @@
       white-space: nowrap;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
-    .agent-tab:hover {
-      background: var(--surface-tertiary);
-    }
-
-    .agent-tab.active {
-      background: var(--brand-primary);
-      color: #000;
-      border-color: var(--brand-primary);
-    }
+    .agent-tab:hover { background: var(--surface-tertiary); }
+    .agent-tab.active { background: var(--brand-primary); color: #000; border-color: var(--brand-primary); }
 
     .agent-tab-dot {
       width: 6px;
@@ -1464,31 +1830,18 @@
       background: var(--color-success);
     }
 
-    .agent-tab-dot.stopped {
-      background: var(--text-muted);
-    }
+    .agent-tab-dot.stopped { background: var(--text-muted); }
+    .agent-tab-empty { font-size: 12px; color: var(--text-muted); padding: 6px; }
 
-    .agent-tab-empty {
-      font-size: 12px;
-      color: var(--text-muted);
-      padding: 8px;
-    }
-
-    /* Status Bar - Minimal inline */
     .agent-status-bar {
       display: inline-flex;
       gap: 16px;
-      padding: 8px 16px;
-      background: transparent;
-      border-bottom: 1px solid var(--border-subtle);
+      padding: 6px 16px;
       font-size: 11px;
+      border-bottom: 1px solid var(--border-subtle);
     }
 
-    .status-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+    .status-item { display: flex; align-items: center; gap: 6px; }
 
     .status-label {
       font-size: 10px;
@@ -1498,17 +1851,8 @@
       color: var(--text-subtle);
     }
 
-    .status-value {
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--text-secondary);
-    }
-
-    .status-tools {
-      display: flex;
-      gap: 6px;
-      font-size: 11px;
-    }
+    .status-value { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+    .status-tools { display: flex; gap: 6px; font-size: 11px; }
 
     .tool-badge {
       padding: 2px 8px;
@@ -1519,15 +1863,14 @@
       font-size: 10px;
     }
 
-    /* Output Area - Main focus area */
     .agent-output-area {
       flex: 1;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       background: var(--surface-primary);
-      border-radius: 8px;
-      margin: 12px;
+      border-radius: 6px;
+      margin: 8px 12px;
       box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
     }
 
@@ -1538,83 +1881,45 @@
       justify-content: center;
       height: 100%;
       color: var(--text-muted);
+      padding: 24px;
     }
 
-    .placeholder-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-      opacity: 0.5;
-    }
+    .placeholder-text { font-size: 13px; font-weight: 500; }
+    .placeholder-hint { font-size: 11px; opacity: 0.7; margin-top: 4px; }
 
-    .placeholder-text {
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 8px;
-    }
-
-    .placeholder-hint {
-      font-size: 12px;
-      opacity: 0.7;
-    }
-
-    /* Command Bar */
     .agent-command-bar {
       display: flex;
       gap: 8px;
-      padding: 16px 20px;
-      background: var(--surface-secondary);
+      padding: 10px 16px;
       border-top: 1px solid var(--border-subtle);
     }
 
     .command-input {
       flex: 1;
-      padding: 12px 16px;
-      font-size: 13px;
+      padding: 8px 12px;
+      font-size: 12px;
       background: var(--surface-tertiary);
       border: 1px solid var(--border-subtle);
-      border-radius: 8px;
+      border-radius: 6px;
       color: var(--text-primary);
       outline: none;
     }
 
-    .command-input:focus {
-      border-color: var(--brand-primary);
-    }
-
-    .command-input::placeholder {
-      color: var(--text-muted);
-    }
+    .command-input:focus { border-color: var(--brand-primary); }
+    .command-input::placeholder { color: var(--text-muted); }
 
     .command-send-btn {
-      padding: 12px 16px;
+      padding: 8px 14px;
       background: var(--brand-primary);
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       color: #000;
       cursor: pointer;
       display: flex;
       align-items: center;
-      justify-content: center;
     }
 
-    .command-send-btn:hover {
-      opacity: 0.9;
-    }
-
-    .refresh-btn {
-      background: transparent;
-      border: 1px solid var(--border-medium);
-      border-radius: 6px;
-      padding: 6px 10px;
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: all var(--transition-fast);
-    }
-
-    .refresh-btn:hover {
-      border-color: var(--brand-primary);
-      color: var(--brand-primary);
-    }
+    .command-send-btn:hover { opacity: 0.9; }
 
     .badge {
       background: var(--brand-primary);
@@ -1625,9 +1930,7 @@
       font-weight: 600;
     }
 
-    .badge.warning {
-      background: var(--color-warning);
-    }
+    .badge.warning { background: var(--color-warning); }
 
     .beads-graph {
       flex: 1;
@@ -2326,6 +2629,30 @@
       color: var(--brand-hover);
     }
 
+    .task-modal-btn.start {
+      background: transparent;
+      border-color: #3b82f6;
+      color: #3b82f6;
+    }
+
+    .task-modal-btn.start:hover {
+      background: rgba(59, 130, 246, 0.1);
+      border-color: #60a5fa;
+      color: #60a5fa;
+    }
+
+    .task-modal-btn.done {
+      background: transparent;
+      border-color: #10b981;
+      color: #10b981;
+    }
+
+    .task-modal-btn.done:hover {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: #34d399;
+      color: #34d399;
+    }
+
     /* MODAL EDIT CONTROLS */
     .modal-edit-select {
       background: var(--surface-tertiary);
@@ -2474,1842 +2801,6 @@
       background: var(--text-subtle);
     }
 
-    /* ============== ORCHESTRATOR VIEW ============== */
-    .orchestrator-layout {
-      display: grid;
-      grid-template-columns: 1fr 280px;
-      grid-template-rows: auto 1fr;
-      height: 100%;
-      background: var(--surface-primary);
-    }
-
-    .orchestrator-header {
-      grid-column: 1 / -1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 24px;
-      background: var(--surface-secondary);
-      border-bottom: 1px solid var(--border-subtle);
-    }
-
-    .orchestrator-phase-indicator {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .phase-step {
-      font-size: 12px;
-      font-weight: 500;
-      padding: 6px 12px;
-      border-radius: 16px;
-      background: var(--surface-tertiary);
-      color: var(--text-muted);
-      transition: all 0.2s ease;
-    }
-
-    .phase-step.active {
-      background: var(--brand-primary);
-      color: #000;
-    }
-
-    .phase-step.completed {
-      background: var(--color-success);
-      color: #000;
-    }
-
-    .phase-arrow {
-      color: var(--text-muted);
-      font-size: 14px;
-    }
-
-    .orchestrator-status {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .orchestrator-main {
-      padding: 24px;
-      overflow-y: auto;
-    }
-
-    .orchestrator-panel {
-      max-width: 800px;
-      margin: 0 auto;
-    }
-
-    .orchestrator-panel.hidden {
-      display: none;
-    }
-
-    .panel-header {
-      margin-bottom: 24px;
-    }
-
-    .panel-header h2 {
-      font-size: 24px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin: 0 0 8px 0;
-    }
-
-    .panel-subtitle {
-      font-size: 14px;
-      color: var(--text-secondary);
-      margin: 0;
-    }
-
-    /* Loading Panel */
-    .loading-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 60px 20px;
-      text-align: center;
-    }
-
-    .loading-spinner {
-      width: 48px;
-      height: 48px;
-      border: 3px solid var(--border-subtle);
-      border-top-color: var(--brand-primary);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 24px;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .loading-title {
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin: 0 0 8px 0;
-    }
-
-    .loading-subtitle {
-      font-size: 14px;
-      color: var(--text-secondary);
-      margin: 0 0 32px 0;
-      max-width: 400px;
-    }
-
-    .loading-steps {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      text-align: left;
-    }
-
-    .loading-step {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 13px;
-      color: var(--text-muted);
-      transition: color 0.3s;
-    }
-
-    .loading-step.active {
-      color: var(--brand-primary);
-    }
-
-    .loading-step.done {
-      color: var(--color-success);
-    }
-
-    .step-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      flex-shrink: 0;
-    }
-
-    .loading-step.active .step-dot {
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 0.4; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.2); }
-    }
-
-    /* Planning Progress Bar */
-    .planning-progress-container {
-      width: 100%;
-      max-width: 400px;
-      margin: 24px 0;
-    }
-
-    .planning-progress-bar {
-      position: relative;
-      width: 100%;
-      height: 8px;
-      background: var(--surface-tertiary);
-      border-radius: 4px;
-      overflow: hidden;
-    }
-
-    .planning-progress-fill {
-      position: absolute;
-      top: 0;
-      left: 0;
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, var(--brand-primary), var(--brand-secondary, #60a5fa));
-      border-radius: 4px;
-      transition: width 0.3s ease-out;
-    }
-
-    .planning-progress-shimmer {
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.3),
-        transparent
-      );
-      animation: shimmer 2s infinite;
-    }
-
-    @keyframes shimmer {
-      0% { left: -100%; }
-      100% { left: 100%; }
-    }
-
-    .planning-progress-status {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 8px;
-      min-height: 18px;
-    }
-
-    .planning-elapsed {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 16px;
-      font-family: monospace;
-    }
-
-    .cancel-btn {
-      margin-top: 24px;
-      padding: 10px 24px;
-      background: transparent;
-      border: 1px solid var(--border-medium);
-      border-radius: 8px;
-      color: var(--text-secondary);
-      font-size: 14px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .cancel-btn:hover {
-      background: var(--surface-tertiary);
-      border-color: var(--text-secondary);
-      color: var(--text-primary);
-    }
-
-    /* Goal Input */
-    .goal-input-area {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .goal-textarea {
-      width: 100%;
-      padding: 16px;
-      font-size: 14px;
-      font-family: inherit;
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      color: var(--text-primary);
-      resize: vertical;
-      outline: none;
-    }
-
-    .goal-textarea:focus {
-      border-color: var(--brand-primary);
-    }
-
-    .goal-textarea::placeholder {
-      color: var(--text-muted);
-    }
-
-    .goal-submit-btn {
-      align-self: flex-end;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 14px 24px;
-      font-size: 14px;
-      font-weight: 600;
-      background: var(--brand-primary);
-      color: #000;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .goal-submit-btn:hover {
-      opacity: 0.9;
-      transform: translateY(-1px);
-    }
-
-    /* Questions */
-    .questions-list {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      margin-bottom: 24px;
-    }
-
-    .question-item {
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 20px;
-    }
-
-    .new-questions-separator {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 24px 0 16px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--brand-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .new-questions-separator::before,
-    .new-questions-separator::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border-medium);
-    }
-
-    .question-text {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-primary);
-      margin-bottom: 12px;
-    }
-
-    .question-options {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .question-option {
-      padding: 8px 16px;
-      font-size: 13px;
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .question-option:hover {
-      border-color: var(--brand-primary);
-    }
-
-    .question-option.selected {
-      background: var(--brand-primary);
-      border-color: var(--brand-primary);
-      color: #000;
-    }
-
-    /* Multi-select questions */
-    .question-options.multi-select {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .question-options.multi-select .question-option {
-      position: relative;
-      padding-left: 32px;
-    }
-
-    .question-options.multi-select .question-option::before {
-      content: '';
-      position: absolute;
-      left: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 14px;
-      height: 14px;
-      border: 2px solid var(--border-medium);
-      border-radius: 3px;
-      background: transparent;
-      transition: all 0.2s ease;
-    }
-
-    .question-options.multi-select .question-option.selected::before {
-      background: var(--brand-primary);
-      border-color: var(--brand-primary);
-    }
-
-    .question-options.multi-select .question-option.selected::after {
-      content: '✓';
-      position: absolute;
-      left: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 10px;
-      color: #000;
-      font-weight: bold;
-    }
-
-    .multi-hint {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-style: italic;
-      margin-bottom: 8px;
-      display: block;
-      width: 100%;
-    }
-
-    .question-input {
-      width: 100%;
-      padding: 12px;
-      font-size: 13px;
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      color: var(--text-primary);
-      outline: none;
-    }
-
-    .question-input:focus {
-      border-color: var(--brand-primary);
-    }
-
-    .submit-answers-btn {
-      width: 100%;
-      padding: 14px;
-      font-size: 14px;
-      font-weight: 600;
-      background: var(--brand-primary);
-      color: #000;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
-    .submit-answers-btn:hover {
-      opacity: 0.9;
-    }
-
-    .questions-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .questions-actions .ask-more-btn {
-      flex: 0 0 auto;
-    }
-
-    .questions-actions .submit-answers-btn {
-      flex: 1;
-    }
-
-    /* Plan */
-    .plan-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    /* Plan task - expandable card with chat */
-    .plan-task {
-      padding: 16px;
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      cursor: pointer;
-      transition: border-color 0.2s ease;
-    }
-
-    .plan-task:hover {
-      border-color: var(--brand-primary);
-    }
-
-    .plan-task.expanded {
-      border-color: var(--brand-primary);
-    }
-
-    .plan-task-header {
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-    }
-
-    .plan-task-number {
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 600;
-      background: var(--surface-tertiary);
-      border-radius: 50%;
-      color: var(--text-secondary);
-      flex-shrink: 0;
-    }
-
-    .plan-task-content {
-      flex: 1;
-    }
-
-    .plan-task-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-primary);
-      margin-bottom: 4px;
-    }
-
-    .plan-task-description {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-
-    .plan-task-meta {
-      display: flex;
-      gap: 12px;
-    }
-
-    .plan-task-badge {
-      font-size: 10px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
-      text-transform: uppercase;
-    }
-
-    .plan-task-badge.backend { background: #2563eb20; color: #60a5fa; }
-    .plan-task-badge.frontend { background: #7c3aed20; color: #a78bfa; }
-    .plan-task-badge.devops { background: #ea580c20; color: #fb923c; }
-    .plan-task-badge.qa { background: #16a34a20; color: #4ade80; }
-    .plan-task-badge.docs { background: #ca8a0420; color: #fbbf24; }
-
-    .plan-task-expand {
-      width: 20px;
-      height: 20px;
-      color: var(--text-tertiary);
-      transition: transform 0.2s ease, color 0.2s ease;
-      flex-shrink: 0;
-      margin-top: 4px;
-    }
-
-    .plan-task.expanded .plan-task-expand {
-      transform: rotate(180deg);
-      color: var(--brand-primary);
-    }
-
-    /* Task chat section */
-    .plan-task-chat {
-      display: none;
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-subtle);
-    }
-
-    .plan-task.expanded .plan-task-chat {
-      display: block;
-    }
-
-    .task-chat-messages {
-      max-height: 200px;
-      overflow-y: auto;
-      margin-bottom: 12px;
-      padding: 8px;
-      background: var(--surface-primary);
-      border-radius: 6px;
-      font-size: 13px;
-    }
-
-    .task-chat-messages:empty {
-      display: none;
-    }
-
-    .task-chat-message {
-      padding: 8px;
-      margin-bottom: 8px;
-      border-radius: 4px;
-    }
-
-    .task-chat-message.user {
-      background: var(--brand-subtle);
-      color: var(--brand-primary);
-      text-align: right;
-    }
-
-    .task-chat-message.assistant {
-      background: var(--surface-tertiary);
-      color: var(--text-secondary);
-    }
-
-    .task-chat-input-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    .task-chat-input {
-      flex: 1;
-      padding: 10px 12px;
-      font-size: 13px;
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      color: var(--text-primary);
-      outline: none;
-    }
-
-    .task-chat-input:focus {
-      border-color: var(--brand-primary);
-    }
-
-    .task-chat-input::placeholder {
-      color: var(--text-muted);
-    }
-
-    .task-chat-send {
-      padding: 10px 16px;
-      font-size: 12px;
-      font-weight: 500;
-      background: var(--brand-primary);
-      color: #000;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.15s ease;
-    }
-
-    .task-chat-send:hover {
-      background: var(--brand-hover);
-    }
-
-    /* Thinking indicator */
-    .task-chat-message.thinking {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      opacity: 0.8;
-    }
-
-    .thinking-dots {
-      display: flex;
-      gap: 4px;
-    }
-
-    .thinking-dots .dot {
-      width: 6px;
-      height: 6px;
-      background: var(--brand-primary);
-      border-radius: 50%;
-      animation: dotPulse 1.4s ease-in-out infinite;
-    }
-
-    .thinking-dots .dot:nth-child(2) {
-      animation-delay: 0.2s;
-    }
-
-    .thinking-dots .dot:nth-child(3) {
-      animation-delay: 0.4s;
-    }
-
-    @keyframes dotPulse {
-      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-      40% { transform: scale(1); opacity: 1; }
-    }
-
-    .thinking-text {
-      font-style: italic;
-      color: var(--text-muted);
-    }
-
-    /* Formatted response styles */
-    .task-chat-message.assistant p {
-      margin: 0 0 8px 0;
-    }
-
-    .task-chat-message.assistant p:last-child {
-      margin-bottom: 0;
-    }
-
-    .task-chat-message.assistant strong {
-      color: var(--text-primary);
-    }
-
-    .task-chat-message.assistant em {
-      color: var(--text-secondary);
-    }
-
-    .task-chat-message.assistant ul,
-    .task-chat-message.assistant ol {
-      margin: 8px 0;
-      padding-left: 20px;
-    }
-
-    .task-chat-message.assistant li {
-      margin: 4px 0;
-    }
-
-    .task-chat-message.assistant .code-block {
-      background: var(--surface-primary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      padding: 12px;
-      margin: 8px 0;
-      overflow-x: auto;
-      font-family: 'Fira Code', 'Monaco', monospace;
-      font-size: 12px;
-      white-space: pre-wrap;
-    }
-
-    .task-chat-message.assistant .inline-code {
-      background: var(--surface-primary);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-family: 'Fira Code', 'Monaco', monospace;
-      font-size: 12px;
-    }
-
-    .task-chat-message.error {
-      color: var(--color-error);
-      border-left-color: var(--color-error);
-    }
-
-    /* Auto-copy on selection (Zellij style) */
-    .selectable-text {
-      user-select: text;
-      cursor: text;
-    }
-
-    .selectable-text::selection {
-      background: var(--brand-primary);
-      color: #000;
-    }
-
-    /* Copy notification */
-    .copy-toast {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface-elevated);
-      border: 1px solid var(--border-medium);
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 12px;
-      color: var(--text-secondary);
-      z-index: 10000;
-      animation: fadeInOut 1.5s ease-in-out forwards;
-    }
-
-    @keyframes fadeInOut {
-      0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
-      15% { opacity: 1; transform: translateX(-50%) translateY(0); }
-      85% { opacity: 1; transform: translateX(-50%) translateY(0); }
-      100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-    }
-
-    /* Ask More Questions button */
-    .ask-more-btn {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      background: transparent;
-      border: 1px dashed var(--border-medium);
-      border-radius: 6px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      margin-bottom: 16px;
-      transition: all 0.15s ease;
-    }
-
-    .ask-more-btn:hover {
-      border-color: var(--brand-primary);
-      color: var(--brand-primary);
-      background: var(--brand-subtle);
-    }
-
-    .ask-more-btn svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    .plan-actions {
-      display: flex;
-      gap: 12px;
-      justify-content: flex-end;
-    }
-
-    .plan-action-btn {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 20px;
-      font-size: 13px;
-      font-weight: 600;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .plan-action-btn.secondary {
-      background: transparent;
-      border: 1px solid var(--border-medium);
-      color: var(--text-secondary);
-    }
-
-    .plan-action-btn.secondary:hover {
-      border-color: var(--text-primary);
-      color: var(--text-primary);
-    }
-
-    .plan-action-btn.primary {
-      background: var(--brand-primary);
-      border: none;
-      color: #000;
-    }
-
-    .plan-action-btn.primary:hover {
-      opacity: 0.9;
-    }
-
-    /* Execution */
-    .execution-stats {
-      display: flex;
-      gap: 16px;
-      margin-top: 8px;
-    }
-
-    .stat-item {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    .progress-feed {
-      max-height: 300px;
-      overflow-y: auto;
-      margin-bottom: 24px;
-      padding: 16px;
-      background: var(--surface-secondary);
-      border-radius: 8px;
-    }
-
-    .progress-item {
-      display: flex;
-      gap: 12px;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border-subtle);
-    }
-
-    .progress-item:last-child {
-      border-bottom: none;
-    }
-
-    .progress-time {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-family: monospace;
-      flex-shrink: 0;
-    }
-
-    .progress-message {
-      font-size: 13px;
-      color: var(--text-primary);
-    }
-
-    .agents-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 16px;
-    }
-
-    .agent-card {
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      padding: 16px;
-    }
-
-    .agent-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
-
-    .agent-card-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-primary);
-    }
-
-    .agent-card-status {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-
-    .agent-card-status.running {
-      background: #16a34a20;
-      color: #4ade80;
-    }
-
-    .agent-card-status.completed {
-      background: #3b82f620;
-      color: #60a5fa;
-    }
-
-    .agent-card-status.failed {
-      background: #dc262620;
-      color: #f87171;
-    }
-
-    .agent-card-type {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-    }
-
-    .agent-card-progress {
-      font-size: 12px;
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px;
-      background: var(--surface-tertiary);
-      border-radius: 4px;
-      min-height: 32px;
-    }
-
-    .agent-card.running {
-      border-color: #4ade8050;
-    }
-
-    .agent-card.completed {
-      border-color: #60a5fa50;
-      opacity: 0.8;
-    }
-
-    .agent-card.failed {
-      border-color: #f8717150;
-    }
-
-    .agent-card-status.pending {
-      background: #fbbf2420;
-      color: #fbbf24;
-    }
-
-    /* Task Review Section */
-    .task-review-section {
-      margin-top: 24px;
-      padding: 16px;
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-    }
-
-    .review-section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .review-section-header h3 {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-primary);
-      margin: 0;
-    }
-
-    .review-count {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .task-review-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-
-    .task-review-card {
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      padding: 16px;
-    }
-
-    .task-review-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 12px;
-    }
-
-    .task-review-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-primary);
-    }
-
-    .task-review-branch {
-      font-size: 11px;
-      font-family: monospace;
-      color: var(--accent-primary);
-      background: var(--accent-primary)15;
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-
-    .task-review-diff {
-      background: var(--surface-primary);
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 12px;
-      font-family: monospace;
-      font-size: 11px;
-      color: var(--text-secondary);
-      white-space: pre-wrap;
-      max-height: 150px;
-      overflow-y: auto;
-    }
-
-    .task-review-diff .added {
-      color: #4ade80;
-    }
-
-    .task-review-diff .removed {
-      color: #f87171;
-    }
-
-    .task-review-actions {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .task-review-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s;
-    }
-
-    .task-review-btn.view-diff {
-      background: var(--surface-secondary);
-      color: var(--text-primary);
-      border: 1px solid var(--border-subtle);
-    }
-
-    .task-review-btn.view-diff:hover {
-      background: var(--surface-tertiary);
-    }
-
-    .task-review-btn.merge {
-      background: #16a34a;
-      color: white;
-    }
-
-    .task-review-btn.merge:hover {
-      background: #15803d;
-    }
-
-    .task-review-btn.discard {
-      background: #dc2626;
-      color: white;
-    }
-
-    .task-review-btn.discard:hover {
-      background: #b91c1c;
-    }
-
-    .review-bulk-actions {
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-subtle);
-    }
-
-    .review-bulk-btn {
-      padding: 10px 20px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s;
-    }
-
-    .review-bulk-btn.merge-all {
-      background: #16a34a;
-      color: white;
-    }
-
-    .review-bulk-btn.merge-all:hover {
-      background: #15803d;
-    }
-
-    .review-bulk-btn.discard-all {
-      background: #dc2626;
-      color: white;
-    }
-
-    .review-bulk-btn.discard-all:hover {
-      background: #b91c1c;
-    }
-
-    .task-review-files {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-    }
-
-    /* Execution chat */
-    .execution-chat {
-      margin-top: 24px;
-      padding: 16px;
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-    }
-
-    .execution-chat-header {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-primary);
-      margin-bottom: 12px;
-    }
-
-    .execution-chat-messages {
-      max-height: 150px;
-      overflow-y: auto;
-      margin-bottom: 12px;
-    }
-
-    .execution-chat-input-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    .execution-chat-input {
-      flex: 1;
-      padding: 10px 12px;
-      font-size: 13px;
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      color: var(--text-primary);
-    }
-
-    .execution-chat-input:focus {
-      outline: none;
-      border-color: var(--brand-primary);
-    }
-
-    /* Review Panel - Enhanced */
-    .review-stats-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .review-stat-card {
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 20px;
-      text-align: center;
-      transition: all 0.2s ease;
-    }
-
-    .review-stat-card:hover {
-      border-color: var(--border-medium);
-      transform: translateY(-2px);
-    }
-
-    .review-stat-card.highlight {
-      background: linear-gradient(135deg, var(--brand-primary)15, var(--surface-secondary));
-      border-color: var(--brand-primary)50;
-    }
-
-    .review-stat-value {
-      display: block;
-      font-size: 32px;
-      font-weight: 700;
-      color: var(--text-primary);
-      line-height: 1;
-      margin-bottom: 8px;
-    }
-
-    .review-stat-card.highlight .review-stat-value {
-      color: var(--brand-primary);
-    }
-
-    .review-stat-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .review-branches-section,
-    .review-commands-section,
-    .review-feedback-section {
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-    }
-
-    .review-branches-section .review-section-header,
-    .review-commands-section .review-section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .review-branches-section h3,
-    .review-commands-section h3,
-    .review-feedback-section h3 {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-primary);
-      margin: 0;
-    }
-
-    .review-bulk-btns {
-      display: flex;
-      gap: 8px;
-    }
-
-    .review-bulk-btn.small {
-      padding: 6px 12px;
-      font-size: 11px;
-      border-radius: 6px;
-      border: 1px solid var(--border-subtle);
-      background: var(--surface-tertiary);
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .review-bulk-btn.small:hover {
-      background: var(--surface-primary);
-      border-color: var(--border-medium);
-    }
-
-    .review-bulk-btn.small.merge {
-      background: #16a34a20;
-      border-color: #16a34a50;
-      color: #4ade80;
-    }
-
-    .review-bulk-btn.small.merge:hover {
-      background: #16a34a40;
-    }
-
-    .review-bulk-btn.small.discard {
-      background: #dc262620;
-      border-color: #dc262650;
-      color: #f87171;
-    }
-
-    .review-bulk-btn.small.discard:hover {
-      background: #dc262640;
-    }
-
-    .review-branches-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-
-    .review-branch-card {
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      padding: 16px;
-      transition: all 0.2s;
-    }
-
-    .review-branch-card:hover {
-      border-color: var(--border-medium);
-    }
-
-    .review-branch-card.merged {
-      opacity: 0.6;
-      border-color: #16a34a50;
-    }
-
-    .review-branch-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 12px;
-    }
-
-    .review-branch-info {
-      flex: 1;
-    }
-
-    .review-branch-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-primary);
-      margin-bottom: 4px;
-    }
-
-    .review-branch-name {
-      font-size: 11px;
-      font-family: monospace;
-      color: var(--accent-primary);
-      background: var(--accent-primary)15;
-      padding: 2px 8px;
-      border-radius: 4px;
-      display: inline-block;
-    }
-
-    .review-branch-status {
-      font-size: 10px;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-weight: 500;
-    }
-
-    .review-branch-status.pending {
-      background: #fbbf2420;
-      color: #fbbf24;
-    }
-
-    .review-branch-status.merged {
-      background: #16a34a20;
-      color: #4ade80;
-    }
-
-    .review-branch-status.discarded {
-      background: #dc262620;
-      color: #f87171;
-    }
-
-    .review-branch-diff {
-      background: var(--surface-primary);
-      border-radius: 6px;
-      padding: 12px;
-      font-family: monospace;
-      font-size: 11px;
-      color: var(--text-secondary);
-      white-space: pre-wrap;
-      max-height: 120px;
-      overflow-y: auto;
-      margin-bottom: 12px;
-    }
-
-    .review-branch-diff .added {
-      color: #4ade80;
-    }
-
-    .review-branch-diff .removed {
-      color: #f87171;
-    }
-
-    .review-branch-actions {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .review-branch-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s;
-    }
-
-    .review-branch-btn.view {
-      background: var(--surface-secondary);
-      color: var(--text-primary);
-      border: 1px solid var(--border-subtle);
-    }
-
-    .review-branch-btn.view:hover {
-      background: var(--surface-primary);
-    }
-
-    .review-branch-btn.merge {
-      background: #16a34a;
-      color: white;
-    }
-
-    .review-branch-btn.merge:hover {
-      background: #15803d;
-    }
-
-    .review-branch-btn.discard {
-      background: transparent;
-      color: #f87171;
-      border: 1px solid #f8717150;
-    }
-
-    .review-branch-btn.discard:hover {
-      background: #dc262620;
-    }
-
-    .review-branch-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    /* Git Commands Section */
-    .copy-commands-btn {
-      padding: 6px 12px;
-      font-size: 11px;
-      border-radius: 6px;
-      border: 1px solid var(--border-subtle);
-      background: var(--surface-tertiary);
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .copy-commands-btn:hover {
-      background: var(--surface-primary);
-    }
-
-    .review-commands-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .review-command-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 12px;
-      background: var(--surface-tertiary);
-      border-radius: 6px;
-    }
-
-    .command-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .command-code {
-      font-family: monospace;
-      font-size: 12px;
-      color: var(--accent-primary);
-      background: var(--surface-primary);
-      padding: 4px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      flex: 1;
-      overflow-x: auto;
-      white-space: nowrap;
-    }
-
-    .command-code:hover {
-      background: var(--accent-primary)20;
-    }
-
-    /* Feedback Section */
-    .review-feedback-section h3 {
-      margin-bottom: 12px;
-    }
-
-    .feedback-textarea {
-      width: 100%;
-      padding: 12px;
-      font-size: 13px;
-      font-family: inherit;
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      color: var(--text-primary);
-      resize: vertical;
-      outline: none;
-      margin-bottom: 16px;
-    }
-
-    .feedback-textarea:focus {
-      border-color: var(--brand-primary);
-    }
-
-    .review-buttons {
-      display: flex;
-      gap: 12px;
-      justify-content: flex-end;
-    }
-
-    .review-btn {
-      padding: 12px 20px;
-      font-size: 13px;
-      font-weight: 600;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .review-btn.secondary {
-      background: transparent;
-      border: 1px solid var(--border-medium);
-      color: var(--text-secondary);
-    }
-
-    .review-btn.secondary:hover {
-      background: var(--surface-tertiary);
-    }
-
-    .review-btn.primary {
-      background: var(--color-success);
-      border: none;
-      color: #000;
-    }
-
-    .review-btn.primary:hover {
-      opacity: 0.9;
-    }
-
-    @media (max-width: 768px) {
-      .review-stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-    }
-
-    /* Sidebar */
-    .orchestrator-sidebar {
-      background: var(--surface-secondary);
-      border-left: 1px solid var(--border-subtle);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .sidebar-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px;
-      border-bottom: 1px solid var(--border-subtle);
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-    }
-
-    .new-orch-btn {
-      font-size: 12px;
-      font-weight: 500;
-      padding: 4px 12px;
-      background: transparent;
-      border: 1px solid var(--border-medium);
-      border-radius: 4px;
-      color: var(--text-secondary);
-      cursor: pointer;
-    }
-
-    .new-orch-btn:hover {
-      border-color: var(--brand-primary);
-      color: var(--brand-primary);
-    }
-
-    .orch-history {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px;
-    }
-
-    .orch-history-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px;
-      background: var(--surface-tertiary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      margin-bottom: 8px;
-    }
-
-    .orch-history-item:hover {
-      border-color: var(--brand-primary);
-    }
-
-    .orch-history-item.active {
-      border-color: var(--brand-primary);
-      background: var(--brand-primary-10);
-    }
-
-    .orch-history-content {
-      flex: 1;
-      cursor: pointer;
-      min-width: 0;
-    }
-
-    .orch-history-goal {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text-primary);
-      margin-bottom: 4px;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-
-    .orch-history-meta {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .orch-delete-btn {
-      flex-shrink: 0;
-      padding: 6px;
-      background: transparent;
-      border: none;
-      border-radius: 4px;
-      color: var(--text-muted);
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.15s, color 0.15s, background 0.15s;
-    }
-
-    .orch-history-item:hover .orch-delete-btn {
-      opacity: 1;
-    }
-
-    .orch-delete-btn:hover {
-      color: var(--color-danger);
-      background: rgba(248, 81, 73, 0.15);
-    }
-
-    /* ============== ORCHESTRATOR CHAT PANEL ============== */
-    .chat-toggle-btn {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      padding: 12px 20px;
-      background: var(--brand-primary);
-      color: #000;
-      border: none;
-      border-radius: 24px;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-      z-index: 100;
-      display: none;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .chat-toggle-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0,0,0,0.4);
-    }
-
-    .chat-toggle-btn.visible {
-      display: flex;
-    }
-
-    .orch-chat-panel {
-      position: fixed;
-      bottom: 80px;
-      right: 24px;
-      width: 420px;
-      max-height: 520px;
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-medium);
-      border-radius: 12px;
-      display: flex;
-      flex-direction: column;
-      z-index: 100;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }
-
-    .orch-chat-panel.hidden {
-      display: none;
-    }
-
-    .chat-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border-subtle);
-      background: var(--surface-tertiary);
-      border-radius: 12px 12px 0 0;
-    }
-
-    .chat-header h3 {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .chat-actions {
-      display: flex;
-      gap: 6px;
-    }
-
-    .chat-actions button {
-      padding: 6px 10px;
-      font-size: 11px;
-      font-weight: 500;
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .chat-actions button:hover {
-      border-color: var(--brand-primary);
-      color: var(--brand-primary);
-    }
-
-    .chat-actions .close-btn {
-      padding: 4px 8px;
-      font-size: 16px;
-      background: transparent;
-      border: none;
-    }
-
-    .chat-actions .close-btn:hover {
-      color: var(--color-danger);
-    }
-
-    .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px;
-      max-height: 320px;
-      min-height: 150px;
-    }
-
-    .chat-message {
-      padding: 10px 14px;
-      margin: 8px 0;
-      border-radius: 12px;
-      font-size: 13px;
-      line-height: 1.5;
-      max-width: 85%;
-    }
-
-    .chat-message.user {
-      background: var(--brand-primary);
-      color: #000;
-      margin-left: auto;
-      border-bottom-right-radius: 4px;
-    }
-
-    .chat-message.assistant {
-      background: var(--surface-tertiary);
-      color: var(--text-primary);
-      margin-right: auto;
-      border-bottom-left-radius: 4px;
-    }
-
-    .chat-message.typing {
-      opacity: 0.7;
-      font-style: italic;
-    }
-
-    .chat-input-area {
-      display: flex;
-      gap: 8px;
-      padding: 14px 16px;
-      border-top: 1px solid var(--border-subtle);
-      background: var(--surface-tertiary);
-      border-radius: 0 0 12px 12px;
-    }
-
-    .chat-input-area textarea {
-      flex: 1;
-      padding: 10px 12px;
-      font-size: 13px;
-      font-family: inherit;
-      background: var(--surface-secondary);
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      color: var(--text-primary);
-      resize: none;
-      outline: none;
-    }
-
-    .chat-input-area textarea:focus {
-      border-color: var(--brand-primary);
-    }
-
-    .chat-input-area textarea::placeholder {
-      color: var(--text-muted);
-    }
-
-    .chat-send-btn {
-      padding: 10px 16px;
-      background: var(--brand-primary);
-      color: #000;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-      transition: opacity 0.15s;
-    }
-
-    .chat-send-btn:hover {
-      opacity: 0.9;
-    }
   </style>
   <!-- D3.js for Beads dependency graph -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -4680,425 +3171,128 @@
         </div>
       </div>
 
-      <!-- BEADS VIEW - Agent Orchestration -->
+      <!-- BEADS VIEW - Project Status Dashboard -->
       <div class="view-container" id="beads-view">
-        <div class="beads-layout">
-          <!-- LEFT SIDEBAR: Tasks & Agents -->
-          <aside class="beads-sidebar">
-            <div class="sidebar-section collapsed" id="section-ready">
-              <div class="section-header" onclick="toggleSection('section-ready')">
-                <span class="section-title">Ready Tasks</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="section-count" id="ready-count">0</span>
-                  <svg class="section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
+        <div class="beads-dashboard">
+          <!-- Stats Bar -->
+          <div class="beads-stats" id="beads-stats">
+            <div class="stat-card open">
+              <div class="stat-value" id="stat-open">0</div>
+              <div class="stat-label">Open</div>
+            </div>
+            <div class="stat-card in-progress">
+              <div class="stat-value" id="stat-in-progress">0</div>
+              <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat-card blocked">
+              <div class="stat-value" id="stat-blocked">0</div>
+              <div class="stat-label">Blocked</div>
+            </div>
+            <div class="stat-card done">
+              <div class="stat-value" id="stat-done">0</div>
+              <div class="stat-label">Done</div>
+            </div>
+            <div class="stat-card total">
+              <div class="stat-value" id="stat-total">0</div>
+              <div class="stat-label">Total</div>
+            </div>
+          </div>
+
+          <!-- Content: Task Lists + Dependency Graph -->
+          <div class="beads-content">
+            <!-- Task Lists Column -->
+            <div class="beads-task-lists">
+              <!-- In Progress -->
+              <div class="task-section" id="section-in-progress">
+                <div class="task-section-header" onclick="toggleTaskSection('section-in-progress')">
+                  <span class="task-section-title">In Progress <span class="task-section-count orange" id="count-in-progress">0</span></span>
+                  <svg class="task-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="task-section-body" id="list-in-progress"></div>
+              </div>
+
+              <!-- Ready -->
+              <div class="task-section" id="section-ready">
+                <div class="task-section-header" onclick="toggleTaskSection('section-ready')">
+                  <span class="task-section-title">Ready <span class="task-section-count teal" id="count-ready">0</span></span>
+                  <svg class="task-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="task-section-body" id="list-ready"></div>
+              </div>
+
+              <!-- Blocked -->
+              <div class="task-section" id="section-blocked">
+                <div class="task-section-header" onclick="toggleTaskSection('section-blocked')">
+                  <span class="task-section-title">Blocked <span class="task-section-count red" id="count-blocked">0</span></span>
+                  <svg class="task-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="task-section-body" id="list-blocked"></div>
+              </div>
+
+              <!-- Recently Completed -->
+              <div class="task-section" id="section-done">
+                <div class="task-section-header" onclick="toggleTaskSection('section-done')">
+                  <span class="task-section-title">Recently Completed <span class="task-section-count green" id="count-done">0</span></span>
+                  <svg class="task-section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="task-section-body" id="list-done"></div>
+              </div>
+            </div>
+
+            <!-- Dependency Graph Column -->
+            <div class="beads-graph-column">
+              <div class="beads-graph-header">Dependency Graph</div>
+              <div class="beads-graph" id="beads-graph"></div>
+            </div>
+          </div>
+
+          <!-- Running Agents Panel (collapsible, bottom) -->
+          <div class="agents-panel collapsed" id="agents-panel">
+            <div class="agents-panel-header" onclick="toggleAgentsPanel()">
+              <span class="agents-panel-title">Running Agents <span class="badge" id="agent-count" style="display: none;">0</span></span>
+              <svg class="agents-panel-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="agents-panel-body">
+              <div class="agent-tabs" id="agent-tabs">
+                <div class="agent-tab-empty">No agents running</div>
+              </div>
+              <div class="agent-status-bar" id="agent-status-bar">
+                <div class="status-item">
+                  <span class="status-label">Status</span>
+                  <span class="status-value" id="status-state">Idle</span>
+                </div>
+                <div class="status-item">
+                  <span class="status-label">Runtime</span>
+                  <span class="status-value" id="status-runtime">--</span>
+                </div>
+                <div class="status-item">
+                  <span class="status-label">Active Tools</span>
+                  <div class="status-tools" id="status-tools">None</div>
                 </div>
               </div>
-              <div id="ready-queue" class="task-list"></div>
-            </div>
-
-            <div class="sidebar-divider"></div>
-
-            <div class="sidebar-section" id="section-agents">
-              <div class="section-header" onclick="toggleSection('section-agents')">
-                <span class="section-title">Running Agents</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="section-count active" id="agent-count">0</span>
-                  <svg class="section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </div>
-              </div>
-              <div id="agent-list" class="agent-list">
-                <div class="empty-state-small">No agents running</div>
-              </div>
-            </div>
-
-            <div class="sidebar-divider"></div>
-
-            <div class="sidebar-section collapsed" id="section-progress">
-              <div class="section-header" onclick="toggleSection('section-progress')">
-                <span class="section-title">In Progress</span>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="section-count warning" id="progress-count">0</span>
-                  <svg class="section-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </div>
-              </div>
-              <div id="in-progress-queue" class="task-list"></div>
-            </div>
-          </aside>
-
-          <!-- MAIN AREA: Agent Viewer -->
-          <main class="beads-main">
-            <!-- Agent Tabs -->
-            <div class="agent-tabs" id="agent-tabs">
-              <div class="agent-tab-empty">Select or start an agent to view output</div>
-            </div>
-
-            <!-- Status Bar -->
-            <div class="agent-status-bar" id="agent-status-bar">
-              <div class="status-item">
-                <span class="status-label">Status</span>
-                <span class="status-value" id="status-state">Idle</span>
-              </div>
-              <div class="status-item">
-                <span class="status-label">Runtime</span>
-                <span class="status-value" id="status-runtime">--</span>
-              </div>
-              <div class="status-item">
-                <span class="status-label">Active Tools</span>
-                <div class="status-tools" id="status-tools">None</div>
-              </div>
-            </div>
-
-            <!-- Output Area -->
-            <div class="agent-output-area">
-              <div id="agent-output" class="agent-output">
-                <div class="output-placeholder">
-                  <div class="placeholder-icon">🤖</div>
-                  <div class="placeholder-text">Click "Claim" on a task to start an agent</div>
-                  <div class="placeholder-hint">Or select a running agent from the sidebar</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Command Input -->
-            <div class="agent-command-bar">
-              <input type="text" id="agent-command-input" class="command-input"
-                     placeholder="Send a command to the agent..."
-                     onkeydown="if(event.key==='Enter') sendAgentCommand()">
-              <button class="command-send-btn" onclick="sendAgentCommand()">
-                <svg viewBox="0 0 24 24" width="20" height="20">
-                  <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                </svg>
-              </button>
-            </div>
-          </main>
-        </div>
-      </div>
-
-      <!-- ORCHESTRATOR VIEW - Full Project Orchestration -->
-      <div class="view-container" id="orchestrator-view">
-        <div class="orchestrator-layout">
-          <!-- HEADER: Goal & Phase -->
-          <header class="orchestrator-header">
-            <div class="orchestrator-phase-indicator" id="orch-phase">
-              <span class="phase-step" data-phase="requirements">1. Requirements</span>
-              <span class="phase-arrow">→</span>
-              <span class="phase-step" data-phase="planning">2. Planning</span>
-              <span class="phase-arrow">→</span>
-              <span class="phase-step" data-phase="execution">3. Execution</span>
-              <span class="phase-arrow">→</span>
-              <span class="phase-step" data-phase="review">4. Review</span>
-            </div>
-            <div class="orchestrator-status" id="orch-status">Ready to start</div>
-          </header>
-
-          <!-- MAIN CONTENT: Changes based on phase -->
-          <main class="orchestrator-main">
-            <!-- PHASE: Goal Input (Initial State) -->
-            <div class="orchestrator-panel" id="orch-goal-panel">
-              <div class="panel-header">
-                <h2>What would you like to build?</h2>
-                <p class="panel-subtitle">Describe your project in natural language. I'll ask clarifying questions, create a plan, and orchestrate specialized agents to build it.</p>
-              </div>
-              <div class="goal-input-area">
-                <textarea id="orch-goal-input" class="goal-textarea"
-                          placeholder="Example: Build a PWA task management app with Vue 3, Supabase for backend, and a clean modern UI..."
-                          rows="5"></textarea>
-                <button class="goal-submit-btn" onclick="startOrchestration()">
-                  <svg viewBox="0 0 24 24" width="20" height="20">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                  </svg>
-                  Start Orchestration
-                </button>
-              </div>
-            </div>
-
-            <!-- PHASE: Loading (Analyzing Goal) -->
-            <div class="orchestrator-panel hidden" id="orch-loading-panel">
-              <div class="loading-content">
-                <div class="loading-spinner"></div>
-                <h3 class="loading-title">Analyzing your goal...</h3>
-                <p class="loading-subtitle">Claude is understanding your requirements and preparing clarifying questions.</p>
-                <div class="loading-steps">
-                  <div class="loading-step active" id="load-step-1">
-                    <span class="step-dot"></span>
-                    <span>Parsing project requirements</span>
-                  </div>
-                  <div class="loading-step" id="load-step-2">
-                    <span class="step-dot"></span>
-                    <span>Identifying technical decisions</span>
-                  </div>
-                  <div class="loading-step" id="load-step-3">
-                    <span class="step-dot"></span>
-                    <span>Generating clarifying questions</span>
+              <div class="agent-output-area">
+                <div id="agent-output" class="agent-output">
+                  <div class="output-placeholder">
+                    <div class="placeholder-text">Claim a task to start an agent</div>
+                    <div class="placeholder-hint">Agent output will appear here</div>
                   </div>
                 </div>
-                <button class="cancel-btn" onclick="cancelOrchestration()">Cancel</button>
               </div>
-            </div>
-
-            <!-- PHASE: Questions -->
-            <div class="orchestrator-panel hidden" id="orch-questions-panel">
-              <div class="panel-header">
-                <h2>A few questions to clarify requirements</h2>
-                <p class="panel-subtitle">Answer these questions to help create a better plan. Need more detail? Ask for more questions.</p>
-              </div>
-              <div id="orch-questions-list" class="questions-list">
-                <!-- Questions will be populated here -->
-              </div>
-              <div class="questions-actions">
-                <button class="ask-more-btn" onclick="askMoreQuestionsFromRequirements()">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                  </svg>
-                  Ask More Clarifying Questions
-                </button>
-                <button class="submit-answers-btn" onclick="submitAnswers()">
-                  Submit Answers & Continue
-                </button>
-              </div>
-            </div>
-
-            <!-- PHASE: Plan Review -->
-            <!-- PHASE: Planning Loading -->
-            <div class="orchestrator-panel hidden" id="orch-planning-panel">
-              <div class="loading-content">
-                <div class="loading-spinner"></div>
-                <h3 class="loading-title">Creating Implementation Plan...</h3>
-                <p class="loading-subtitle">Analyzing your requirements and breaking down the project into tasks.</p>
-
-                <!-- Progress bar -->
-                <div class="planning-progress-container">
-                  <div class="planning-progress-bar">
-                    <div class="planning-progress-fill" id="planning-progress-fill"></div>
-                    <div class="planning-progress-shimmer"></div>
-                  </div>
-                  <div class="planning-progress-status" id="planning-progress-status">Starting Claude...</div>
-                </div>
-
-                <div class="loading-steps">
-                  <div class="loading-step active" id="plan-step-1">
-                    <span class="step-dot"></span>
-                    <span>Analyzing requirements</span>
-                  </div>
-                  <div class="loading-step" id="plan-step-2">
-                    <span class="step-dot"></span>
-                    <span>Identifying dependencies</span>
-                  </div>
-                  <div class="loading-step" id="plan-step-3">
-                    <span class="step-dot"></span>
-                    <span>Creating task breakdown</span>
-                  </div>
-                </div>
-                <div class="planning-elapsed" id="planning-elapsed">Elapsed: 0s</div>
-                <button class="cancel-btn" onclick="cancelOrchestration()">Cancel</button>
-              </div>
-            </div>
-
-            <div class="orchestrator-panel hidden" id="orch-plan-panel">
-              <div class="panel-header">
-                <h2>Implementation Plan</h2>
-                <p class="panel-subtitle">Review the tasks below. Click any task to expand and chat about it, or request more clarifying questions.</p>
-              </div>
-              <button class="ask-more-btn" onclick="askMoreQuestions()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-                Ask More Clarifying Questions
-              </button>
-              <div id="orch-plan-list" class="plan-list">
-                <!-- Plan tasks will be populated here -->
-              </div>
-              <div class="plan-actions">
-                <button class="plan-action-btn secondary" onclick="modifyPlan()">Modify Plan</button>
-                <button class="plan-action-btn primary" onclick="executePlan()">
+              <div class="agent-command-bar">
+                <input type="text" id="agent-command-input" class="command-input"
+                       placeholder="Send a command to the agent..."
+                       onkeydown="if(event.key==='Enter') sendAgentCommand()">
+                <button class="command-send-btn" onclick="sendAgentCommand()">
                   <svg viewBox="0 0 24 24" width="18" height="18">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
+                    <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                   </svg>
-                  Execute Plan
                 </button>
               </div>
-            </div>
-
-            <!-- PHASE: Execution Progress -->
-            <div class="orchestrator-panel hidden" id="orch-execution-panel">
-              <div class="panel-header">
-                <h2>Execution in Progress</h2>
-                <div class="execution-stats">
-                  <span class="stat-item" id="orch-completed-count">0 completed</span>
-                  <span class="stat-item" id="orch-running-count">0 running</span>
-                  <span class="stat-item" id="orch-pending-count">0 pending</span>
-                </div>
-              </div>
-              <div id="orch-progress-feed" class="progress-feed">
-                <!-- Summary updates will appear here -->
-              </div>
-              <div id="orch-agents-grid" class="agents-grid">
-                <!-- Agent cards will appear here -->
-              </div>
-
-              <!-- Completed Tasks Review Section -->
-              <div class="task-review-section" id="orch-task-review">
-                <div class="review-section-header">
-                  <h3>Completed Tasks - Ready for Review</h3>
-                  <span class="review-count" id="review-count">0 tasks ready</span>
-                </div>
-                <div class="task-review-list" id="task-review-list">
-                  <!-- Completed task cards with merge/discard buttons will appear here -->
-                </div>
-                <div class="review-bulk-actions" id="review-bulk-actions" style="display: none;">
-                  <button class="review-bulk-btn merge-all" onclick="mergeAllCompletedTasks()">
-                    ✅ Merge All
-                  </button>
-                  <button class="review-bulk-btn discard-all" onclick="discardAllCompletedTasks()">
-                    🗑️ Discard All
-                  </button>
-                </div>
-              </div>
-
-              <!-- Chat with orchestrator during execution -->
-              <div class="execution-chat">
-                <div class="execution-chat-header">💬 Chat with Orchestrator</div>
-                <div class="execution-chat-messages" id="execution-chat-messages">
-                  <!-- Chat messages will appear here -->
-                </div>
-                <div class="execution-chat-input-row">
-                  <input type="text" class="execution-chat-input" id="execution-chat-input"
-                         placeholder="Ask questions, request changes, or pause execution..."
-                         onkeypress="if(event.key==='Enter') sendExecutionChat()">
-                  <button class="task-chat-send" onclick="sendExecutionChat()">Send</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- PHASE: Review -->
-            <div class="orchestrator-panel hidden" id="orch-review-panel">
-              <div class="panel-header">
-                <h2>Review & Merge Changes</h2>
-                <p class="panel-subtitle">All agents completed. Review the changes in each branch before merging.</p>
-              </div>
-
-              <!-- Overall Statistics -->
-              <div class="review-stats-grid" id="review-stats-grid">
-                <div class="review-stat-card">
-                  <span class="review-stat-value" id="review-total-tasks">0</span>
-                  <span class="review-stat-label">Tasks Completed</span>
-                </div>
-                <div class="review-stat-card">
-                  <span class="review-stat-value" id="review-total-branches">0</span>
-                  <span class="review-stat-label">Branches Ready</span>
-                </div>
-                <div class="review-stat-card">
-                  <span class="review-stat-value" id="review-total-files">0</span>
-                  <span class="review-stat-label">Files Changed</span>
-                </div>
-                <div class="review-stat-card highlight">
-                  <span class="review-stat-value" id="review-pending-merge">0</span>
-                  <span class="review-stat-label">Pending Merge</span>
-                </div>
-              </div>
-
-              <!-- Branches To Review -->
-              <div class="review-branches-section">
-                <div class="review-section-header">
-                  <h3>Branches Ready for Review</h3>
-                  <div class="review-bulk-btns">
-                    <button class="review-bulk-btn small" onclick="viewAllDiffs()">👁 View All Diffs</button>
-                    <button class="review-bulk-btn small merge" onclick="mergeAllCompletedTasks()">✅ Merge All</button>
-                    <button class="review-bulk-btn small discard" onclick="discardAllCompletedTasks()">🗑 Discard All</button>
-                  </div>
-                </div>
-                <div class="review-branches-list" id="review-branches-list">
-                  <!-- Branch cards will be populated dynamically -->
-                  <div class="empty-state-small">Loading completed tasks...</div>
-                </div>
-              </div>
-
-              <!-- Git Commands Reference -->
-              <div class="review-commands-section">
-                <div class="review-section-header">
-                  <h3>Terminal Commands</h3>
-                  <button class="copy-commands-btn" onclick="copyAllGitCommands()">📋 Copy All</button>
-                </div>
-                <div class="review-commands-list" id="review-commands-list">
-                  <div class="review-command-item">
-                    <span class="command-label">View all branches:</span>
-                    <code class="command-code" onclick="copyCommand(this)">git branch | grep bd-</code>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Request Changes Section -->
-              <div class="review-feedback-section">
-                <h3>Need Changes?</h3>
-                <textarea id="orch-feedback-input" class="feedback-textarea"
-                          placeholder="Describe what needs to be changed or improved..."
-                          rows="3"></textarea>
-                <div class="review-buttons">
-                  <button class="review-btn secondary" onclick="requestRefinement()">
-                    🔄 Request Changes & Re-run
-                  </button>
-                  <button class="review-btn primary" onclick="finalizeProject()">
-                    ✅ Finalize Project
-                  </button>
-                </div>
-              </div>
-            </div>
-          </main>
-
-          <!-- SIDEBAR: Orchestrations List -->
-          <aside class="orchestrator-sidebar">
-            <div class="sidebar-header">
-              <span>Orchestrations</span>
-              <button class="new-orch-btn" onclick="resetOrchestrator()">+ New</button>
-            </div>
-            <div id="orch-history-list" class="orch-history">
-              <div class="empty-state-small">No orchestrations yet</div>
-            </div>
-          </aside>
-
-          <!-- Floating Chat Toggle Button -->
-          <button class="chat-toggle-btn" onclick="toggleOrchestratorChat()" id="orch-chat-toggle">
-            💬 Chat with Orchestrator
-          </button>
-
-          <!-- Floating Chat Panel -->
-          <div class="orch-chat-panel hidden" id="orch-chat">
-            <div class="chat-header">
-              <h3>💬 Chat</h3>
-              <div class="chat-actions">
-                <button onclick="requestDeeperQuestions()" title="Ask more clarifying questions">
-                  🔍 Ask More
-                </button>
-                <button onclick="requestExplanation()" title="Explain reasoning">
-                  💡 Explain
-                </button>
-                <button onclick="toggleOrchestratorChat()" class="close-btn">×</button>
-              </div>
-            </div>
-
-            <div class="chat-messages" id="orch-chat-messages">
-              <div class="chat-message assistant">
-                Hi! I'm here to help with your orchestration. Ask me anything about the current phase, request changes, or click "Ask More" for deeper clarifying questions.
-              </div>
-            </div>
-
-            <div class="chat-input-area">
-              <textarea id="orch-chat-input" placeholder="Ask a question or request changes..." rows="2"></textarea>
-              <button class="chat-send-btn" onclick="sendOrchestratorChatMessage()">Send</button>
             </div>
           </div>
         </div>
       </div>
+
     </div>
   </div>
 
@@ -5158,6 +3352,8 @@
       <div class="task-modal-sync-status" id="modalSyncStatus"></div>
 
       <div class="task-modal-actions">
+        <button class="task-modal-btn start btn-icon" id="modalStartBtn" onclick="modalQuickStart()"><span class="icon"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg></span> Start</button>
+        <button class="task-modal-btn done btn-icon" id="modalDoneBtn" onclick="modalQuickDone()"><span class="icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg></span> Done</button>
         <button class="task-modal-btn" onclick="closeTaskModal()">Close</button>
         <button class="task-modal-btn primary btn-icon" onclick="saveAndClose()"><span class="icon"><svg
               viewBox="0 0 24 24">
@@ -5202,6 +3398,8 @@
       idea: '<svg class="inline-icon empty-icon" viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/></svg>',
       check: '<svg class="inline-icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>'
     };
+
+    const COPY_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
     /**
      * Comprehensive task status parser
@@ -5335,14 +3533,14 @@
             currentSubSection = '';
             continue;
           }
-          if (trimmed.startsWith('## Active Bugs') || trimmed.startsWith('## Active Tasks')) {
+          if (trimmed.startsWith('## Active Bugs')) {
             currentSection = 'activeWork';
             currentSubSection = '';
             continue;
           }
-          if (trimmed.startsWith('## Planned Tasks')) {
+          if (trimmed.startsWith('## Active Tasks')) {
             currentSection = 'activeWork';
-            currentSubSection = 'planned';
+            currentSubSection = '';
             continue;
           }
           if (trimmed.startsWith('## Known Issues')) {
@@ -5688,6 +3886,11 @@
                   }
                   // Merge notes/title if needed
                   if (!existingTask.notes && item.notes) existingTask.notes = item.notes;
+                  // TASK-323 FIX: Table parsing is authoritative for done status (strikethrough + DONE markers)
+                  if (isDone && existingTask.status !== 'done') {
+                    existingTask.status = 'done';
+                    existingTask.progress = 100;
+                  }
                 } else {
                   data.activeWork.push(item);
                 }
@@ -5970,6 +4173,7 @@
                 task.status === 'in-progress' ? 'IN PROGRESS' :
                   task.status === 'paused' ? 'PAUSED' :
                     task.status === 'review' ? 'REVIEW' : 'TODO';
+              const copyTextEncoded = encodeURIComponent(`${task.id} ${task.title}`);
 
               card.innerHTML = `
               <div class="task-header">
@@ -6017,6 +4221,15 @@
                   </div>
                   <div class="progress-percent">${progress}%</div>
                 </div>
+                <button
+                  class="task-copy-btn"
+                  type="button"
+                  title="Copy task ID and title"
+                  aria-label="Copy ${task.id} and task title"
+                  data-copy-text="${copyTextEncoded}"
+                  data-task-id="${task.id}"
+                  onclick="copyTaskSummary(this, event)"
+                >${COPY_ICON_SVG}</button>
               </div>
             `;
 
@@ -6871,6 +5084,9 @@
       syncStatus.className = 'task-modal-sync-status';
       syncStatus.textContent = '';
 
+      // Update action button visibility based on current status
+      updateModalActionButtons(item.status || 'todo');
+
       // Show modal
       modal.classList.add('active');
 
@@ -6913,6 +5129,7 @@
         if (result.success) {
           showSyncStatus('success', `✓ Status updated to ${newStatus}`);
           currentEditTask.status = newStatus;
+          updateModalActionButtons(newStatus);
           // Refresh the kanban to reflect changes from MASTER_PLAN.md
           setTimeout(() => renderKanban(), 500);
         } else {
@@ -7218,6 +5435,37 @@
       }, 800);
     }
 
+    async function modalQuickStart() {
+      if (!currentEditTask) return;
+      document.getElementById('modalStatusSelect').value = 'in-progress';
+      await updateTaskStatus();
+      updateModalActionButtons('in-progress');
+    }
+
+    async function modalQuickDone() {
+      if (!currentEditTask) return;
+      document.getElementById('modalStatusSelect').value = 'done';
+      document.getElementById('modalProgressSlider').value = 100;
+      document.getElementById('modalProgressValue').textContent = '100%';
+      await updateTaskStatus();
+      pendingChanges.progress = 100;
+      try {
+        await fetch(`${API_BASE}/api/task/${currentEditTask.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ property: 'progress', value: 100 })
+        });
+      } catch (e) { /* progress update is best-effort */ }
+      updateModalActionButtons('done');
+    }
+
+    function updateModalActionButtons(status) {
+      const startBtn = document.getElementById('modalStartBtn');
+      const doneBtn = document.getElementById('modalDoneBtn');
+      startBtn.style.display = (status === 'in-progress' || status === 'done') ? 'none' : '';
+      doneBtn.style.display = status === 'done' ? 'none' : '';
+    }
+
     // Show sync status message
     function showSyncStatus(type, message) {
       const syncStatus = document.getElementById('modalSyncStatus');
@@ -7314,7 +5562,6 @@
           archive: 'Archive',
           status: 'Priority Board',
           beads: 'Beads Agent Tracker',
-          orchestrator: 'AI Orchestrator'
         };
         document.getElementById('view-title').textContent = titles[view];
 
@@ -7524,8 +5771,85 @@
         cards.forEach(card => column.appendChild(card));
       });
 
+      try {
+        ensureTaskCopyButtons();
+      } catch (error) {
+        console.error('Copy button setup failed:', error);
+      }
+
       // Re-initialize drag and drop listeners for new cards
       initDragAndDrop();
+    }
+
+    function ensureTaskCopyButtons() {
+      const cards = document.querySelectorAll('.task-card');
+      cards.forEach(card => {
+        if (card.querySelector('.task-copy-btn')) return;
+
+        const taskIdEl = card.querySelector('.task-id');
+        const taskTitleEl = card.querySelector('.task-title');
+        const taskId = taskIdEl && typeof taskIdEl.textContent === 'string' ? taskIdEl.textContent.trim() : '';
+        const taskTitle = taskTitleEl && typeof taskTitleEl.textContent === 'string' ? taskTitleEl.textContent.trim() : '';
+        if (!taskId || !taskTitle) return;
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'task-copy-btn';
+        copyBtn.title = 'Copy task ID and title';
+        copyBtn.setAttribute('aria-label', `Copy ${taskId} and task title`);
+        copyBtn.dataset.taskId = taskId;
+        copyBtn.dataset.taskTitle = taskTitle;
+        copyBtn.innerHTML = COPY_ICON_SVG;
+        copyBtn.addEventListener('click', (event) => copyTaskSummary(copyBtn, event));
+        card.appendChild(copyBtn);
+      });
+    }
+
+    async function copyTaskSummary(buttonEl, event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (!buttonEl || !buttonEl.dataset) return;
+      const taskId = buttonEl.dataset.taskId || '';
+      const encodedCopyText = buttonEl.dataset.copyText || '';
+      const textToCopy = encodedCopyText
+        ? decodeURIComponent(encodedCopyText)
+        : `${taskId} ${buttonEl.dataset.taskTitle || ''}`.trim();
+      if (!textToCopy) return;
+
+      try {
+        await writeTextToClipboard(textToCopy);
+        buttonEl.classList.add('copied');
+        setTimeout(() => buttonEl.classList.remove('copied'), 900);
+        showToast(`✓ Copied ${taskId}`, 'success');
+      } catch (error) {
+        console.error('Copy failed:', error);
+        showToast('✗ Failed to copy task info', 'error');
+      }
+    }
+
+    function writeTextToClipboard(text) {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        return navigator.clipboard.writeText(text);
+      }
+
+      return new Promise((resolve, reject) => {
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.setAttribute('readonly', '');
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (ok) resolve();
+          else reject(new Error('document.execCommand("copy") failed'));
+        } catch (error) {
+          reject(error);
+        }
+      });
     }
 
     // Priority comparison (P1/HIGH > P2/MEDIUM > P3/LOW)
@@ -8002,22 +6326,6 @@
       const statusElements = document.querySelectorAll('[style*="position: fixed"]');
       statusElements.forEach(el => el.remove());
 
-      // Check for view parameter in URL (for orchestrator tab)
-      const urlParams = new URLSearchParams(window.location.search);
-      const viewParam = urlParams.get('view');
-
-      if (viewParam === 'orchestrator') {
-        // Switch to orchestrator view
-        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-        const orchTab = document.querySelector('.nav-tab[data-view="orchestrator"]');
-        if (orchTab) orchTab.classList.add('active');
-
-        document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
-        const orchView = document.getElementById('orchestrator-view');
-        if (orchView) orchView.classList.add('active');
-
-        document.getElementById('view-title').textContent = 'AI Orchestrator';
-      }
 
       // Initial render
       renderKanban();
@@ -8102,33 +6410,181 @@
     });
     // ===== END LIVE FILE SYNC =====
 
-    // ===== BEADS AGENT TRACKER =====
-    let beadsData = { issues: [], ready: [], graph: { nodes: [], links: [] } };
+    // ===== BEADS PROJECT STATUS DASHBOARD =====
+    let beadsData = { issues: [], ready: [], closed: [], stats: null, graph: { nodes: [], links: [] } };
     let beadsSimulation = null;
 
     async function loadBeadsData() {
       try {
-        const [listRes, readyRes, graphRes] = await Promise.all([
+        const [listRes, readyRes, statsRes, closedRes, graphRes] = await Promise.all([
           fetch(`${API_BASE}/api/beads/list`),
           fetch(`${API_BASE}/api/beads/ready`),
+          fetch(`${API_BASE}/api/beads/stats`),
+          fetch(`${API_BASE}/api/beads/list?status=closed`),
           fetch(`${API_BASE}/api/beads/graph`)
         ]);
 
         const listData = await listRes.json();
         const readyData = await readyRes.json();
+        const statsData = await statsRes.json();
+        const closedData = await closedRes.json();
         const graphData = await graphRes.json();
 
         beadsData.issues = listData.issues || [];
         beadsData.ready = readyData.issues || [];
+        beadsData.stats = statsData.summary || null;
+        beadsData.closed = closedData.issues || [];
         beadsData.graph = graphData;
 
+        renderBeadsStats();
+        renderBeadsTaskLists();
         renderBeadsGraph();
-        renderReadyQueue();
-        renderInProgressQueue();
       } catch (err) {
         console.error('[Beads] Error loading data:', err);
         showToast('Failed to load Beads data', 'error');
       }
+    }
+
+    function renderBeadsStats() {
+      const stats = beadsData.stats;
+      if (stats) {
+        // Use authoritative stats from bd
+        document.getElementById('stat-open').textContent = stats.ready_issues || 0;
+        document.getElementById('stat-in-progress').textContent = stats.in_progress_issues || 0;
+        document.getElementById('stat-blocked').textContent = stats.blocked_issues || 0;
+        document.getElementById('stat-done').textContent = stats.closed_issues || 0;
+        document.getElementById('stat-total').textContent = stats.total_issues || 0;
+      } else {
+        // Fallback: compute from issue list
+        const issues = beadsData.issues;
+        const readyIds = new Set(beadsData.ready.filter(i => i.status === 'open').map(i => i.id));
+        document.getElementById('stat-open').textContent = readyIds.size;
+        document.getElementById('stat-in-progress').textContent = issues.filter(i => i.status === 'in_progress').length;
+        document.getElementById('stat-blocked').textContent = issues.filter(i => i.status === 'open' && !readyIds.has(i.id) && i.dependency_count > 0).length;
+        document.getElementById('stat-done').textContent = beadsData.closed.length;
+        document.getElementById('stat-total').textContent = issues.length + beadsData.closed.length;
+      }
+    }
+
+    function renderBeadsTaskLists() {
+      const issues = beadsData.issues;
+      const readyIssues = beadsData.ready.filter(i => i.status === 'open');
+      const readyIds = new Set(readyIssues.map(i => i.id));
+
+      // In Progress
+      const inProgress = issues.filter(i => i.status === 'in_progress' || i.status === 'inreview');
+      renderTaskList('list-in-progress', 'count-in-progress', inProgress, 'in-progress');
+
+      // Ready
+      renderTaskList('list-ready', 'count-ready', readyIssues, 'ready');
+
+      // Blocked
+      const blocked = issues.filter(i =>
+        i.status === 'open' && !readyIds.has(i.id) && (i.dependency_count > 0)
+      );
+      renderTaskList('list-blocked', 'count-blocked', blocked, 'blocked');
+
+      // Recently completed (last 10 from closed issues)
+      const done = beadsData.closed.slice(0, 10);
+      renderTaskList('list-done', 'count-done', done, 'done');
+    }
+
+    function renderTaskList(containerId, countId, items, type) {
+      const container = document.getElementById(containerId);
+      document.getElementById(countId).textContent = items.length;
+
+      if (items.length === 0) {
+        const messages = {
+          'in-progress': 'No tasks in progress',
+          'ready': 'No ready tasks',
+          'blocked': 'No blocked tasks',
+          'done': 'No completed tasks yet'
+        };
+        container.innerHTML = '<div class="task-list-empty">' + (messages[type] || 'Empty') + '</div>';
+        return;
+      }
+
+      container.innerHTML = items.map(issue => {
+        const agent = activeAgents.find(a => a.taskId === issue.id);
+        const isRunning = agent && agent.status === 'running';
+        const isComplete = agent && (agent.status === 'completed' || agent.status === 'idle');
+        const supervisorType = agent?.supervisorType || 'worker';
+        const branchName = agent?.branchName || 'bd-' + issue.id;
+
+        // Build card class
+        let cardClass = 'bead-card';
+        if (type === 'in-progress') cardClass += ' in-progress' + (isRunning ? ' running' : '') + (isComplete ? ' complete' : '');
+        if (type === 'blocked') cardClass += ' blocked-card';
+        if (type === 'done') cardClass += ' done-card';
+
+        // Build card content
+        let html = '<div class="' + cardClass + '">';
+        html += '<div class="bead-card-header">';
+        html += '<span class="bead-card-id">' + issue.id + '</span>';
+        if (type === 'in-progress' && agent) html += '<span class="bead-card-supervisor">' + supervisorType + '</span>';
+        html += '<span class="bead-card-priority p' + issue.priority + '">P' + issue.priority + '</span>';
+        html += '</div>';
+        html += '<div class="bead-card-title' + (type === 'done' ? ' strikethrough' : '') + '">' + issue.title + '</div>';
+        html += '<span class="bead-card-type">' + (issue.issue_type || 'task') + '</span>';
+
+        // In-progress: show branch + status + actions
+        if (type === 'in-progress') {
+          html += '<div class="bead-card-branch">' + branchName + '</div>';
+          html += '<div class="bead-card-status">';
+          if (isRunning) html += '<span class="status-running">Working...</span>';
+          if (isComplete) html += '<span class="status-complete">Ready to merge</span>';
+          if (issue.status === 'inreview') html += '<span class="status-review">In Review</span>';
+          html += '</div>';
+          html += '<div class="bead-card-actions">';
+          if (isRunning) html += '<button class="bead-btn danger" onclick="stopAgent(\'' + issue.id + '\')">Stop</button>';
+          if (isComplete || issue.status === 'inreview') html += '<button class="bead-btn success" onclick="mergeBead(\'' + issue.id + '\')">Merge</button>';
+          html += '<button class="bead-btn" onclick="freeBead(\'' + issue.id + '\')" title="Release back to queue">Free</button>';
+          html += '</div>';
+        }
+
+        // Ready: show claim button
+        if (type === 'ready') {
+          html += '<div class="bead-card-actions">';
+          html += '<select id="supervisor-' + issue.id + '" class="supervisor-select">';
+          html += '<option value="worker">Worker</option><option value="backend">Backend</option>';
+          html += '<option value="frontend">Frontend</option><option value="devops">DevOps</option><option value="qa">QA</option>';
+          html += '</select>';
+          html += '<button class="bead-btn primary" onclick="claimBead(\'' + issue.id + '\')">Claim</button>';
+          html += '</div>';
+        }
+
+        // Blocked: show what blocks it
+        if (type === 'blocked') {
+          const blockers = findBlockers(issue.id);
+          if (blockers.length > 0) {
+            html += '<div class="bead-card-blocker">Blocked by: ' + blockers.join(', ') + '</div>';
+          }
+        }
+
+        html += '</div>';
+        return html;
+      }).join('');
+    }
+
+    function findBlockers(issueId) {
+      // Use graph links to find what blocks this issue
+      const links = beadsData.graph.links || [];
+      return links
+        .filter(l => {
+          const targetId = typeof l.target === 'object' ? l.target.id : l.target;
+          return targetId === issueId;
+        })
+        .map(l => typeof l.source === 'object' ? l.source.id : l.source);
+    }
+
+    function toggleTaskSection(sectionId) {
+      const section = document.getElementById(sectionId);
+      if (section) section.classList.toggle('collapsed');
+    }
+
+    function toggleAgentsPanel() {
+      const panel = document.getElementById('agents-panel');
+      if (panel) panel.classList.toggle('collapsed');
     }
 
     function renderBeadsGraph() {
@@ -8150,9 +6606,16 @@
         .attr('orient', 'auto').attr('markerWidth', 6).attr('markerHeight', 6)
         .append('path').attr('d', 'M 0,-5 L 10,0 L 0,5').attr('fill', '#6e7681');
 
+      // Color nodes by status
+      const statusColors = {
+        open: '#4ECDC4',
+        in_progress: '#f59e0b',
+        inreview: '#f59e0b',
+        closed: '#10b981',
+        done: '#10b981'
+      };
       const priorityColors = { 1: '#ef4444', 2: '#f59e0b', 3: '#3b82f6', 4: '#10b981' };
 
-      // Filter links to only include those where both source and target nodes exist
       const nodeIds = new Set(nodes.map(n => n.id));
       const validLinks = (links || []).filter(l => nodeIds.has(l.source) && nodeIds.has(l.target));
 
@@ -8169,9 +6632,8 @@
         .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended));
 
       node.append('circle').attr('r', d => d.type === 'epic' ? 22 : 14)
-        .attr('fill', d => priorityColors[d.priority] || '#6b7280');
+        .attr('fill', d => statusColors[d.status] || priorityColors[d.priority] || '#6b7280');
 
-      // Show truncated title as label
       node.append('text')
         .attr('dy', d => d.type === 'epic' ? 35 : 28)
         .attr('text-anchor', 'middle')
@@ -8182,14 +6644,12 @@
           return title.length > maxLen ? title.substring(0, maxLen) + '...' : title;
         });
 
-      // Add type badge inside node for epics
       node.filter(d => d.type === 'epic').append('text')
         .attr('dy', 5).attr('text-anchor', 'middle')
         .attr('fill', '#fff').attr('font-size', '9px').attr('font-weight', 'bold')
         .text('EPIC');
 
-      // Tooltip with full details
-      node.append('title').text(d => d.id + '\n' + d.title + '\nPriority: P' + d.priority + '\nType: ' + (d.type || 'task'));
+      node.append('title').text(d => d.id + '\n' + d.title + '\nStatus: ' + d.status + '\nPriority: P' + d.priority + '\nType: ' + (d.type || 'task'));
 
       beadsSimulation.on('tick', () => {
         link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
@@ -8208,76 +6668,6 @@
       }
     }
 
-    function renderReadyQueue() {
-      const container = document.getElementById('ready-queue');
-      document.getElementById('ready-count').textContent = beadsData.ready.filter(i => i.status === 'open').length;
-      const readyIssues = beadsData.ready.filter(i => i.status === 'open');
-      if (readyIssues.length === 0) {
-        container.innerHTML = '<div class="beads-empty"><p>No ready tasks</p></div>';
-        return;
-      }
-      container.innerHTML = readyIssues.map(issue => `
-        <div class="bead-card">
-          <div class="bead-card-header">
-            <span class="bead-card-id">${issue.id}</span>
-            <span class="bead-card-priority p${issue.priority}">P${issue.priority}</span>
-          </div>
-          <div class="bead-card-title">${issue.title}</div>
-          <span class="bead-card-type">${issue.issue_type || 'task'}</span>
-          <div class="bead-card-actions">
-            <select id="supervisor-${issue.id}" class="supervisor-select">
-              <option value="worker">Worker</option>
-              <option value="backend">Backend</option>
-              <option value="frontend">Frontend</option>
-              <option value="devops">DevOps</option>
-              <option value="qa">QA</option>
-            </select>
-            <button class="bead-btn primary" onclick="claimBead('${issue.id}')">Claim</button>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function renderInProgressQueue() {
-      const container = document.getElementById('in-progress-queue');
-      const inProgress = beadsData.issues.filter(i => i.status === 'in_progress' || i.status === 'inreview');
-      document.getElementById('progress-count').textContent = inProgress.length;
-      if (inProgress.length === 0) {
-        container.innerHTML = '<div class="beads-empty"><p>No tasks in progress</p></div>';
-        return;
-      }
-      container.innerHTML = inProgress.map(issue => {
-        // Find if there's an agent running for this task
-        const agent = activeAgents.find(a => a.taskId === issue.id);
-        const isRunning = agent && agent.status === 'running';
-        const isComplete = agent && (agent.status === 'completed' || agent.status === 'idle');
-        const supervisorType = agent?.supervisorType || 'worker';
-        const branchName = agent?.branchName || `bd-${issue.id}`;
-
-        return `
-          <div class="bead-card in-progress ${isRunning ? 'running' : ''} ${isComplete ? 'complete' : ''}">
-            <div class="bead-card-header">
-              <span class="bead-card-id">${issue.id}</span>
-              <span class="bead-card-supervisor">${supervisorType}</span>
-              <span class="bead-card-priority p${issue.priority}">P${issue.priority}</span>
-            </div>
-            <div class="bead-card-title">${issue.title}</div>
-            <div class="bead-card-branch">${branchName}</div>
-            <div class="bead-card-status">
-              ${isRunning ? '<span class="status-running">Working...</span>' : ''}
-              ${isComplete ? '<span class="status-complete">Ready to merge</span>' : ''}
-              ${issue.status === 'inreview' ? '<span class="status-review">In Review</span>' : ''}
-            </div>
-            <div class="bead-card-actions">
-              ${isRunning ? `<button class="bead-btn danger" onclick="stopAgent('${issue.id}')">Stop</button>` : ''}
-              ${isComplete || issue.status === 'inreview' ? `<button class="bead-btn success" onclick="mergeBead('${issue.id}')">Merge</button>` : ''}
-              <button class="bead-btn" onclick="freeBead('${issue.id}')" title="Release task back to queue">Free</button>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
     // Agent tracking
     let activeAgents = [];
     let selectedAgent = null;
@@ -8285,26 +6675,23 @@
 
     async function claimBead(id) {
       try {
-        // Get selected supervisor type
         const supervisorSelect = document.getElementById('supervisor-' + id);
         const supervisorType = supervisorSelect ? supervisorSelect.value : 'worker';
-
-        showToast(`Spawning ${supervisorType} agent for ${id}...`, 'info');
+        showToast('Spawning ' + supervisorType + ' agent for ' + id + '...', 'info');
 
         const res = await fetch(API_BASE + '/api/beads/claim/' + id, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ autoStart: true, supervisorType: supervisorType })
         });
-
         const data = await res.json();
 
         if (res.ok) {
-          showToast(`${supervisorType} agent started for ${id}`, 'success');
+          showToast(supervisorType + ' agent started for ' + id, 'success');
           await loadBeadsData();
           await loadAgents();
-
-          // Auto-select and stream the new agent
+          // Auto-expand agents panel and select
+          document.getElementById('agents-panel').classList.remove('collapsed');
           selectAgent(id);
         } else {
           showToast('Failed to start agent: ' + (data.error || 'Unknown error'), 'error');
@@ -8319,12 +6706,9 @@
       try {
         showToast('Merging branch for ' + id + '...', 'info');
         const res = await fetch(API_BASE + '/api/beads/merge/' + id, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          method: 'POST', headers: { 'Content-Type': 'application/json' }
         });
-
         const data = await res.json();
-
         if (res.ok) {
           showToast(data.message || 'Merged successfully', 'success');
           await loadBeadsData();
@@ -8340,18 +6724,12 @@
 
     async function freeBead(id) {
       try {
-        // Stop agent if running
         await stopAgent(id);
-
-        // Update bead status back to open
-        const res = await fetch(API_BASE + '/api/beads/close/' + id, {
+        await fetch(API_BASE + '/api/beads/close/' + id, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reason: 'Released - returned to queue' })
         });
-
-        // Actually we want to set it back to todo, not close it
-        // Let's update the status instead
         showToast('Released ' + id + ' back to queue', 'success');
         await loadBeadsData();
         await loadAgents();
@@ -8372,53 +6750,27 @@
       } catch (err) { showToast('Failed to close task', 'error'); }
     }
 
-    // Toggle sidebar section collapse
-    function toggleSection(sectionId) {
-      const section = document.getElementById(sectionId);
-      if (section) {
-        section.classList.toggle('collapsed');
-      }
-    }
-
     async function loadAgents() {
       try {
         const res = await fetch(API_BASE + '/api/beads/agents');
         const data = await res.json();
         activeAgents = data.agents || [];
-        renderAgentList();
+
+        // Auto-expand/collapse agents panel based on whether agents exist
+        const panel = document.getElementById('agents-panel');
+        const badge = document.getElementById('agent-count');
+        if (activeAgents.length > 0) {
+          panel.classList.remove('collapsed');
+          badge.textContent = activeAgents.length;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+
+        renderAgentTabs();
       } catch (err) {
         console.error('[Beads] Error loading agents:', err);
       }
-    }
-
-    function renderAgentList() {
-      const container = document.getElementById('agent-list');
-      document.getElementById('agent-count').textContent = activeAgents.length;
-
-      if (activeAgents.length === 0) {
-        container.innerHTML = '<div class="empty-state-small">No agents running</div>';
-        return;
-      }
-
-      container.innerHTML = activeAgents.map(agent => {
-        const displayTitle = agent.title && agent.title !== 'Unknown'
-          ? agent.title
-          : `Task ${agent.taskId}`;
-        const shortTitle = displayTitle.length > 25 ? displayTitle.slice(0, 25) + '...' : displayTitle;
-
-        return `
-          <div class="agent-item ${selectedAgent === agent.taskId ? 'active' : ''}" onclick="selectAgent('${agent.taskId}')">
-            <div class="agent-status-dot ${agent.status}"></div>
-            <div class="agent-item-info">
-              <div class="agent-item-title" title="${displayTitle}">${shortTitle}</div>
-              <div class="agent-item-status">${formatRuntime(agent.runningFor)}</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      // Also update tabs
-      renderAgentTabs();
     }
 
     function renderAgentTabs() {
@@ -8701,17 +7053,7 @@
     }
 
     function updateAgentStatusLabel(data) {
-      const label = document.getElementById('agent-status-label');
-      if (data.type === 'stdout' || data.type === 'user') {
-        label.textContent = 'Working...';
-        label.className = 'agent-status-label active';
-      } else if (data.type === 'status' && data.status === 'idle') {
-        label.textContent = 'Ready';
-        label.className = 'agent-status-label';
-      } else if (data.type === 'exit') {
-        label.textContent = data.code === 0 ? 'Completed' : 'Failed';
-        label.className = 'agent-status-label';
-      }
+      // No-op: status is shown in the agent status bar
     }
 
     async function sendAgentCommand() {
@@ -8775,1628 +7117,6 @@
 
     // ===== END BEADS AGENT TRACKER =====
 
-    // ===== ORCHESTRATOR =====
-    let currentOrchestration = null;
-    let orchestratorEventSource = null;
-    let orchestrationAnswers = {};
-
-    // Start a new orchestration
-    async function startOrchestration() {
-      const goalInput = document.getElementById('orch-goal-input');
-      const goal = goalInput.value.trim();
-
-      if (!goal) {
-        showToast('Please enter a project description', 'warning');
-        return;
-      }
-
-      // Show loading panel immediately
-      showOrchestratorPanel('loading');
-      startLoadingAnimation();
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ goal })
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          currentOrchestration = { id: data.orchestrationId, goal };
-          updateOrchestratorStatus('Generating questions...');
-          connectOrchestratorStream(data.orchestrationId);
-          loadOrchestrationHistory();
-        } else {
-          showOrchestratorPanel('goal');
-          showToast(data.error || 'Failed to start orchestration', 'error');
-        }
-      } catch (err) {
-        console.error('[Orchestrator] Error:', err);
-        showOrchestratorPanel('goal');
-        showToast('Failed to start orchestration', 'error');
-      }
-    }
-
-    // Cancel current orchestration
-    async function cancelOrchestration() {
-      stopLoadingAnimation();
-
-      if (currentOrchestration && currentOrchestration.id) {
-        try {
-          await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}`, {
-            method: 'DELETE'
-          });
-        } catch (err) {
-          console.log('[Orchestrator] Error deleting:', err);
-        }
-      }
-
-      // Close SSE connection
-      if (orchestratorEventSource) {
-        orchestratorEventSource.close();
-        orchestratorEventSource = null;
-      }
-
-      currentOrchestration = null;
-      showOrchestratorPanel('goal');
-      showToast('Orchestration cancelled', 'info');
-      loadOrchestrationHistory();
-    }
-
-    // Animate loading steps
-    let loadingAnimationTimer = null;
-    function startLoadingAnimation() {
-      // Reset steps
-      document.querySelectorAll('.loading-step').forEach((el, i) => {
-        el.classList.remove('active', 'done');
-        if (i === 0) el.classList.add('active');
-      });
-
-      let step = 0;
-      loadingAnimationTimer = setInterval(() => {
-        step++;
-        if (step < 3) {
-          document.getElementById(`load-step-${step}`).classList.remove('active');
-          document.getElementById(`load-step-${step}`).classList.add('done');
-          document.getElementById(`load-step-${step + 1}`).classList.add('active');
-        }
-      }, 2000);
-    }
-
-    function stopLoadingAnimation() {
-      if (loadingAnimationTimer) {
-        clearInterval(loadingAnimationTimer);
-        loadingAnimationTimer = null;
-      }
-    }
-
-    // ===== ORCHESTRATOR CHAT =====
-    let orchestratorChatVisible = false;
-
-    function toggleOrchestratorChat() {
-      orchestratorChatVisible = !orchestratorChatVisible;
-      const chatPanel = document.getElementById('orch-chat');
-      const toggleBtn = document.getElementById('orch-chat-toggle');
-
-      if (orchestratorChatVisible) {
-        chatPanel.classList.remove('hidden');
-        toggleBtn.classList.add('active');
-        document.getElementById('orch-chat-input').focus();
-      } else {
-        chatPanel.classList.add('hidden');
-        toggleBtn.classList.remove('active');
-      }
-    }
-
-    async function sendOrchestratorChatMessage() {
-      if (!currentOrchestration) {
-        showToast('No active orchestration', 'warning');
-        return;
-      }
-
-      const input = document.getElementById('orch-chat-input');
-      const message = input.value.trim();
-      if (!message) return;
-
-      // Add user message to UI immediately
-      addOrchestratorChatMessage(message, 'user');
-      input.value = '';
-
-      // Show typing indicator
-      const typingId = addOrchestratorChatMessage('Thinking...', 'assistant typing');
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message,
-            phase: currentOrchestration.phase
-          })
-        });
-
-        const data = await res.json();
-
-        // Remove typing indicator
-        const typingEl = document.getElementById(typingId);
-        if (typingEl) typingEl.remove();
-
-        if (data.success) {
-          addOrchestratorChatMessage(data.response, 'assistant');
-        } else if (res.status === 404 || data.error === 'Orchestration not found') {
-          addOrchestratorChatMessage('This orchestration no longer exists (server may have restarted). Please start a new orchestration.', 'assistant error');
-          currentOrchestration = null;
-        } else {
-          addOrchestratorChatMessage('Sorry, I encountered an error. Please try again.', 'assistant error');
-        }
-      } catch (err) {
-        const typingEl = document.getElementById(typingId);
-        if (typingEl) typingEl.remove();
-        addOrchestratorChatMessage('Connection error. Please try again.', 'assistant error');
-      }
-    }
-
-    function addOrchestratorChatMessage(text, className) {
-      const container = document.getElementById('orch-chat-messages');
-      const msgId = 'orch-msg-' + Date.now();
-
-      const msg = document.createElement('div');
-      msg.id = msgId;
-      msg.className = `chat-message ${className}`;
-      msg.textContent = text;
-
-      container.appendChild(msg);
-      container.scrollTop = container.scrollHeight;
-
-      return msgId;
-    }
-
-    async function requestDeeperQuestions() {
-      if (!currentOrchestration) {
-        showToast('No active orchestration', 'warning');
-        return;
-      }
-
-      addOrchestratorChatMessage('Generating additional clarifying questions...', 'assistant');
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/deepen`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'questions' })
-        });
-
-        const data = await res.json();
-        if (data.success && data.newQuestions) {
-          addOrchestratorChatMessage(`Added ${data.newQuestions.length} new questions. Check the Questions panel.`, 'assistant');
-          // Update the questions panel if we're on that phase
-          if (currentOrchestration && currentOrchestration.phase === 'questions') {
-            currentOrchestration.questions = data.questions || currentOrchestration.questions;
-            showOrchestratorPanel('questions');
-          }
-        } else if (res.status === 404 || data.error === 'Orchestration not found') {
-          addOrchestratorChatMessage('This orchestration no longer exists. Please start a new orchestration.', 'assistant error');
-          currentOrchestration = null;
-        } else {
-          addOrchestratorChatMessage('Could not generate additional questions.', 'assistant error');
-        }
-      } catch (err) {
-        addOrchestratorChatMessage('Failed to generate questions. Please try again.', 'assistant error');
-      }
-    }
-
-    async function requestExplanation() {
-      if (!currentOrchestration) {
-        showToast('No active orchestration', 'warning');
-        return;
-      }
-
-      const typingId = addOrchestratorChatMessage('Let me explain my reasoning...', 'assistant typing');
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/deepen`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'explain' })
-        });
-
-        const data = await res.json();
-
-        // Remove typing indicator
-        const typingEl = document.getElementById(typingId);
-        if (typingEl) typingEl.remove();
-
-        if (data.success && data.explanation) {
-          addOrchestratorChatMessage(data.explanation, 'assistant');
-        } else if (res.status === 404 || data.error === 'Orchestration not found') {
-          addOrchestratorChatMessage('This orchestration no longer exists. Please start a new orchestration.', 'assistant error');
-          currentOrchestration = null;
-        } else {
-          addOrchestratorChatMessage('Could not generate explanation.', 'assistant error');
-        }
-      } catch (err) {
-        const typingEl = document.getElementById(typingId);
-        if (typingEl) typingEl.remove();
-        addOrchestratorChatMessage('Failed to generate explanation. Please try again.', 'assistant error');
-      }
-    }
-
-    // Handle Enter key in orchestrator chat input
-    document.addEventListener('DOMContentLoaded', () => {
-      const chatInput = document.getElementById('orch-chat-input');
-      if (chatInput) {
-        chatInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendOrchestratorChatMessage();
-          }
-        });
-      }
-    });
-
-    // Connect to orchestrator SSE stream
-    function connectOrchestratorStream(orchId) {
-      if (orchestratorEventSource) {
-        orchestratorEventSource.close();
-      }
-
-      orchestratorEventSource = new EventSource(`${API_BASE}/api/orchestrator/${orchId}/stream`);
-
-      orchestratorEventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        handleOrchestratorEvent(data);
-      };
-
-      orchestratorEventSource.onerror = () => {
-        console.log('[Orchestrator] SSE connection error');
-      };
-    }
-
-    // Handle orchestrator events
-    function handleOrchestratorEvent(data) {
-      console.log('[Orchestrator] Event:', data.type, data);
-
-      switch (data.type) {
-        case 'phase':
-          updatePhaseIndicator(data.phase);
-          updateOrchestratorStatus(data.message);
-          // Show appropriate panel based on phase
-          if (data.phase === 'planning') {
-            showOrchestratorPanel('planning');
-          } else if (data.phase === 'execution') {
-            showOrchestratorPanel('execution');
-          } else if (data.phase === 'review') {
-            showOrchestratorPanel('review');
-            populateReviewPanel();
-          }
-          break;
-
-        case 'questions':
-          // Check if we already have questions - if so, preserve answers by appending only new ones
-          const existingQuestionIds = new Set(currentOrchestration?.questions?.map(q => q.id) || []);
-          const newQuestionsOnly = data.questions.filter(q => !existingQuestionIds.has(q.id));
-
-          if (existingQuestionIds.size > 0 && newQuestionsOnly.length > 0 && newQuestionsOnly.length < data.questions.length) {
-            // We have existing questions and some new ones - append only the new ones
-            currentOrchestration.questions = data.questions;
-            renderQuestions(newQuestionsOnly, true);
-          } else if (existingQuestionIds.size === 0 || Object.keys(orchestrationAnswers).length === 0) {
-            // No existing questions or no answers yet - render all fresh
-            if (currentOrchestration) currentOrchestration.questions = data.questions;
-            renderQuestions(data.questions, false);
-          } else {
-            // Re-render but preserve answers (e.g., reconnection)
-            if (currentOrchestration) currentOrchestration.questions = data.questions;
-            renderQuestions(data.questions, true);
-          }
-          showOrchestratorPanel('questions');
-          break;
-
-        case 'plan':
-          stopPlanningAnimation();
-          renderPlan(data.plan);
-          showOrchestratorPanel('plan');
-          break;
-
-        case 'summary':
-        case 'progress':
-          addProgressItem(data.message);
-          break;
-
-        case 'task_started':
-          addProgressItem(`🚀 Starting: ${data.task?.title || data.taskId}`, 'info');
-          updateExecutionStats(data.stats);
-          addOrUpdateAgentCard(data.taskId, data.task, 'running');
-          break;
-
-        case 'task_progress':
-          updateAgentCardProgress(data.taskId, data.message);
-          break;
-
-        case 'task_completed':
-          addProgressItem(`✅ Completed: ${data.task?.title || data.taskId} (${data.filesChanged || 0} files)`, 'success');
-          updateExecutionStats(data.stats);
-          updateAgentCardStatus(data.taskId, 'completed');
-          // Add review card with diff info
-          addTaskReviewCard(data);
-          break;
-
-        case 'task_retrying':
-          addProgressItem(`⚠️ Retrying: ${data.task?.title || data.taskId} (${data.retries}/${data.maxRetries})`, 'warning');
-          updateExecutionStats(data.stats);
-          updateAgentCardStatus(data.taskId, 'retrying');
-          break;
-
-        case 'task_failed':
-          addProgressItem(`❌ Failed: ${data.task?.title || data.taskId} - ${data.error}`, 'error');
-          updateExecutionStats(data.stats);
-          updateAgentCardStatus(data.taskId, 'failed');
-          break;
-
-        case 'escalation':
-          addProgressItem(data.message, 'error');
-          showToast(data.message, 'warning');
-          break;
-
-        case 'complete':
-          showOrchestratorPanel('review');
-          updateOrchestratorStatus(data.message);
-          showToast(data.message, 'success');
-          break;
-
-        case 'error':
-          showToast(data.message, 'error');
-          break;
-      }
-    }
-
-    // Track execution state
-    let executionState = {
-      completed: 0,
-      running: 0,
-      pending: 0,
-      agents: new Map()
-    };
-
-    // Update execution statistics
-    function updateExecutionStats(stats) {
-      if (stats) {
-        executionState = { ...executionState, ...stats };
-      }
-      document.getElementById('orch-completed-count').textContent = `${executionState.completed} completed`;
-      document.getElementById('orch-running-count').textContent = `${executionState.running} running`;
-      document.getElementById('orch-pending-count').textContent = `${executionState.pending} pending`;
-    }
-
-    // Add or update agent card during execution
-    function addOrUpdateAgentCard(taskId, task, status) {
-      const grid = document.getElementById('orch-agents-grid');
-      let card = document.getElementById(`agent-card-${taskId}`);
-
-      if (!card) {
-        card = document.createElement('div');
-        card.id = `agent-card-${taskId}`;
-        card.className = `agent-card ${status}`;
-        card.innerHTML = `
-          <div class="agent-card-header">
-            <span class="agent-card-title">${escapeHtml(task?.title || taskId)}</span>
-            <span class="agent-card-status ${status}">${status}</span>
-          </div>
-          <div class="agent-card-type">${task?.agentType || 'general'}</div>
-          <div class="agent-card-progress" id="agent-progress-${taskId}">
-            <span class="thinking-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
-            Working...
-          </div>
-        `;
-        grid.appendChild(card);
-      } else {
-        card.className = `agent-card ${status}`;
-        card.querySelector('.agent-card-status').textContent = status;
-        card.querySelector('.agent-card-status').className = `agent-card-status ${status}`;
-      }
-
-      executionState.agents.set(taskId, { task, status });
-    }
-
-    // Update agent card progress message
-    function updateAgentCardProgress(taskId, message) {
-      const progressEl = document.getElementById(`agent-progress-${taskId}`);
-      if (progressEl && message) {
-        progressEl.innerHTML = escapeHtml(message);
-      }
-    }
-
-    // Update agent card status
-    function updateAgentCardStatus(taskId, status) {
-      const card = document.getElementById(`agent-card-${taskId}`);
-      if (card) {
-        card.className = `agent-card ${status}`;
-        const statusEl = card.querySelector('.agent-card-status');
-        if (statusEl) {
-          statusEl.textContent = status;
-          statusEl.className = `agent-card-status ${status}`;
-        }
-        const progressEl = card.querySelector('.agent-card-progress');
-        if (progressEl) {
-          if (status === 'completed') {
-            progressEl.innerHTML = '✅ Done';
-          } else if (status === 'failed') {
-            progressEl.innerHTML = '❌ Failed';
-          }
-        }
-      }
-      if (executionState.agents.has(taskId)) {
-        executionState.agents.get(taskId).status = status;
-      }
-    }
-
-    // Track completed tasks ready for review
-    let completedTasksForReview = new Map();
-
-    // Add a task review card with diff info and merge/discard buttons
-    function addTaskReviewCard(data) {
-      const list = document.getElementById('task-review-list');
-      if (!list) return;
-
-      const taskId = data.taskId;
-      const task = data.task || { title: taskId };
-      const branch = data.branch || 'unknown';
-      const diffSummary = data.diffSummary || 'No changes detected';
-      const filesChanged = data.filesChanged || 0;
-      const reviewCommands = data.reviewCommands || {};
-
-      // Store for bulk operations
-      completedTasksForReview.set(taskId, {
-        task,
-        branch,
-        worktree: data.worktree,
-        reviewCommands
-      });
-
-      // Update count
-      document.getElementById('review-count').textContent = `${completedTasksForReview.size} tasks ready`;
-
-      // Show bulk actions if multiple tasks
-      const bulkActions = document.getElementById('review-bulk-actions');
-      if (bulkActions && completedTasksForReview.size > 1) {
-        bulkActions.style.display = 'flex';
-      }
-
-      // Check if card already exists
-      let card = document.getElementById(`review-card-${taskId}`);
-      if (card) {
-        // Update existing card
-        card.querySelector('.task-review-diff').innerHTML = formatDiffSummary(diffSummary);
-        return;
-      }
-
-      // Create new card
-      card = document.createElement('div');
-      card.id = `review-card-${taskId}`;
-      card.className = 'task-review-card';
-      card.innerHTML = `
-        <div class="task-review-header">
-          <span class="task-review-title">${escapeHtml(task.title)}</span>
-          <span class="task-review-branch">${escapeHtml(branch)}</span>
-        </div>
-        <div class="task-review-files">${filesChanged} file${filesChanged !== 1 ? 's' : ''} changed</div>
-        <div class="task-review-diff">${formatDiffSummary(diffSummary)}</div>
-        <div class="task-review-actions">
-          <button class="task-review-btn view-diff" onclick="viewTaskDiff('${taskId}')" title="View full diff">
-            👁 View Diff
-          </button>
-          <button class="task-review-btn discard" onclick="discardTask('${taskId}')" title="Discard changes">
-            🗑️ Discard
-          </button>
-          <button class="task-review-btn merge" onclick="mergeTask('${taskId}')" title="Merge changes">
-            ✅ Merge
-          </button>
-        </div>
-      `;
-
-      list.appendChild(card);
-    }
-
-    // Format diff summary with syntax highlighting
-    function formatDiffSummary(diffSummary) {
-      if (!diffSummary) return '<span class="text-muted">No changes</span>';
-
-      // Escape HTML first
-      let formatted = escapeHtml(diffSummary);
-
-      // Highlight additions (green) and deletions (red)
-      formatted = formatted.replace(/(\d+) insertions?\(\+\)/g, '<span class="added">$1 insertion$2(+)</span>');
-      formatted = formatted.replace(/(\d+) deletions?\(-\)/g, '<span class="removed">$1 deletion$2(-)</span>');
-
-      // Highlight file names
-      formatted = formatted.replace(/^(\s*[\w\/.]+\s*\|)/gm, '<strong>$1</strong>');
-
-      return formatted;
-    }
-
-    // View full diff for a task
-    async function viewTaskDiff(taskId) {
-      const taskData = completedTasksForReview.get(taskId);
-      if (!taskData || !taskData.branch) {
-        showToast('No diff information available', 'warning');
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/orchestrator/task/${taskId}/diff?branch=${encodeURIComponent(taskData.branch)}`);
-        const result = await response.json();
-
-        if (result.success && result.diff) {
-          // Show diff in a modal or new window
-          const diffWindow = window.open('', '_blank', 'width=800,height=600');
-          diffWindow.document.write(`
-            <html>
-              <head>
-                <title>Diff: ${escapeHtml(taskData.task?.title || taskId)}</title>
-                <style>
-                  body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding: 20px; }
-                  .line { white-space: pre; }
-                  .add { color: #4ade80; background: #16a34a20; }
-                  .del { color: #f87171; background: #dc262620; }
-                  .hunk { color: #60a5fa; }
-                </style>
-              </head>
-              <body>
-                <h2>Diff: ${escapeHtml(taskData.task?.title || taskId)}</h2>
-                <p>Branch: ${escapeHtml(taskData.branch)}</p>
-                <hr>
-                <pre>${formatFullDiff(result.diff)}</pre>
-              </body>
-            </html>
-          `);
-        } else {
-          showToast(result.error || 'Failed to load diff', 'error');
-        }
-      } catch (err) {
-        console.error('Error viewing diff:', err);
-        showToast('Error loading diff: ' + err.message, 'error');
-      }
-    }
-
-    // Format full diff with syntax highlighting
-    function formatFullDiff(diff) {
-      if (!diff) return 'No changes';
-      return escapeHtml(diff)
-        .split('\\n')
-        .map(line => {
-          if (line.startsWith('+') && !line.startsWith('+++')) {
-            return `<span class="add">${line}</span>`;
-          } else if (line.startsWith('-') && !line.startsWith('---')) {
-            return `<span class="del">${line}</span>`;
-          } else if (line.startsWith('@@')) {
-            return `<span class="hunk">${line}</span>`;
-          }
-          return line;
-        })
-        .join('\\n');
-    }
-
-    // Merge a completed task's changes
-    async function mergeTask(taskId) {
-      const taskData = completedTasksForReview.get(taskId);
-      if (!taskData) {
-        showToast('Task not found', 'error');
-        return;
-      }
-
-      if (!confirm(`Merge changes from branch "${taskData.branch}" into master?`)) {
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/orchestrator/task/${taskId}/merge`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ branch: taskData.branch, worktree: taskData.worktree })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          showToast(`✅ Merged: ${taskData.task?.title || taskId}`, 'success');
-          removeTaskReviewCard(taskId);
-        } else {
-          showToast(result.error || 'Merge failed', 'error');
-        }
-      } catch (err) {
-        console.error('Error merging task:', err);
-        showToast('Error merging: ' + err.message, 'error');
-      }
-    }
-
-    // Discard a completed task's changes
-    async function discardTask(taskId) {
-      const taskData = completedTasksForReview.get(taskId);
-      if (!taskData) {
-        showToast('Task not found', 'error');
-        return;
-      }
-
-      if (!confirm(`Discard all changes from "${taskData.task?.title || taskId}"? This cannot be undone.`)) {
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/orchestrator/task/${taskId}/discard`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ branch: taskData.branch, worktree: taskData.worktree })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          showToast(`🗑️ Discarded: ${taskData.task?.title || taskId}`, 'info');
-          removeTaskReviewCard(taskId);
-        } else {
-          showToast(result.error || 'Discard failed', 'error');
-        }
-      } catch (err) {
-        console.error('Error discarding task:', err);
-        showToast('Error discarding: ' + err.message, 'error');
-      }
-    }
-
-    // Remove a task review card from the UI
-    function removeTaskReviewCard(taskId) {
-      const card = document.getElementById(`review-card-${taskId}`);
-      if (card) {
-        card.remove();
-      }
-      completedTasksForReview.delete(taskId);
-
-      // Update count
-      document.getElementById('review-count').textContent = `${completedTasksForReview.size} tasks ready`;
-
-      // Hide bulk actions if only one task left
-      const bulkActions = document.getElementById('review-bulk-actions');
-      if (bulkActions && completedTasksForReview.size <= 1) {
-        bulkActions.style.display = 'none';
-      }
-    }
-
-    // Merge all completed tasks
-    async function mergeAllCompletedTasks() {
-      if (!confirm(`Merge all ${completedTasksForReview.size} completed tasks?`)) {
-        return;
-      }
-
-      const taskIds = [...completedTasksForReview.keys()];
-      for (const taskId of taskIds) {
-        await mergeTask(taskId);
-      }
-    }
-
-    // Discard all completed tasks
-    async function discardAllCompletedTasks() {
-      if (!confirm(`Discard all ${completedTasksForReview.size} completed tasks? This cannot be undone.`)) {
-        return;
-      }
-
-      const taskIds = [...completedTasksForReview.keys()];
-      for (const taskId of taskIds) {
-        await discardTask(taskId);
-      }
-    }
-
-    // Copy a single command to clipboard
-    function copyCommand(element) {
-      const command = element.textContent;
-      navigator.clipboard.writeText(command).then(() => {
-        showToast('📋 Command copied!', 'success');
-        element.classList.add('copied');
-        setTimeout(() => element.classList.remove('copied'), 1000);
-      }).catch(err => {
-        console.error('Failed to copy:', err);
-        showToast('Failed to copy command', 'error');
-      });
-    }
-
-    // Copy all git commands
-    function copyAllGitCommands() {
-      const commandsList = document.getElementById('review-commands-list');
-      if (!commandsList) return;
-
-      const commands = Array.from(commandsList.querySelectorAll('.command-code'))
-        .map(el => el.textContent)
-        .join('\n');
-
-      navigator.clipboard.writeText(commands).then(() => {
-        showToast('📋 All commands copied!', 'success');
-      }).catch(err => {
-        console.error('Failed to copy:', err);
-        showToast('Failed to copy commands', 'error');
-      });
-    }
-
-    // View all diffs in new tabs
-    function viewAllDiffs() {
-      if (completedTasksForReview.size === 0) {
-        showToast('No completed tasks to view', 'info');
-        return;
-      }
-
-      const taskIds = [...completedTasksForReview.keys()];
-      taskIds.forEach(taskId => {
-        window.open(`/api/orchestrator/task/${taskId}/diff`, '_blank');
-      });
-      showToast(`Opening ${taskIds.length} diff(s)...`, 'success');
-    }
-
-    // Update phase indicator
-    function updatePhaseIndicator(activePhase) {
-      const phases = ['requirements', 'planning', 'execution', 'review'];
-      const activeIndex = phases.indexOf(activePhase);
-
-      document.querySelectorAll('.phase-step').forEach((el, idx) => {
-        const phase = el.dataset.phase;
-        el.classList.remove('active', 'completed');
-
-        if (phase === activePhase) {
-          el.classList.add('active');
-        } else if (phases.indexOf(phase) < activeIndex) {
-          el.classList.add('completed');
-        }
-      });
-    }
-
-    // Update status text
-    function updateOrchestratorStatus(message) {
-      document.getElementById('orch-status').textContent = message;
-    }
-
-    // Show specific panel
-    function showOrchestratorPanel(panelName) {
-      console.log('[Orchestrator] showOrchestratorPanel:', panelName);
-      const panels = ['goal', 'loading', 'questions', 'planning', 'plan', 'execution', 'review'];
-      panels.forEach(name => {
-        const panel = document.getElementById(`orch-${name}-panel`);
-        if (panel) {
-          const shouldHide = name !== panelName;
-          panel.classList.toggle('hidden', shouldHide);
-          console.log(`[Orchestrator] Panel ${name}: hidden=${shouldHide}`);
-        } else {
-          console.warn(`[Orchestrator] Panel not found: orch-${name}-panel`);
-        }
-      });
-
-      // Stop loading animations when leaving loading panels
-      if (panelName !== 'loading') {
-        stopLoadingAnimation();
-      }
-      if (panelName !== 'planning') {
-        stopPlanningAnimation();
-      }
-
-      // Start planning animation when entering planning panel
-      if (panelName === 'planning') {
-        startPlanningAnimation();
-      }
-    }
-
-    // Planning animation
-    let planningAnimationTimer = null;
-    let planningElapsedTimer = null;
-    let planningStartTime = null;
-
-    const planningStatusMessages = [
-      'Starting Claude...',
-      'Analyzing your requirements...',
-      'Understanding project scope...',
-      'Identifying key components...',
-      'Mapping dependencies...',
-      'Breaking down into tasks...',
-      'Estimating complexity...',
-      'Organizing task priorities...',
-      'Finalizing plan structure...',
-      'Almost there...'
-    ];
-
-    function startPlanningAnimation() {
-      planningStartTime = Date.now();
-
-      // Reset progress bar
-      const progressFill = document.getElementById('planning-progress-fill');
-      const progressStatus = document.getElementById('planning-progress-status');
-      const elapsedEl = document.getElementById('planning-elapsed');
-
-      if (progressFill) progressFill.style.width = '0%';
-      if (progressStatus) progressStatus.textContent = planningStatusMessages[0];
-      if (elapsedEl) elapsedEl.textContent = 'Elapsed: 0s';
-
-      // Reset steps
-      document.querySelectorAll('#orch-planning-panel .loading-step').forEach((el, i) => {
-        el.classList.remove('active', 'done');
-        if (i === 0) el.classList.add('active');
-      });
-
-      let progress = 0;
-      let statusIndex = 0;
-
-      // Progress animation - smoothly increases but slows as it approaches 90%
-      planningAnimationTimer = setInterval(() => {
-        // Logarithmic slowdown as we approach 90%
-        const remaining = 90 - progress;
-        const increment = Math.max(0.5, remaining * 0.08);
-        progress = Math.min(90, progress + increment);
-
-        if (progressFill) progressFill.style.width = `${progress}%`;
-
-        // Update status message every ~10%
-        const newStatusIndex = Math.min(Math.floor(progress / 10), planningStatusMessages.length - 1);
-        if (newStatusIndex !== statusIndex) {
-          statusIndex = newStatusIndex;
-          if (progressStatus) progressStatus.textContent = planningStatusMessages[statusIndex];
-        }
-
-        // Update step indicators
-        if (progress > 30) {
-          document.getElementById('plan-step-1')?.classList.remove('active');
-          document.getElementById('plan-step-1')?.classList.add('done');
-          document.getElementById('plan-step-2')?.classList.add('active');
-        }
-        if (progress > 60) {
-          document.getElementById('plan-step-2')?.classList.remove('active');
-          document.getElementById('plan-step-2')?.classList.add('done');
-          document.getElementById('plan-step-3')?.classList.add('active');
-        }
-      }, 500);
-
-      // Elapsed timer
-      planningElapsedTimer = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - planningStartTime) / 1000);
-        if (elapsedEl) elapsedEl.textContent = `Elapsed: ${elapsed}s`;
-      }, 1000);
-    }
-
-    function stopPlanningAnimation() {
-      // Complete the progress bar
-      const progressFill = document.getElementById('planning-progress-fill');
-      const progressStatus = document.getElementById('planning-progress-status');
-
-      if (progressFill) progressFill.style.width = '100%';
-      if (progressStatus) progressStatus.textContent = 'Plan ready!';
-
-      // Mark all steps as done
-      document.querySelectorAll('#orch-planning-panel .loading-step').forEach(el => {
-        el.classList.remove('active');
-        el.classList.add('done');
-      });
-
-      if (planningAnimationTimer) {
-        clearInterval(planningAnimationTimer);
-        planningAnimationTimer = null;
-      }
-      if (planningElapsedTimer) {
-        clearInterval(planningElapsedTimer);
-        planningElapsedTimer = null;
-      }
-    }
-
-    // Render clarifying questions
-    function renderQuestions(questions, append = false) {
-      stopLoadingAnimation();
-      const container = document.getElementById('orch-questions-list');
-
-      // Only reset answers if not appending
-      if (!append) {
-        orchestrationAnswers = {};
-      }
-
-      const questionsHtml = questions.map(q => {
-        // Check if this question allows multiple selections
-        const isMultiSelect = q.multiSelect || q.type === 'multiselect';
-        const existingAnswer = orchestrationAnswers[q.id];
-
-        const optionsHtml = q.options
-          ? `<div class="question-options ${isMultiSelect ? 'multi-select' : ''}" data-multi="${isMultiSelect}">
-               ${isMultiSelect ? '<span class="multi-hint">Select all that apply</span>' : ''}
-               ${q.options.map(opt => {
-                 // Check if this option was previously selected
-                 const isSelected = existingAnswer && (
-                   Array.isArray(existingAnswer) ? existingAnswer.includes(opt) : existingAnswer === opt
-                 );
-                 return `<button class="question-option ${isSelected ? 'selected' : ''}"
-                         data-qid="${q.id}" data-value="${opt}" data-multi="${isMultiSelect}"
-                         onclick="selectOption(this)">${opt}</button>`;
-               }).join('')}
-             </div>`
-          : '';
-
-        // Get existing custom text answer
-        const existingText = typeof existingAnswer === 'string' && !q.options?.includes(existingAnswer)
-          ? existingAnswer
-          : (existingAnswer?.customText || '');
-
-        return `
-          <div class="question-item" data-qid="${q.id}" data-multi="${isMultiSelect}">
-            <div class="question-text">${q.question}</div>
-            ${optionsHtml}
-            <input type="text" class="question-input" data-qid="${q.id}" id="q-${q.id}"
-                   value="${escapeHtml(existingText)}"
-                   placeholder="${q.options ? 'Add custom details or additional context...' : 'Type your answer...'}"
-                   oninput="updateAnswer(this)">
-          </div>
-        `;
-      }).join('');
-
-      if (append) {
-        // Append new questions with a separator
-        container.innerHTML += `
-          <div class="new-questions-separator">Additional Questions</div>
-          ${questionsHtml}
-        `;
-        // Scroll to the new questions
-        const newItems = container.querySelectorAll('.question-item');
-        if (newItems.length > 0) {
-          newItems[newItems.length - questions.length]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      } else {
-        container.innerHTML = questionsHtml;
-      }
-    }
-
-    // Select an option for a question (supports multi-select)
-    function selectOption(btn) {
-      const qid = btn.dataset.qid;
-      const value = btn.dataset.value;
-      const isMulti = btn.dataset.multi === 'true';
-      const wasSelected = btn.classList.contains('selected');
-
-      if (isMulti) {
-        // Multi-select: toggle this option
-        btn.classList.toggle('selected');
-
-        // Gather all selected values
-        const selectedBtns = document.querySelectorAll(`.question-option[data-qid="${qid}"].selected`);
-        const selectedValues = Array.from(selectedBtns).map(b => b.dataset.value);
-
-        // Get custom text if any
-        const input = document.querySelector(`.question-input[data-qid="${qid}"]`);
-        const customText = input?.value?.trim() || '';
-
-        if (selectedValues.length > 0 || customText) {
-          orchestrationAnswers[qid] = {
-            selections: selectedValues,
-            customText: customText
-          };
-        } else {
-          delete orchestrationAnswers[qid];
-        }
-      } else {
-        // Single select: deselect others first
-        document.querySelectorAll(`.question-option[data-qid="${qid}"]`).forEach(b => {
-          b.classList.remove('selected');
-        });
-
-        if (wasSelected) {
-          // Toggle off - but keep custom text if present
-          const input = document.querySelector(`.question-input[data-qid="${qid}"]`);
-          const customText = input?.value?.trim() || '';
-          if (customText) {
-            orchestrationAnswers[qid] = customText;
-          } else {
-            delete orchestrationAnswers[qid];
-          }
-        } else {
-          // Select this one
-          btn.classList.add('selected');
-          const input = document.querySelector(`.question-input[data-qid="${qid}"]`);
-          const customText = input?.value?.trim() || '';
-
-          if (customText) {
-            // Combine selection with custom text
-            orchestrationAnswers[qid] = `${value} - ${customText}`;
-          } else {
-            orchestrationAnswers[qid] = value;
-          }
-        }
-      }
-    }
-
-    // Update answer from text input (combines with selection)
-    function updateAnswer(input) {
-      const qid = input.dataset.qid;
-      const questionItem = input.closest('.question-item');
-      const isMulti = questionItem?.dataset.multi === 'true';
-      const customText = input.value.trim();
-
-      // Get selected options
-      const selectedBtns = document.querySelectorAll(`.question-option[data-qid="${qid}"].selected`);
-      const selectedValues = Array.from(selectedBtns).map(b => b.dataset.value);
-
-      if (isMulti) {
-        // Multi-select: store both selections and custom text
-        if (selectedValues.length > 0 || customText) {
-          orchestrationAnswers[qid] = {
-            selections: selectedValues,
-            customText: customText
-          };
-        } else {
-          delete orchestrationAnswers[qid];
-        }
-      } else {
-        // Single select: combine or use custom text alone
-        if (selectedValues.length > 0 && customText) {
-          orchestrationAnswers[qid] = `${selectedValues[0]} - ${customText}`;
-        } else if (selectedValues.length > 0) {
-          orchestrationAnswers[qid] = selectedValues[0];
-        } else if (customText) {
-          orchestrationAnswers[qid] = customText;
-        } else {
-          delete orchestrationAnswers[qid];
-        }
-      }
-    }
-
-    // Legacy compatibility - keep old behavior for simple text answers
-    function updateAnswerLegacy(input) {
-      const qid = input.dataset.qid;
-      if (input.value.trim()) {
-        orchestrationAnswers[qid] = input.value.trim();
-        // Deselect option buttons
-        document.querySelectorAll(`.question-option[data-qid="${qid}"]`).forEach(b => {
-          b.classList.remove('selected');
-        });
-      }
-    }
-
-    // Submit answers
-    async function submitAnswers() {
-      if (!currentOrchestration) return;
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/answer`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answers: orchestrationAnswers })
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          updateOrchestratorStatus('Creating implementation plan...');
-        } else {
-          showToast(data.error || 'Failed to submit answers', 'error');
-        }
-      } catch (err) {
-        showToast('Failed to submit answers', 'error');
-      }
-    }
-
-    // Render plan tasks with expandable chat
-    function renderPlan(plan) {
-      const container = document.getElementById('orch-plan-list');
-
-      container.innerHTML = plan.map((task, idx) => `
-        <div class="plan-task" id="plan-task-${task.id}" onclick="togglePlanTask('${task.id}', event)">
-          <div class="plan-task-header">
-            <div class="plan-task-number">${idx + 1}</div>
-            <div class="plan-task-content">
-              <div class="plan-task-title">${task.title}</div>
-              <div class="plan-task-description">${task.description || ''}</div>
-              <div class="plan-task-meta">
-                <span class="plan-task-badge ${task.agentType}">${task.agentType}</span>
-                ${task.priority ? `<span class="plan-task-badge">${task.priority}</span>` : ''}
-              </div>
-            </div>
-            <svg class="plan-task-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-          <div class="plan-task-chat">
-            <div class="task-chat-messages" id="task-chat-${task.id}"></div>
-            <div class="task-chat-input-row">
-              <input type="text" class="task-chat-input" id="task-input-${task.id}"
-                     placeholder="Ask about this task or suggest changes..."
-                     onclick="event.stopPropagation()"
-                     onkeypress="if(event.key==='Enter') sendTaskChat('${task.id}')">
-              <button class="task-chat-send" onclick="event.stopPropagation(); sendTaskChat('${task.id}')">Send</button>
-            </div>
-          </div>
-        </div>
-      `).join('');
-
-      if (currentOrchestration) {
-        currentOrchestration.plan = plan;
-      }
-    }
-
-    // Toggle plan task expansion
-    function togglePlanTask(taskId, event) {
-      // Don't toggle if clicking on input or button
-      if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON') {
-        return;
-      }
-      const taskEl = document.getElementById(`plan-task-${taskId}`);
-      if (taskEl) {
-        taskEl.classList.toggle('expanded');
-      }
-    }
-
-    // Send chat message for a specific task
-    async function sendTaskChat(taskId) {
-      const input = document.getElementById(`task-input-${taskId}`);
-      const messagesEl = document.getElementById(`task-chat-${taskId}`);
-      const message = input.value.trim();
-
-      if (!message || !currentOrchestration) return;
-
-      // Add user message to UI
-      messagesEl.innerHTML += `<div class="task-chat-message user">${escapeHtml(message)}</div>`;
-      input.value = '';
-
-      // Add thinking indicator
-      const thinkingId = `thinking-${taskId}-${Date.now()}`;
-      messagesEl.innerHTML += `
-        <div class="task-chat-message assistant thinking" id="${thinkingId}">
-          <span class="thinking-dots">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
-          </span>
-          <span class="thinking-text">Claude is thinking...</span>
-        </div>
-      `;
-
-      // Scroll to bottom
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/task/${taskId}/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message })
-        });
-
-        const data = await res.json();
-
-        // Remove thinking indicator
-        document.getElementById(thinkingId)?.remove();
-
-        if (data.response) {
-          // Format response with basic markdown rendering
-          const formattedResponse = formatMarkdown(data.response);
-          messagesEl.innerHTML += `<div class="task-chat-message assistant selectable-text">${formattedResponse}</div>`;
-          messagesEl.scrollTop = messagesEl.scrollHeight;
-        }
-      } catch (err) {
-        document.getElementById(thinkingId)?.remove();
-        messagesEl.innerHTML += `<div class="task-chat-message assistant error">Sorry, couldn't get a response. Please try again.</div>`;
-      }
-    }
-
-    // Basic markdown to HTML formatting
-    function formatMarkdown(text) {
-      if (!text) return '';
-
-      let html = escapeHtml(text);
-
-      // Code blocks (```...```)
-      html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>');
-
-      // Inline code (`...`)
-      html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-
-      // Bold (**...** or __...__)
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-
-      // Italic (*...* or _..._)
-      html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
-
-      // Bullet lists
-      html = html.replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>');
-      html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-
-      // Numbered lists
-      html = html.replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
-
-      // Line breaks
-      html = html.replace(/\n\n/g, '</p><p>');
-      html = html.replace(/\n/g, '<br>');
-
-      return `<p>${html}</p>`;
-    }
-
-    // Send chat message to orchestrator during execution
-    async function sendExecutionChat() {
-      const input = document.getElementById('execution-chat-input');
-      const messagesEl = document.getElementById('execution-chat-messages');
-      const message = input.value.trim();
-
-      if (!message || !currentOrchestration) return;
-
-      // Add user message to UI
-      messagesEl.innerHTML += `<div class="task-chat-message user">${escapeHtml(message)}</div>`;
-      input.value = '';
-
-      // Add thinking indicator
-      const thinkingId = `exec-thinking-${Date.now()}`;
-      messagesEl.innerHTML += `
-        <div class="task-chat-message assistant thinking" id="${thinkingId}">
-          <span class="thinking-dots">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
-          </span>
-          <span class="thinking-text">Orchestrator is thinking...</span>
-        </div>
-      `;
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, phase: 'execution' })
-        });
-
-        const data = await res.json();
-        document.getElementById(thinkingId)?.remove();
-
-        if (data.response) {
-          const formattedResponse = formatMarkdown(data.response);
-          messagesEl.innerHTML += `<div class="task-chat-message assistant selectable-text">${formattedResponse}</div>`;
-
-          // If orchestrator took an action, show it
-          if (data.action) {
-            addProgressItem(`🤖 Orchestrator: ${data.action}`, 'info');
-          }
-        }
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-      } catch (err) {
-        document.getElementById(thinkingId)?.remove();
-        messagesEl.innerHTML += `<div class="task-chat-message assistant error">Failed to get response. Please try again.</div>`;
-      }
-    }
-
-    // Ask for more clarifying questions
-    async function askMoreQuestions() {
-      if (!currentOrchestration) return;
-
-      showToast('Generating more questions...', 'info');
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/more-questions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        const data = await res.json();
-
-        if (data.newQuestions && data.newQuestions.length > 0) {
-          // Use the full question list from server if available
-          currentOrchestration.questions = data.allQuestions || [...(currentOrchestration.questions || []), ...data.newQuestions];
-          renderQuestions(data.newQuestions);
-          showOrchestratorPanel('questions');
-          updatePhaseIndicator('requirements');
-          showToast(`${data.newQuestions.length} more questions added!`, 'success');
-        } else {
-          showToast('No additional questions needed', 'info');
-        }
-      } catch (err) {
-        showToast('Failed to generate questions', 'error');
-      }
-    }
-
-    // Ask for more questions from requirements page (before plan is generated)
-    async function askMoreQuestionsFromRequirements() {
-      if (!currentOrchestration) return;
-
-      // Collect current answers first
-      collectCurrentAnswers();
-
-      showToast('Generating more questions based on your answers...', 'info');
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/more-questions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ currentAnswers: currentOrchestration.answers })
-        });
-
-        const data = await res.json();
-
-        if (data.newQuestions && data.newQuestions.length > 0) {
-          // Append new questions to the existing list
-          currentOrchestration.questions = data.allQuestions || [...(currentOrchestration.questions || []), ...data.newQuestions];
-          // Render the new questions (append to existing)
-          renderQuestions(data.newQuestions, true);
-          showToast(`${data.newQuestions.length} more questions added!`, 'success');
-        } else {
-          showToast('No additional questions needed at this time', 'info');
-        }
-      } catch (err) {
-        console.error('Error requesting more questions:', err);
-        showToast('Failed to generate more questions', 'error');
-      }
-    }
-
-    // Collect current answers from form inputs
-    function collectCurrentAnswers() {
-      if (!currentOrchestration) return;
-      const questions = currentOrchestration.questions || [];
-      const answers = {};
-      questions.forEach((q, idx) => {
-        const input = document.getElementById(`q-${q.id || idx}`);
-        if (input) {
-          answers[q.id || `q${idx}`] = input.value || '';
-        }
-      });
-      currentOrchestration.answers = { ...currentOrchestration.answers, ...answers };
-    }
-
-    // Helper to escape HTML
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // Modify plan (go back to questions for now)
-    function modifyPlan() {
-      showOrchestratorPanel('questions');
-      updatePhaseIndicator('requirements');
-    }
-
-    // Execute the plan
-    async function executePlan() {
-      if (!currentOrchestration) return;
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/execute`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          showOrchestratorPanel('execution');
-          updatePhaseIndicator('execution');
-          updateOrchestratorStatus('Spawning agents...');
-        } else {
-          showToast(data.error || 'Failed to execute plan', 'error');
-        }
-      } catch (err) {
-        showToast('Failed to execute plan', 'error');
-      }
-    }
-
-    // Add progress item to feed
-    function addProgressItem(message, type = 'info') {
-      const feed = document.getElementById('orch-progress-feed');
-
-      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-
-      const item = document.createElement('div');
-      item.className = `progress-item ${type}`;
-      item.innerHTML = `
-        <span class="progress-time">${time}</span>
-        <span class="progress-message">${message}</span>
-      `;
-
-      feed.appendChild(item);
-      feed.scrollTop = feed.scrollHeight;
-
-      // Also show execution panel if not visible
-      showOrchestratorPanel('execution');
-    }
-
-    // Request refinement
-    async function requestRefinement() {
-      if (!currentOrchestration) return;
-
-      const feedback = document.getElementById('orch-feedback-input').value.trim();
-
-      if (!feedback) {
-        showToast('Please provide feedback for refinements', 'warning');
-        return;
-      }
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/refine`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'refine', feedback })
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          showOrchestratorPanel('execution');
-          updateOrchestratorStatus('Processing refinements...');
-          document.getElementById('orch-feedback-input').value = '';
-        } else {
-          showToast(data.error || 'Failed to process refinement', 'error');
-        }
-      } catch (err) {
-        showToast('Failed to process refinement', 'error');
-      }
-    }
-
-    // Approve project
-    async function approveProject() {
-      if (!currentOrchestration) return;
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${currentOrchestration.id}/refine`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'approve' })
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          showToast('Project approved and completed!', 'success');
-          resetOrchestrator();
-        } else {
-          showToast(data.error || 'Failed to approve project', 'error');
-        }
-      } catch (err) {
-        showToast('Failed to approve project', 'error');
-      }
-    }
-
-    // Reset orchestrator to initial state
-    function resetOrchestrator() {
-      currentOrchestration = null;
-      orchestrationAnswers = {};
-
-      if (orchestratorEventSource) {
-        orchestratorEventSource.close();
-        orchestratorEventSource = null;
-      }
-
-      // Reset UI
-      document.getElementById('orch-goal-input').value = '';
-      document.getElementById('orch-questions-list').innerHTML = '';
-      document.getElementById('orch-plan-list').innerHTML = '';
-      document.getElementById('orch-progress-feed').innerHTML = '';
-      document.getElementById('orch-feedback-input').value = '';
-
-      showOrchestratorPanel('goal');
-      updatePhaseIndicator('');
-      updateOrchestratorStatus('Ready to start');
-    }
-
-    // Load orchestration history
-    async function loadOrchestrationHistory() {
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/list`);
-        const data = await res.json();
-
-        const container = document.getElementById('orch-history-list');
-
-        if (!data.orchestrations || data.orchestrations.length === 0) {
-          container.innerHTML = '<div class="empty-state-small">No orchestrations yet</div>';
-          return;
-        }
-
-        container.innerHTML = data.orchestrations.map(orch => {
-          const isActive = currentOrchestration && currentOrchestration.id === orch.id;
-          const runtime = formatRuntime(orch.runtime);
-
-          return `
-            <div class="orch-history-item ${isActive ? 'active' : ''}">
-              <div class="orch-history-content" onclick="loadOrchestration('${orch.id}')">
-                <div class="orch-history-goal">${orch.goal}</div>
-                <div class="orch-history-meta">${orch.phase} - ${runtime}</div>
-              </div>
-              <button class="orch-delete-btn" onclick="event.stopPropagation(); deleteOrchestration('${orch.id}')" title="Delete">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              </button>
-            </div>
-          `;
-        }).join('');
-      } catch (err) {
-        console.error('[Orchestrator] Error loading history:', err);
-      }
-    }
-
-    // Load a specific orchestration
-    async function loadOrchestration(orchId) {
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${orchId}`);
-        const data = await res.json();
-
-        if (data.id) {
-          currentOrchestration = data;
-          updatePhaseIndicator(data.phase);
-          updateOrchestratorStatus(`Phase: ${data.phase}`);
-
-          // Show appropriate panel
-          switch (data.phase) {
-            case 'requirements':
-              if (data.questions && data.questions.length > 0) {
-                renderQuestions(data.questions);
-                showOrchestratorPanel('questions');
-              } else {
-                showOrchestratorPanel('goal');
-              }
-              break;
-            case 'planning':
-              if (data.plan && data.plan.length > 0) {
-                renderPlan(data.plan);
-                showOrchestratorPanel('plan');
-              }
-              break;
-            case 'execution':
-              if (data.plan) renderPlan(data.plan);
-              data.summary.forEach(s => addProgressItem(s.message));
-              showOrchestratorPanel('execution');
-              break;
-            case 'review':
-              showOrchestratorPanel('review');
-              break;
-          }
-
-          // Reconnect SSE
-          connectOrchestratorStream(orchId);
-          loadOrchestrationHistory();
-        }
-      } catch (err) {
-        showToast('Failed to load orchestration', 'error');
-      }
-    }
-
-    // Format runtime
-    // Delete an orchestration
-    async function deleteOrchestration(orchId) {
-      if (!confirm('Delete this orchestration?')) return;
-
-      try {
-        const res = await fetch(`${API_BASE}/api/orchestrator/${orchId}`, {
-          method: 'DELETE'
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          showToast('Orchestration deleted', 'success');
-          // Clear current if it was the deleted one
-          if (currentOrchestration && currentOrchestration.id === orchId) {
-            resetOrchestrator();
-          }
-          loadOrchestrationHistory();
-        } else {
-          showToast('Failed to delete: ' + (data.error || 'Unknown error'), 'error');
-        }
-      } catch (err) {
-        console.error('[Orchestrator] Error deleting:', err);
-        showToast('Failed to delete orchestration', 'error');
-      }
-    }
-
-    function formatRuntime(ms) {
-      if (!ms || ms < 0) return '--';
-      const secs = Math.floor(ms / 1000);
-      const mins = Math.floor(secs / 60);
-      const hours = Math.floor(mins / 60);
-
-      if (hours > 0) return `${hours}h ${mins % 60}m`;
-      if (mins > 0) return `${mins}m ${secs % 60}s`;
-      return `${secs}s`;
-    }
-
-    // Initialize orchestrator view when shown
-    document.addEventListener('DOMContentLoaded', () => {
-      // Load history when orchestrator tab is shown
-      document.querySelector('[data-view="orchestrator"]')?.addEventListener('click', () => {
-        loadOrchestrationHistory();
-      });
-    });
-
-    // ===== END ORCHESTRATOR =====
   </script>
 </body>
 
