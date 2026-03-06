@@ -1,7 +1,13 @@
 #!/bin/bash
 # Dev Maestro quick start script
 
-cd "$(dirname "$0")"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR"
+
+# TUI subcommand — launch terminal kanban board
+if [ "$1" = "tui" ]; then
+  exec node "$DIR/tui/src/index.js"
+fi
 
 # Kill any existing instance
 pkill -f "node server.js" 2>/dev/null
