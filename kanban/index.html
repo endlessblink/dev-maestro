@@ -3553,6 +3553,13 @@
             currentSubSection = '';
             continue;
           }
+          // Any other ## section (e.g. "## Planned Tasks", "## Dev-Maestro Orchestrator")
+          // should be treated as activeWork so tasks under them get picked up
+          if (trimmed.match(/^## /) && !trimmed.startsWith('## Formatting') && !trimmed.startsWith('## References') && !trimmed.startsWith('## Architecture') && !trimmed.startsWith('## Task Dependency Index')) {
+            currentSection = 'activeWork';
+            currentSubSection = '';
+            continue;
+          }
 
           // Detect subsections
           if (trimmed.startsWith('### Near-term')) {

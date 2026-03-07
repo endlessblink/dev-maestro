@@ -824,40 +824,60 @@
                 return 'todo';
             }
 
-            // Extract active items from the Active Work dependency table
-            // Table format: | ID | Status | Primary Files | Depends | Blocks |
-            // Only parse from the "## Active Work" section
-            const activeWorkSection = text.match(/## Active Work[\s\S]*?(?=\n---|\n## |$)/);
-            if (activeWorkSection) {
-                const depTablePattern = /\|\s*(TASK|BUG|ROAD|ISSUE)-(\d+)\s*\|\s*([^|\n]+)\|([^|\n]+)\|/g;
-                let match;
-                const seenActive = new Set();
+            // Extract active items from ### task headers across ALL sections
+            // Scan entire document for ### TASK-*/BUG-* headers with IN PROGRESS or REVIEW status
+            const seenActive = new Set();
+            const taskHeaderPattern = /^###\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?[:\s]+(.+?)(?:\s*\(([^)]+)\))?\s*$/gm;
+            let match;
 
-                while ((match = depTablePattern.exec(activeWorkSection[0])) !== null) {
-                    const id = `${match[1]}-${match[2]}`;
-                    const isDone = match[0].includes('~~') || match[0].includes('✅');
-                    if (isDone || seenActive.has(id)) continue;
+            while ((match = taskHeaderPattern.exec(text)) !== null) {
+                const id = match[1];
+                const title_raw = match[2] || '';
+                const statusText = match[3] || '';
 
-                    const statusCol = match[3].trim();
-                    const filesCol = match[4].trim();
+                // Skip done/strikethrough
+                if (match[0].includes('~~') && !match[0].match(/^###\s+[^~]/)) continue;
 
-                    const parsedStatus = parseTaskStatus(statusCol);
-                    if (parsedStatus !== 'in-progress' && parsedStatus !== 'review') continue;
+                const parsedStatus = parseTaskStatus(statusText || title_raw);
+                if (parsedStatus !== 'in-progress' && parsedStatus !== 'review') continue;
+                if (seenActive.has(id)) continue;
 
-                    seenActive.add(id);
-                    const status = parsedStatus === 'review' ? 'monitoring' : 'progress';
+                seenActive.add(id);
+                const status = parsedStatus === 'review' ? 'monitoring' : 'progress';
 
-                    // Find the title from the detailed section
-                    const titlePattern = new RegExp(`###\\s*(?:~~)?${id}(?:~~)?[:\\s]+([^\\n(]+)`, 'i');
-                    const titleMatch = text.match(titlePattern);
-                    let title = titleMatch ? titleMatch[1].trim() : id;
+                // Clean up title
+                let title = title_raw.replace(/\*\*/g, '').replace(/~~.*?~~/g, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+                if (!title || title.length < 3) title = id;
 
-                    // Clean up title
-                    title = title.replace(/\*\*/g, '').replace(/~~.*?~~/g, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
-                    if (!title || title.length < 3) title = id;
+                // Try to find files from nearby lines
+                const afterHeader = text.slice(match.index + match[0].length, match.index + match[0].length + 500);
+                const filesMatch = afterHeader.match(/\*\*(?:Files?|Primary Files?)\*\*:\s*([^\n]+)/i);
+                const files = filesMatch ? filesMatch[1].trim() : '';
 
-                    data.active.push({ id, title, status, files: filesCol });
-                }
+                data.active.push({ id, title, status, files });
+            }
+
+            // Also check table rows for active items (dependency tables)
+            const depTablePattern = /\|\s*(?:\*\*)?(TASK|BUG|ROAD|ISSUE)-(\d+)(?:\*\*)?\s*\|\s*([^|\n]+)\|([^|\n]+)\|/g;
+            while ((match = depTablePattern.exec(text)) !== null) {
+                const id = `${match[1]}-${match[2]}`;
+                if (match[0].includes('~~') || match[0].includes('✅') || seenActive.has(id)) continue;
+
+                const statusCol = match[3].trim();
+                const parsedStatus = parseTaskStatus(statusCol);
+                if (parsedStatus !== 'in-progress' && parsedStatus !== 'review') continue;
+
+                seenActive.add(id);
+                const status = parsedStatus === 'review' ? 'monitoring' : 'progress';
+                const filesCol = match[4].trim();
+
+                const titlePattern = new RegExp(`###\\s*(?:~~)?${id}(?:~~)?[:\\s]+([^\\n(]+)`, 'i');
+                const titleMatch = text.match(titlePattern);
+                let title = titleMatch ? titleMatch[1].trim() : id;
+                title = title.replace(/\*\*/g, '').replace(/~~.*?~~/g, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+                if (!title || title.length < 3) title = id;
+
+                data.active.push({ id, title, status, files: filesCol });
             }
 
             // Extract completed items with dates
