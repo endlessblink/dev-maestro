@@ -5,39 +5,102 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 PORT="${PORT:-6010}"
 
-# Colors
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
+# ─── Colors & Styles ─────────────────────────────────────────────────────────
+RST='\033[0m'
 BOLD='\033[1m'
 DIM='\033[2m'
-NC='\033[0m'
+ITAL='\033[3m'
+ULINE='\033[4m'
+# Foreground
+BLK='\033[30m';  RED='\033[31m';  GRN='\033[32m';  YEL='\033[33m'
+BLU='\033[34m';  MAG='\033[35m';  CYN='\033[36m';  WHT='\033[37m'
+# Bright foreground
+BBLK='\033[90m'; BRED='\033[91m'; BGRN='\033[92m'; BYEL='\033[93m'
+BBLU='\033[94m'; BMAG='\033[95m'; BCYN='\033[96m'; BWHT='\033[97m'
+# Background
+BG_BLU='\033[44m'; BG_MAG='\033[45m'; BG_CYN='\033[46m'
 
-# Check if dashboard server is running
+# ─── Box drawing ─────────────────────────────────────────────────────────────
+# Uses Unicode box-drawing characters for clean borders
+BOX_TL='╭'; BOX_TR='╮'; BOX_BL='╰'; BOX_BR='╯'
+BOX_H='─'; BOX_V='│'; BOX_LT='├'; BOX_RT='┤'
+
+TERM_WIDTH=$(tput cols 2>/dev/null || echo 60)
+BOX_W=$((TERM_WIDTH > 64 ? 62 : TERM_WIDTH - 2))
+
+# Draw a horizontal line
+hline() {
+  local char="${1:-$BOX_H}"
+  local w=$((BOX_W - 2))
+  printf '%*s' "$w" '' | tr ' ' "$char"
+}
+
+# Print a boxed line with padding
+bline() {
+  local text="$1"
+  local plain
+  plain=$(echo -e "$text" | sed 's/\x1b\[[0-9;]*m//g')
+  local len=${#plain}
+  local pad=$((BOX_W - 4 - len))
+  [ $pad -lt 0 ] && pad=0
+  printf "  ${BBLK}${BOX_V}${RST} %b%*s ${BBLK}${BOX_V}${RST}\n" "$text" "$pad" ""
+}
+
+# Print a boxed empty line
+bempty() {
+  local inner=$((BOX_W - 2))
+  printf "  ${BBLK}${BOX_V}${RST}%*s${BBLK}${BOX_V}${RST}\n" "$inner" ""
+}
+
+# Top border
+btop() {
+  printf "  ${BBLK}${BOX_TL}$(hline)${BOX_TR}${RST}\n"
+}
+
+# Bottom border
+bbot() {
+  printf "  ${BBLK}${BOX_BL}$(hline)${BOX_BR}${RST}\n"
+}
+
+# Separator
+bsep() {
+  printf "  ${BBLK}${BOX_LT}$(hline)${BOX_RT}${RST}\n"
+}
+
+# ─── Core Functions ──────────────────────────────────────────────────────────
+
 is_server_running() {
   curl -s "http://localhost:${PORT}/api/status" >/dev/null 2>&1
 }
 
-# Start dashboard server in background
+get_server_info() {
+  curl -s "http://localhost:${PORT}/api/status" 2>/dev/null
+}
+
+get_task_stats() {
+  curl -s "http://localhost:${PORT}/api/tasks/stats" 2>/dev/null
+}
+
 start_server() {
   cd "$DIR"
   node server.js > /tmp/maestro-server.log 2>&1 &
   local pid=$!
-  echo -e "${GREEN}Dashboard starting on http://localhost:${PORT}${NC} (PID: $pid)"
-  # Wait for it to be ready
-  for i in {1..10}; do
+
+  # Animated spinner while waiting
+  local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local i=0
+  for attempt in {1..10}; do
+    printf "\r  ${BCYN}${spin:i++%10:1}${RST} ${DIM}Starting dashboard...${RST}  "
     sleep 1
     if is_server_running; then
-      echo -e "${GREEN}Dashboard ready.${NC}"
+      printf "\r  ${BGRN}✓${RST} Dashboard running ${DIM}(PID $pid)${RST}       \n"
       return 0
     fi
   done
-  echo -e "${RED}Dashboard failed to start. Check /tmp/maestro-server.log${NC}"
+  printf "\r  ${BRED}✗${RST} Failed to start. Check /tmp/maestro-server.log\n"
   return 1
 }
 
-# Open dashboard in browser
 open_dashboard() {
   local url="http://localhost:${PORT}"
   if command -v xdg-open &>/dev/null; then
@@ -45,131 +108,242 @@ open_dashboard() {
   elif command -v open &>/dev/null; then
     open "$url" 2>/dev/null &
   else
-    echo -e "${CYAN}Open in browser: ${url}${NC}"
+    echo -e "  ${DIM}Open in browser:${RST} ${ULINE}${BCYN}${url}${RST}"
+    return
   fi
+  echo -e "  ${BGRN}✓${RST} Opened ${ULINE}${BCYN}${url}${RST}"
 }
 
-# Start TUI
 start_tui() {
   cd "$DIR"
   exec node "$DIR/tui/src/index.js"
 }
 
-# Show status
-show_status() {
-  if is_server_running; then
-    local info
-    info=$(curl -s "http://localhost:${PORT}/api/status" 2>/dev/null)
-    local version=$(echo "$info" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
-    local project=$(echo "$info" | grep -o '"masterPlanPath":"[^"]*"' | cut -d'"' -f4)
-    echo -e "${GREEN}Dashboard: running${NC} on http://localhost:${PORT} (v${version})"
-    echo -e "${DIM}Project: ${project}${NC}"
-  else
-    echo -e "${DIM}Dashboard: not running${NC}"
-  fi
-}
-
-# Stop server
 stop_server() {
   if is_server_running; then
     local pid=$(lsof -ti:${PORT} 2>/dev/null)
     if [ -n "$pid" ]; then
       kill "$pid" 2>/dev/null
-      echo -e "${YELLOW}Dashboard stopped.${NC}"
+      echo -e "  ${BYEL}■${RST} Dashboard stopped"
     fi
   else
-    echo -e "${DIM}Dashboard is not running.${NC}"
+    echo -e "  ${DIM}Dashboard is not running${RST}"
   fi
 }
 
-# Interactive menu
+# ─── ASCII Logo ──────────────────────────────────────────────────────────────
+
+print_logo() {
+  echo ""
+  echo -e "  ${BCYN}${BOLD}  ███╗   ███╗ █████╗ ███████╗███████╗████████╗██████╗  ██████╗${RST}"
+  echo -e "  ${BCYN}${BOLD}  ████╗ ████║██╔══██╗██╔════╝██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗${RST}"
+  echo -e "  ${BCYN}  ██╔████╔██║███████║█████╗  ███████╗   ██║   ██████╔╝██║   ██║${RST}"
+  echo -e "  ${BLU}  ██║╚██╔╝██║██╔══██║██╔══╝  ╚════██║   ██║   ██╔══██╗██║   ██║${RST}"
+  echo -e "  ${BLU}  ██║ ╚═╝ ██║██║  ██║███████╗███████║   ██║   ██║  ██║╚██████╔╝${RST}"
+  echo -e "  ${BBLK}  ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝${RST}"
+  echo -e "  ${DIM}${ITAL}                    AI Orchestration Dashboard${RST}"
+  echo ""
+}
+
+# ─── Status Display ──────────────────────────────────────────────────────────
+
+show_status() {
+  print_logo
+
+  if is_server_running; then
+    local info
+    info=$(get_server_info)
+    local version=$(echo "$info" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+    local project_path=$(echo "$info" | grep -o '"masterPlanPath":"[^"]*"' | cut -d'"' -f4)
+    local project_name=$(basename "$(dirname "$(dirname "$project_path")")" 2>/dev/null)
+    local uptime_secs=$(echo "$info" | grep -o '"uptime":[0-9.]*' | cut -d: -f2 | cut -d. -f1)
+    local uptime_fmt=""
+    if [ -n "$uptime_secs" ]; then
+      local h=$((uptime_secs / 3600))
+      local m=$(( (uptime_secs % 3600) / 60 ))
+      [ $h -gt 0 ] && uptime_fmt="${h}h ${m}m" || uptime_fmt="${m}m"
+    fi
+
+    btop
+    bline "${BGRN}●${RST} ${BOLD}Server${RST}    ${GRN}running${RST} on port ${BOLD}${PORT}${RST}  ${DIM}v${version}${RST}"
+    bline "${BCYN}●${RST} ${BOLD}Project${RST}   ${BCYN}${project_name}${RST}"
+    [ -n "$uptime_fmt" ] && bline "${BBLU}●${RST} ${BOLD}Uptime${RST}    ${uptime_fmt}"
+    bsep
+
+    # Task stats
+    local stats
+    stats=$(get_task_stats 2>/dev/null)
+    if [ -n "$stats" ] && echo "$stats" | grep -q '"total"'; then
+      local total=$(echo "$stats" | grep -o '"total":[0-9]*' | head -1 | cut -d: -f2)
+
+      # Extract counts from byStatus array — put each object on its own line
+      local flat_stats=$(echo "$stats" | tr '\n' ' ' | sed 's/},{/}\n{/g')
+      local s_done=$(echo "$flat_stats" | grep '"done"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_prog=$(echo "$flat_stats" | grep '"in_progress"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_plan=$(echo "$flat_stats" | grep '"planned"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_rev=$(echo "$flat_stats" | grep '"review"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_pause=$(echo "$flat_stats" | grep '"paused"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+
+      s_done=${s_done:-0}; s_prog=${s_prog:-0}; s_plan=${s_plan:-0}
+      s_rev=${s_rev:-0}; s_pause=${s_pause:-0}
+
+      bline "${BOLD}Tasks${RST} ${DIM}(${total} total)${RST}"
+      bempty
+
+      # Progress bar
+      if [ "$total" -gt 0 ] 2>/dev/null; then
+        local bar_width=$((BOX_W - 12))
+        local done_w=$(( (s_done * bar_width) / total ))
+        local prog_w=$(( (s_prog * bar_width) / total ))
+        local rev_w=$(( (s_rev * bar_width) / total ))
+        local remain=$((bar_width - done_w - prog_w - rev_w))
+        [ $remain -lt 0 ] && remain=0
+
+        local bar=""
+        [ $done_w -gt 0 ] && bar+=$(printf "\033[42m%*s\033[0m" "$done_w" "")
+        [ $prog_w -gt 0 ] && bar+=$(printf "\033[44m%*s\033[0m" "$prog_w" "")
+        [ $rev_w -gt 0 ] && bar+=$(printf "\033[43m%*s\033[0m" "$rev_w" "")
+        [ $remain -gt 0 ] && bar+=$(printf "\033[100m%*s\033[0m" "$remain" "")
+
+        bline "    ${bar}"
+      fi
+      bempty
+      bline "    ${BGRN}■${RST} Done ${DIM}${s_done}${RST}   ${BBLU}■${RST} Active ${DIM}${s_prog}${RST}   ${BYEL}■${RST} Review ${DIM}${s_rev}${RST}   ${BBLK}■${RST} Planned ${DIM}${s_plan}${RST}"
+    fi
+
+    bbot
+  else
+    btop
+    bline "${BRED}●${RST} ${BOLD}Server${RST}    ${DIM}not running${RST}"
+    bbot
+  fi
+  echo ""
+}
+
+# ─── Interactive Menu ────────────────────────────────────────────────────────
+
 show_menu() {
   local server_running=false
   is_server_running && server_running=true
 
-  echo ""
-  echo -e "${BOLD}${CYAN}  Dev Maestro${NC}"
-  echo ""
+  print_logo
+
+  btop
+
+  # Server status line
+  if $server_running; then
+    local info
+    info=$(get_server_info)
+    local project_path=$(echo "$info" | grep -o '"masterPlanPath":"[^"]*"' | cut -d'"' -f4)
+    local project_name=$(basename "$(dirname "$(dirname "$project_path")")" 2>/dev/null)
+    bline "${BGRN}●${RST} Server ${GRN}running${RST}  ${DIM}port ${PORT}${RST}  ${DIM}project: ${BCYN}${project_name}${RST}"
+  else
+    bline "${BBLK}●${RST} Server ${DIM}stopped${RST}"
+  fi
+
+  bsep
+  bempty
 
   if $server_running; then
-    echo -e "  ${GREEN}Dashboard is running${NC} on http://localhost:${PORT}"
+    bline "  ${BOLD}${BCYN}1${RST}  ${BCYN}▸${RST} Open TUI            ${DIM}terminal kanban board${RST}"
+    bline "  ${BOLD}${BCYN}2${RST}  ${BCYN}▸${RST} Open Dashboard      ${DIM}browser UI${RST}"
+    bline "  ${BOLD}${BCYN}3${RST}  ${BCYN}▸${RST} Launch Both         ${DIM}dashboard + TUI${RST}"
+    bempty
+    bline "  ${BOLD}${BYEL}s${RST}  ${BYEL}▸${RST} Status              ${DIM}detailed server info${RST}"
+    bline "  ${BOLD}${BRED}x${RST}  ${BRED}▸${RST} Stop Server         ${DIM}shutdown dashboard${RST}"
   else
-    echo -e "  ${DIM}Dashboard is not running${NC}"
+    bline "  ${BOLD}${BCYN}1${RST}  ${BCYN}▸${RST} Open TUI            ${DIM}starts server + terminal board${RST}"
+    bline "  ${BOLD}${BCYN}2${RST}  ${BCYN}▸${RST} Start Dashboard     ${DIM}start server + open browser${RST}"
+    bline "  ${BOLD}${BCYN}3${RST}  ${BCYN}▸${RST} Launch Both         ${DIM}dashboard + TUI${RST}"
   fi
-  echo ""
 
-  # Build menu options based on state
-  if $server_running; then
-    echo -e "  ${BOLD}1${NC}) Open TUI (terminal board)"
-    echo -e "  ${BOLD}2${NC}) Open Dashboard (browser)"
-    echo -e "  ${BOLD}3${NC}) Stop Dashboard"
-    echo -e "  ${BOLD}q${NC}) Quit"
-  else
-    echo -e "  ${BOLD}1${NC}) Open TUI (terminal board)"
-    echo -e "  ${BOLD}2${NC}) Start Dashboard + Open Browser"
-    echo -e "  ${BOLD}3${NC}) Start Both (Dashboard + TUI)"
-    echo -e "  ${BOLD}q${NC}) Quit"
-  fi
+  bempty
+  bline "  ${BOLD}${BBLK}q${RST}  ${BBLK}▸${RST} Quit"
+  bempty
+  bbot
   echo ""
-  read -p "  Choose [1-3/q]: " choice
+  printf "  ${BOLD}Choose${RST} ${DIM}▸${RST} "
+  read -r -n1 choice
+  echo ""
+  echo ""
 
   case "$choice" in
     1)
       if ! $server_running; then
-        echo -e "${DIM}Starting dashboard in background first...${NC}"
-        start_server
+        start_server || exit 1
       fi
       start_tui
       ;;
     2)
-      if $server_running; then
-        open_dashboard
-        echo -e "${GREEN}Opened dashboard in browser.${NC}"
-      else
-        start_server && open_dashboard
+      if ! $server_running; then
+        start_server || exit 1
       fi
+      open_dashboard
       ;;
     3)
-      if $server_running; then
-        stop_server
-      else
-        start_server && open_dashboard
-        echo ""
-        start_tui
+      if ! $server_running; then
+        start_server || exit 1
       fi
+      open_dashboard
+      echo ""
+      start_tui
+      ;;
+    s|S)
+      show_status
+      ;;
+    x|X)
+      stop_server
       ;;
     q|Q|"")
       exit 0
       ;;
     *)
-      echo -e "${RED}Invalid choice.${NC}"
+      echo -e "  ${BRED}Invalid choice${RST}"
       exit 1
       ;;
   esac
 }
 
-# ============================================================================
-# SUBCOMMANDS
-# ============================================================================
+# ─── Help ────────────────────────────────────────────────────────────────────
+
+show_help() {
+  print_logo
+  btop
+  bline "${BOLD}Usage${RST}  maestro ${DIM}[command]${RST}"
+  bsep
+  bempty
+  bline "  ${BCYN}(none)${RST}        Interactive menu"
+  bline "  ${BCYN}tui${RST}           Terminal kanban board"
+  bline "  ${BCYN}dashboard${RST}     Start server + open browser"
+  bline "  ${BCYN}both${RST}          Dashboard + TUI"
+  bline "  ${BCYN}status${RST}        Server info + task stats"
+  bline "  ${BCYN}stop${RST}          Stop dashboard server"
+  bline "  ${BCYN}install${RST}       Install/configure a project"
+  bline "  ${BCYN}archive${RST}       Archive done tasks"
+  bline "  ${BCYN}help${RST}          This help screen"
+  bempty
+  bbot
+  echo ""
+}
+
+# ─── Subcommands ─────────────────────────────────────────────────────────────
+
 case "${1:-}" in
   tui)
-    # Ensure server is running, then launch TUI
     if ! is_server_running; then
-      echo -e "${DIM}Starting dashboard in background...${NC}"
-      start_server
+      start_server || exit 1
     fi
     start_tui
     ;;
   dashboard|dash|web)
     if ! is_server_running; then
-      start_server
+      start_server || exit 1
     fi
     open_dashboard
-    echo -e "${GREEN}Dashboard: http://localhost:${PORT}${NC}"
     ;;
   both)
     if ! is_server_running; then
-      start_server
+      start_server || exit 1
     fi
     open_dashboard
     start_tui
@@ -189,27 +363,14 @@ case "${1:-}" in
     exec bash "$DIR/install.sh" "$@"
     ;;
   help|--help|-h)
-    echo -e "${CYAN}Dev Maestro${NC} — AI orchestration dashboard"
-    echo ""
-    echo "Usage: maestro [command]"
-    echo ""
-    echo "Commands:"
-    echo "  (none)        Interactive menu"
-    echo "  tui           Launch terminal board"
-    echo "  dashboard     Start dashboard + open browser"
-    echo "  both          Start dashboard + open TUI"
-    echo "  status        Show running status"
-    echo "  stop          Stop dashboard server"
-    echo "  archive       Archive done tasks"
-    echo "  install       Install/configure a project"
-    echo "  help          Show this help"
+    show_help
     ;;
   "")
     show_menu
     ;;
   *)
-    echo -e "${RED}Unknown command: $1${NC}"
-    echo "Run 'maestro help' for usage."
+    echo -e "  ${BRED}Unknown command:${RST} $1"
+    echo -e "  Run ${BCYN}maestro help${RST} for usage."
     exit 1
     ;;
 esac
