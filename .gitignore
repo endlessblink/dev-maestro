@@ -1,11 +1,19 @@
 # Environment
 .env
 
-# Dependencies (optional - uncomment if dev-manager is standalone)
-# node_modules/
+# Dependencies
+node_modules/
+tui/node_modules/
+package-lock.json
+tui/package-lock.json
 
 # Orchestrator data (contains user session data)
-data/orchestrations.json
+data/
+logs/
 
 # Local user customizations (preserved across updates)
 local/
+
+# SQLite databases
+.maestro/
+*.sqlite
