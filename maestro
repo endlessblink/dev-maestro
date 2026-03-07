@@ -9,6 +9,12 @@ if [ "$1" = "tui" ]; then
   exec node "$DIR/tui/src/index.js"
 fi
 
+# Archive subcommand — move old DONE tasks to archive file
+if [ "$1" = "archive" ]; then
+  shift
+  exec node "$DIR/tui/src/archive-cli.js" "$@"
+fi
+
 # Kill any existing instance
 pkill -f "node server.js" 2>/dev/null
 

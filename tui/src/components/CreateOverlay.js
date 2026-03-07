@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import { bdExec } from '../lib/bd-client.js';
+import { bdExecAsync } from '../lib/bd-client.js';
 
 const h = React.createElement;
 
@@ -44,12 +44,13 @@ export default function CreateOverlay({ onCreated, onClose }) {
         const type = TYPES[typeIdx];
         const prio = PRIORITIES[prioIdx].value;
         const escaped = title.replace(/"/g, '\\"');
-        const res = bdExec(`create --title="${escaped}" --type=${type} --priority=${prio}`);
-        if (res.success) {
-          onCreated();
-        } else {
-          setError(res.output);
-        }
+        bdExecAsync(`create --title="${escaped}" --type=${type} --priority=${prio}`).then(res => {
+          if (res.success) {
+            onCreated();
+          } else {
+            setError(res.output);
+          }
+        });
         return;
       }
       if (input === 'n') { onClose(); return; }

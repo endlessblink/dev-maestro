@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 require('dotenv').config();
+const taskEngine = require('./modules/task-engine');
 
 // ============================================================================
 // LOCAL OVERRIDES SYSTEM
@@ -96,8 +97,6 @@ const app = express();
 // Use port from: 1) env var, 2) local config, 3) default 6010
 const PORT = process.env.PORT || localConfig.port || 6010;
 
-// Orchestrations persistence file
-const ORCHESTRATIONS_FILE = path.join(__dirname, 'data', 'orchestrations.json');
 
 // Cache for health scan results
 let healthCache = null;
@@ -115,61 +114,6 @@ const broadcastLog = (message) => {
     });
 };
 
-// Helper to broadcast lock changes to SSE clients
-const broadcastLocksChanged = () => {
-    const payload = JSON.stringify({ type: 'locks-changed' });
-    clients.forEach(client => {
-        client.write(`data: ${payload}\n\n`);
-    });
-    console.log(`[SSE] Broadcast locks-changed to ${clients.length} clients`);
-};
-
-// Helper to broadcast deferred queue changes
-const broadcastDeferredChanged = () => {
-    const payload = JSON.stringify({ type: 'deferred-changed' });
-    clients.forEach(client => {
-        client.write(`data: ${payload}\n\n`);
-    });
-    console.log(`[SSE] Broadcast deferred-changed to ${clients.length} clients`);
-};
-
-// Setup file watchers for real-time updates (after getMasterPlanPath is called)
-let locksWatcher = null;
-let deferredWatcher = null;
-
-const setupFileWatchers = (projectRoot) => {
-    // Watch locks directory
-    const locksDir = path.join(projectRoot, '.claude', 'locks');
-    if (fs.existsSync(locksDir) && !locksWatcher) {
-        try {
-            locksWatcher = fs.watch(locksDir, { persistent: false }, (eventType, filename) => {
-                if (filename && filename.endsWith('.lock')) {
-                    console.log(`[Watch] Lock file ${eventType}: ${filename}`);
-                    broadcastLocksChanged();
-                }
-            });
-            console.log(`[Watch] Watching locks directory: ${locksDir}`);
-        } catch (err) {
-            console.log(`[Watch] Could not watch locks directory: ${err.message}`);
-        }
-    }
-
-    // Watch deferred queue directory
-    const deferredDir = path.join(projectRoot, '.claude', 'deferred-queue');
-    if (fs.existsSync(deferredDir) && !deferredWatcher) {
-        try {
-            deferredWatcher = fs.watch(deferredDir, { persistent: false }, (eventType, filename) => {
-                if (filename && filename.endsWith('.json')) {
-                    console.log(`[Watch] Deferred queue ${eventType}: ${filename}`);
-                    broadcastDeferredChanged();
-                }
-            });
-            console.log(`[Watch] Watching deferred queue: ${deferredDir}`);
-        } catch (err) {
-            console.log(`[Watch] Could not watch deferred queue: ${err.message}`);
-        }
-    }
-};
 
 // Enable CORS
 app.use(cors());
@@ -442,6 +386,142 @@ app.get('/api/master-plan', (req, res) => {
 // Middleware to parse JSON bodies
 app.use(express.json());
 
+// ============================================================================
+// MULTI-PROJECT API
+// ============================================================================
+
+const projectsJsonPath = path.join(__dirname, 'projects.json');
+
+// Helper: Read projects.json
+const readProjects = () => {
+    if (!fs.existsSync(projectsJsonPath)) {
+        return { projects: [] };
+    }
+    try {
+        return JSON.parse(fs.readFileSync(projectsJsonPath, 'utf8'));
+    } catch (e) {
+        console.warn('[Projects] Failed to parse projects.json:', e.message);
+        return { projects: [] };
+    }
+};
+
+// Helper: Write projects.json
+const writeProjects = (data) => {
+    fs.writeFileSync(projectsJsonPath, JSON.stringify(data, null, 2) + '\n');
+};
+
+// GET /api/projects - List all registered projects
+app.get('/api/projects', (req, res) => {
+    const data = readProjects();
+    const currentPlan = process.env.MASTER_PLAN_PATH
+        ? path.resolve(process.env.MASTER_PLAN_PATH)
+        : '';
+
+    const projects = data.projects.map(p => ({
+        ...p,
+        active: currentPlan === p.masterPlan
+    }));
+
+    res.json({ projects });
+});
+
+// POST /api/projects - Register a new project
+app.post('/api/projects', (req, res) => {
+    const { name, root, masterPlan, modules } = req.body;
+
+    if (!name) {
+        return res.status(400).json({ error: 'Missing required field: name' });
+    }
+    if (!root) {
+        return res.status(400).json({ error: 'Missing required field: root' });
+    }
+
+    const resolvedRoot = path.resolve(root);
+    if (!fs.existsSync(resolvedRoot)) {
+        return res.status(400).json({ error: 'Project root does not exist', root: resolvedRoot });
+    }
+
+    const data = readProjects();
+
+    if (data.projects.some(p => p.name === name)) {
+        return res.status(409).json({ error: `Project "${name}" already exists` });
+    }
+
+    // Auto-detect masterPlan if not provided
+    let resolvedPlan = masterPlan ? path.resolve(masterPlan) : findMasterPlan(resolvedRoot);
+
+    const entry = {
+        name,
+        root: resolvedRoot,
+        masterPlan: resolvedPlan || null,
+        modules: modules || [],
+        addedAt: new Date().toISOString().split('T')[0]
+    };
+
+    data.projects.push(entry);
+    writeProjects(data);
+
+    console.log(`[Projects] Registered new project: ${name}`);
+    res.status(201).json(entry);
+});
+
+// DELETE /api/projects/:name - Remove a project from the registry
+app.delete('/api/projects/:name', (req, res) => {
+    const { name } = req.params;
+    const data = readProjects();
+
+    const idx = data.projects.findIndex(p => p.name === name);
+    if (idx === -1) {
+        return res.status(404).json({ error: `Project "${name}" not found` });
+    }
+
+    const removed = data.projects.splice(idx, 1)[0];
+    writeProjects(data);
+
+    console.log(`[Projects] Removed project: ${name}`);
+    res.json({ removed });
+});
+
+// POST /api/projects/:name/activate - Switch active project without restart
+app.post('/api/projects/:name/activate', (req, res) => {
+    const { name } = req.params;
+    const data = readProjects();
+
+    const project = data.projects.find(p => p.name === name);
+    if (!project) {
+        return res.status(404).json({ error: `Project "${name}" not found` });
+    }
+
+    if (!project.masterPlan) {
+        return res.status(400).json({
+            error: `Project "${name}" has no masterPlan path configured`
+        });
+    }
+
+    // Update runtime environment
+    process.env.MASTER_PLAN_PATH = project.masterPlan;
+
+    // Persist to .env file
+    updateEnvFile('MASTER_PLAN_PATH', project.masterPlan);
+
+    console.log(`[Projects] Activated project: ${name} -> ${project.masterPlan}`);
+
+    // Re-sync task engine with new project
+    taskEngine.closeDb();
+    initTaskEngine();
+
+    // Broadcast project change to SSE clients
+    const payload = JSON.stringify({
+        type: 'project-changed',
+        project: { ...project, active: true }
+    });
+    clients.forEach(client => {
+        client.write(`data: ${payload}\n\n`);
+    });
+
+    res.json({ activated: { ...project, active: true } });
+});
+
 // Helper to get Master Plan path
 const getMasterPlanPath = () => {
     const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
@@ -449,6 +529,36 @@ const getMasterPlanPath = () => {
         ? path.resolve(process.env.MASTER_PLAN_PATH)
         : defaultPath;
 };
+
+// ============================================================================
+// NATIVE TASK ENGINE (SQLite)
+// ============================================================================
+let taskEngineReady = false;
+
+function initTaskEngine() {
+    try {
+        const masterPlanPath = getMasterPlanPath();
+        if (!masterPlanPath || !fs.existsSync(masterPlanPath)) {
+            console.log('[TaskEngine] No MASTER_PLAN.md found, skipping init');
+            taskEngineReady = false;
+            return;
+        }
+        const projectRoot = getProjectRoot(masterPlanPath);
+        const maestroDir = path.join(projectRoot, '.maestro');
+        if (!fs.existsSync(maestroDir)) fs.mkdirSync(maestroDir, { recursive: true });
+        const dbPath = path.join(maestroDir, 'db.sqlite');
+        taskEngine.initDb(dbPath);
+        const count = taskEngine.syncFromMarkdown(masterPlanPath);
+        taskEngineReady = true;
+        console.log(`[TaskEngine] Initialized: ${count} tasks synced from ${path.basename(masterPlanPath)}`);
+    } catch (err) {
+        console.error('[TaskEngine] Init failed:', err.message);
+        taskEngineReady = false;
+    }
+}
+
+// Initialize on startup
+initTaskEngine();
 
 // Helper to scan for existing IDs and find the next available one
 const getNextId = (content, prefix = 'TASK') => {
@@ -1097,7 +1207,9 @@ app.get('/api/skills', (req, res) => {
 
 // GET /api/docs - Dynamically scan docs/ directory
 app.get('/api/docs', (req, res) => {
-    const docsDir = path.join(__dirname, '../docs');
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+    const docsDir = path.join(projectRoot, 'docs');
 
     try {
         if (!fs.existsSync(docsDir)) {
@@ -1187,7 +1299,18 @@ app.get('/api/docs', (req, res) => {
 
 // ============== BEADS API ==============
 const { spawn } = require('child_process');
-const BD_PATH = process.env.BD_PATH || `${process.env.HOME}/go/bin/bd`;
+const BD_PATH = process.env.BD_PATH || (() => {
+    // Try common Go bin locations
+    const candidates = [
+        `${process.env.HOME}/app-data/go/bin/bd`,
+        `${process.env.HOME}/go/bin/bd`,
+        '/usr/local/bin/bd'
+    ];
+    for (const p of candidates) {
+        if (fs.existsSync(p)) return p;
+    }
+    return 'bd'; // fallback to PATH
+})();
 
 // Track running agents
 const runningAgents = new Map(); // id -> { process, task, startTime, outputBuffer, clients }
@@ -1198,8 +1321,10 @@ const agentOutputClients = new Map(); // agentId -> [res, res, ...]
 // Helper to run bd commands
 const runBd = (args) => {
     try {
+        const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+        const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
         const result = execSync(`${BD_PATH} ${args} --json`, {
-            cwd: path.join(__dirname, '..'),
+            cwd: projectRoot,
             encoding: 'utf8',
             timeout: 10000
         });
@@ -1210,9 +1335,17 @@ const runBd = (args) => {
     }
 };
 
-// GET /api/beads/list - All issues
+// GET /api/beads/stats - Project statistics
+app.get('/api/beads/stats', (req, res) => {
+    const stats = runBd('stats');
+    res.json(stats || { error: 'Failed to fetch stats' });
+});
+
+// GET /api/beads/list - All issues (supports ?status=open,in_progress,closed,blocked)
 app.get('/api/beads/list', (req, res) => {
-    const issues = runBd('list --limit 0');
+    const status = req.query.status;
+    const args = status ? `list --limit 0 --status=${status}` : 'list --limit 0';
+    const issues = runBd(args);
     res.json({ issues: issues || [], error: issues ? null : 'Failed to fetch issues' });
 });
 
@@ -1864,99 +1997,7 @@ function broadcastAgentOutput(taskId, data) {
 // ORCHESTRATOR SUB-AGENT OUTPUT HANDLING (TASK-319)
 // ============================================================================
 
-// Ensure logs directory exists
-const logsDir = path.join(__dirname, 'logs');
-if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
-    console.log('[Orchestrator] Created logs directory:', logsDir);
-}
 
-// Append to agent log file
-function appendAgentLog(taskId, message) {
-    const logFile = path.join(logsDir, `agent-${taskId}.log`);
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(logFile, `[${timestamp}] ${message}\n`);
-}
-
-// Parse and broadcast orchestrator sub-agent output (stream-json format)
-// Similar to parseAndBroadcastAgentOutput but uses broadcastOrchestration
-function parseAndBroadcastOrchOutput(orchId, taskId, rawData, subAgentData, jsonBuffer = '') {
-    jsonBuffer += rawData;
-    const lines = jsonBuffer.split('\n');
-    const remainingBuffer = lines.pop(); // Keep incomplete line
-
-    for (const line of lines) {
-        if (!line.trim()) continue;
-
-        try {
-            const event = JSON.parse(line);
-
-            // Parse different event types from stream-json format
-            if (event.type === 'assistant' && event.message?.content) {
-                for (const block of event.message.content) {
-                    if (block.type === 'text' && block.text?.trim()) {
-                        const text = block.text.trim();
-                        subAgentData.output.push({ type: 'assistant', text, time: Date.now() });
-                        appendAgentLog(taskId, `[ASSISTANT] ${text.substring(0, 200)}`);
-                        broadcastOrchestration(orchId, {
-                            type: 'agent_output',
-                            taskId,
-                            outputType: 'assistant',
-                            text: text.substring(0, 500) // Limit broadcast size
-                        });
-                    } else if (block.type === 'tool_use') {
-                        const toolText = `🔧 ${block.name}: ${JSON.stringify(block.input || {}).substring(0, 100)}`;
-                        subAgentData.output.push({ type: 'tool', text: toolText, tool: block.name, time: Date.now() });
-                        appendAgentLog(taskId, `[TOOL] ${block.name}`);
-                        broadcastOrchestration(orchId, {
-                            type: 'agent_output',
-                            taskId,
-                            outputType: 'tool',
-                            tool: block.name,
-                            text: toolText
-                        });
-                    }
-                }
-            } else if (event.type === 'content_block_delta' && event.delta?.text) {
-                const text = event.delta.text;
-                if (text.trim()) {
-                    subAgentData.output.push({ type: 'delta', text, time: Date.now() });
-                    // Don't broadcast deltas to reduce noise, but log them
-                    appendAgentLog(taskId, `[DELTA] ${text.substring(0, 100)}`);
-                }
-            } else if (event.type === 'result') {
-                const text = event.subtype === 'success'
-                    ? '✅ Task completed successfully!'
-                    : `⚠️ Task ended: ${event.subtype}`;
-                subAgentData.output.push({ type: 'result', text, time: Date.now() });
-                appendAgentLog(taskId, `[RESULT] ${text}`);
-                broadcastOrchestration(orchId, {
-                    type: 'agent_output',
-                    taskId,
-                    outputType: 'result',
-                    text
-                });
-            } else if (event.type === 'system') {
-                // Skip noisy system messages
-                const skipSubtypes = ['init', 'hook_response', 'config'];
-                if (skipSubtypes.includes(event.subtype)) continue;
-                if (event.message && typeof event.message === 'string') {
-                    subAgentData.output.push({ type: 'system', text: event.message, time: Date.now() });
-                    appendAgentLog(taskId, `[SYSTEM] ${event.message}`);
-                }
-            }
-        } catch (e) {
-            // Not JSON - log meaningful non-JSON output
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('{') && trimmed.length < 500) {
-                subAgentData.output.push({ type: 'stdout', text: trimmed, time: Date.now() });
-                appendAgentLog(taskId, `[STDOUT] ${trimmed}`);
-            }
-        }
-    }
-
-    return remainingBuffer;
-}
 
 // GET /api/beads/agents - List all running agents
 app.get('/api/beads/agents', (req, res) => {
@@ -1979,28 +2020,6 @@ app.get('/api/beads/agents', (req, res) => {
     res.json({ agents });
 });
 
-// GET /api/orchestrator/logs/:taskId - Get agent log file (TASK-319)
-app.get('/api/orchestrator/logs/:taskId', (req, res) => {
-    const taskId = req.params.taskId;
-    const logFile = path.join(logsDir, `agent-${taskId}.log`);
-
-    if (!fs.existsSync(logFile)) {
-        return res.status(404).json({ error: 'Log file not found', taskId });
-    }
-
-    try {
-        const content = fs.readFileSync(logFile, 'utf8');
-        const lines = content.split('\n').filter(l => l.trim());
-        res.json({
-            taskId,
-            logFile,
-            lineCount: lines.length,
-            content: lines.slice(-100) // Last 100 lines
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
 
 // POST /api/beads/merge/:id - Merge agent's branch to main
 app.post('/api/beads/merge/:id', (req, res) => {
@@ -2248,1934 +2267,6 @@ app.post('/api/beads/close/:id', (req, res) => {
     }
 });
 
-// ============== ORCHESTRATOR API ==============
-// Full agentic orchestration system that:
-// 1. Understands requirements through natural language + clarifying questions
-// 2. Creates specialized sub-agents for different parts
-// 3. Monitors and auto-retries failed agents
-// 4. Provides summary progress updates
-// 5. Conducts review sessions with user
-
-// Track orchestrations
-const orchestrations = new Map(); // orchestrationId -> OrchestratorState
-
-// Load orchestrations from disk on startup
-function loadOrchestrations() {
-    try {
-        if (fs.existsSync(ORCHESTRATIONS_FILE)) {
-            const data = JSON.parse(fs.readFileSync(ORCHESTRATIONS_FILE, 'utf8'));
-            for (const [id, orch] of Object.entries(data)) {
-                // Don't restore process references - they're not serializable
-                orch.subAgents = orch.subAgents?.map(a => ({ ...a, process: null })) || [];
-                orchestrations.set(id, orch);
-            }
-            console.log(`[Orchestrator] Loaded ${orchestrations.size} orchestrations from disk`);
-        }
-    } catch (err) {
-        console.error('[Orchestrator] Failed to load orchestrations:', err.message);
-    }
-}
-
-// Save orchestrations to disk
-function saveOrchestrations() {
-    try {
-        // Ensure data directory exists
-        const dataDir = path.dirname(ORCHESTRATIONS_FILE);
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir, { recursive: true });
-        }
-
-        // Convert Map to object, excluding non-serializable properties
-        const data = {};
-        for (const [id, orch] of orchestrations) {
-            data[id] = {
-                ...orch,
-                subAgents: orch.subAgents?.map(a => ({
-                    ...a,
-                    process: undefined  // Can't serialize process
-                })) || []
-            };
-        }
-
-        fs.writeFileSync(ORCHESTRATIONS_FILE, JSON.stringify(data, null, 2));
-    } catch (err) {
-        console.error('[Orchestrator] Failed to save orchestrations:', err.message);
-    }
-}
-
-// Debounced save to avoid excessive disk writes
-let saveTimeout = null;
-function debouncedSave() {
-    if (saveTimeout) clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(saveOrchestrations, 1000);
-}
-
-// Load on startup
-loadOrchestrations();
-
-// Orchestrator state machine
-class OrchestratorState {
-    constructor(id, goal) {
-        this.id = id;
-        this.goal = goal;
-        this.phase = 'requirements'; // requirements | planning | execution | review
-        this.questions = [];        // Clarifying questions to ask
-        this.answers = {};          // User's answers
-        this.plan = [];             // Breakdown of tasks
-        this.subAgents = [];        // Spawned agents { taskId, status, retries, output }
-        this.summary = [];          // Progress summaries
-        this.startTime = Date.now();
-        this.status = 'active';
-        this.maxRetries = 3;
-    }
-}
-
-// SSE clients for orchestrator updates
-const orchestratorClients = new Map(); // orchestrationId -> [res, res, ...]
-
-// Helper to broadcast orchestrator updates
-function broadcastOrchestration(orchId, data) {
-    const clients = orchestratorClients.get(orchId) || [];
-    const payload = JSON.stringify({ orchestrationId: orchId, ...data, timestamp: Date.now() });
-
-    clients.forEach(client => {
-        try {
-            client.write(`data: ${payload}\n\n`);
-        } catch (e) {
-            // Client disconnected
-        }
-    });
-
-    // Also store in orchestration state for history
-    const orch = orchestrations.get(orchId);
-    if (orch && data.type === 'summary') {
-        orch.summary.push({ ...data, timestamp: Date.now() });
-    }
-}
-
-// POST /api/orchestrator/start - Start a new orchestration with a goal
-app.post('/api/orchestrator/start', (req, res) => {
-    const { goal } = req.body;
-
-    if (!goal) {
-        return res.status(400).json({ error: 'Goal is required' });
-    }
-
-    const orchId = `orch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const orch = new OrchestratorState(orchId, goal);
-    orchestrations.set(orchId, orch);
-    debouncedSave();
-
-    console.log(`[Orchestrator] Started ${orchId}: "${goal.slice(0, 50)}..."`);
-
-    // Phase 1: Generate clarifying questions using Claude
-    generateClarifyingQuestions(orch);
-
-    res.json({
-        success: true,
-        orchestrationId: orchId,
-        phase: 'requirements',
-        message: 'Orchestration started. Generating clarifying questions...'
-    });
-});
-
-// GET /api/orchestrator/list - List all orchestrations (MUST be before /:id routes!)
-app.get('/api/orchestrator/list', (req, res) => {
-    const list = [];
-
-    for (const [id, orch] of orchestrations.entries()) {
-        list.push({
-            id,
-            goal: orch.goal.slice(0, 100),
-            phase: orch.phase,
-            status: orch.status,
-            taskCount: orch.plan.length,
-            completedTasks: orch.subAgents.filter(a => a.status === 'completed').length,
-            startTime: orch.startTime,
-            runtime: Date.now() - orch.startTime
-        });
-    }
-
-    res.json({ orchestrations: list });
-});
-
-// Helper: Detect tech stack from package.json
-function detectTechStack() {
-    try {
-        const pkgPath = path.join(__dirname, '..', 'package.json');
-        if (fs.existsSync(pkgPath)) {
-            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-            const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-            const stack = [];
-
-            if (deps['vue'] || deps['@vue/cli-service']) stack.push('Vue 3');
-            if (deps['react'] || deps['react-dom']) stack.push('React');
-            if (deps['typescript']) stack.push('TypeScript');
-            if (deps['vite']) stack.push('Vite');
-            if (deps['tailwindcss']) stack.push('Tailwind CSS');
-            if (deps['pinia']) stack.push('Pinia');
-            if (deps['@supabase/supabase-js']) stack.push('Supabase');
-            if (deps['@vue-flow/core']) stack.push('Vue Flow');
-            if (deps['naive-ui']) stack.push('Naive UI');
-            if (deps['@tiptap/vue-3']) stack.push('TipTap');
-
-            return stack.length > 0 ? stack.join(', ') : 'Unknown';
-        }
-    } catch (e) {
-        console.error('[Orchestrator] Error detecting tech stack:', e.message);
-    }
-    return 'Unknown';
-}
-
-// Helper: Use fallback questions when Claude fails or times out
-function useFallbackQuestions(orch, reason) {
-    console.log(`[Orchestrator] Using fallback questions (reason: ${reason})`);
-
-    // Auto-detect tech stack
-    const detectedStack = detectTechStack();
-    console.log(`[Orchestrator] Detected tech stack: ${detectedStack}`);
-
-    orch.questions = [
-        {
-            id: 'q0',
-            question: `Detected tech stack: ${detectedStack}. Is this correct?`,
-            type: 'choice',
-            multiSelect: false,
-            options: ['Yes, use this stack', 'No, let me specify']
-        },
-        {
-            id: 'q1',
-            question: 'What type of feature is this?',
-            type: 'choice',
-            multiSelect: false,
-            options: ['New feature', 'Bug fix', 'Refactoring', 'Performance improvement', 'UI/UX update']
-        },
-        {
-            id: 'q2',
-            question: 'What is the scope of this work?',
-            type: 'choice',
-            multiSelect: false,
-            options: ['Small (1-2 files)', 'Medium (3-5 files)', 'Large (6+ files)', 'Not sure']
-        },
-        {
-            id: 'q3',
-            question: 'What are the essential features or requirements? (describe briefly)',
-            type: 'text',
-            multiSelect: false
-        },
-        {
-            id: 'q4',
-            question: 'What quality and testing requirements apply?',
-            type: 'multiselect',
-            multiSelect: true,
-            options: ['Unit tests required', 'E2E tests required', 'Keep backwards compatible', 'Performance critical', 'Accessibility compliance']
-        }
-    ];
-
-    broadcastOrchestration(orch.id, {
-        type: 'questions',
-        questions: orch.questions,
-        message: 'A few questions to clarify requirements:'
-    });
-    debouncedSave();
-}
-
-// Helper: Detect project tech stack from package.json and codebase
-function detectProjectContext(projectPath) {
-    const context = {
-        framework: null,
-        uiLibrary: null,
-        stateManagement: null,
-        database: null,
-        testing: [],
-        buildTool: null,
-        components: [],
-        rawDeps: {}
-    };
-
-    try {
-        // Read package.json
-        const pkgPath = path.join(projectPath, 'package.json');
-        if (fs.existsSync(pkgPath)) {
-            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-            const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-            context.rawDeps = deps;
-
-            // Detect framework
-            if (deps['vue'] || deps['vue-router']) context.framework = 'Vue 3';
-            else if (deps['react'] || deps['react-dom']) context.framework = 'React';
-            else if (deps['svelte']) context.framework = 'Svelte';
-            else if (deps['@angular/core']) context.framework = 'Angular';
-
-            // Detect UI library
-            if (deps['naive-ui']) context.uiLibrary = 'Naive UI';
-            else if (deps['@mui/material']) context.uiLibrary = 'Material UI';
-            else if (deps['@chakra-ui/react']) context.uiLibrary = 'Chakra UI';
-            else if (deps['vuetify']) context.uiLibrary = 'Vuetify';
-            else if (deps['element-plus']) context.uiLibrary = 'Element Plus';
-            else if (deps['ant-design-vue'] || deps['antd']) context.uiLibrary = 'Ant Design';
-
-            // Detect state management
-            if (deps['pinia']) context.stateManagement = 'Pinia';
-            else if (deps['vuex']) context.stateManagement = 'Vuex';
-            else if (deps['redux'] || deps['@reduxjs/toolkit']) context.stateManagement = 'Redux';
-            else if (deps['zustand']) context.stateManagement = 'Zustand';
-            else if (deps['mobx']) context.stateManagement = 'MobX';
-
-            // Detect database/backend
-            if (deps['@supabase/supabase-js']) context.database = 'Supabase';
-            else if (deps['firebase']) context.database = 'Firebase';
-            else if (deps['prisma'] || deps['@prisma/client']) context.database = 'Prisma';
-
-            // Detect testing
-            if (deps['vitest']) context.testing.push('Vitest');
-            if (deps['jest']) context.testing.push('Jest');
-            if (deps['@playwright/test'] || deps['playwright']) context.testing.push('Playwright');
-            if (deps['cypress']) context.testing.push('Cypress');
-
-            // Detect build tool
-            if (deps['vite']) context.buildTool = 'Vite';
-            else if (deps['webpack']) context.buildTool = 'Webpack';
-            else if (deps['esbuild']) context.buildTool = 'esbuild';
-
-            // Detect common components/libraries
-            if (deps['@vueflow/core'] || deps['vue-flow']) context.components.push('Vue Flow (canvas)');
-            if (deps['@tiptap/vue-3'] || deps['tiptap']) context.components.push('TipTap (rich text editor)');
-            if (deps['vuedraggable']) context.components.push('Vue Draggable');
-            if (deps['tailwindcss']) context.components.push('Tailwind CSS');
-        }
-
-        // Check for existing modals/components
-        const srcPath = path.join(projectPath, 'src');
-        if (fs.existsSync(srcPath)) {
-            const checkPaths = [
-                { pattern: 'components/**/Modal*.vue', name: 'Custom modals' },
-                { pattern: 'components/**/Dialog*.vue', name: 'Custom dialogs' },
-                { pattern: 'composables/use*.ts', name: 'Custom composables' }
-            ];
-
-            // Simple check for common component patterns
-            try {
-                const componentsPath = path.join(srcPath, 'components');
-                if (fs.existsSync(componentsPath)) {
-                    const files = fs.readdirSync(componentsPath, { recursive: true });
-                    const hasModals = files.some(f => f.toString().toLowerCase().includes('modal'));
-                    const hasDialogs = files.some(f => f.toString().toLowerCase().includes('dialog'));
-                    if (hasModals || hasDialogs) context.components.push('Custom modal/dialog components');
-                }
-            } catch (e) { /* ignore */ }
-        }
-
-    } catch (err) {
-        console.error('[Orchestrator] Error detecting project context:', err.message);
-    }
-
-    return context;
-}
-
-// Helper: Generate clarifying questions based on goal
-async function generateClarifyingQuestions(orch) {
-    console.log(`[Orchestrator] generateClarifyingQuestions called for ${orch.id}`);
-
-    // TEMPORARY: Skip Claude and use fallback questions for faster testing
-    // TODO: Re-enable Claude once we debug the hanging issue
-    const USE_CLAUDE_FOR_QUESTIONS = true;
-
-    if (!USE_CLAUDE_FOR_QUESTIONS) {
-        console.log(`[Orchestrator] Using immediate fallback questions (Claude disabled)`);
-        setTimeout(() => useFallbackQuestions(orch, 'claude_disabled'), 500);
-        return;
-    }
-
-    // Auto-detect project context
-    const projectPath = path.join(__dirname, '..');
-    const detectedContext = detectProjectContext(projectPath);
-    orch.detectedContext = detectedContext; // Store for later use
-
-    console.log('[Orchestrator] Detected project context:', JSON.stringify(detectedContext, null, 2));
-
-    // Build context string for prompt
-    const contextLines = [];
-    if (detectedContext.framework) contextLines.push(`- Framework: ${detectedContext.framework}`);
-    if (detectedContext.uiLibrary) contextLines.push(`- UI Library: ${detectedContext.uiLibrary} (has modal/dialog components)`);
-    if (detectedContext.stateManagement) contextLines.push(`- State Management: ${detectedContext.stateManagement}`);
-    if (detectedContext.database) contextLines.push(`- Database/Backend: ${detectedContext.database}`);
-    if (detectedContext.testing.length) contextLines.push(`- Testing: ${detectedContext.testing.join(', ')}`);
-    if (detectedContext.buildTool) contextLines.push(`- Build Tool: ${detectedContext.buildTool}`);
-    if (detectedContext.components.length) contextLines.push(`- Components: ${detectedContext.components.join(', ')}`);
-
-    const contextBlock = contextLines.length > 0
-        ? `\n\n**DETECTED PROJECT CONTEXT (DO NOT ASK ABOUT THESE - ALREADY KNOWN):**\n${contextLines.join('\n')}\n`
-        : '';
-
-    const prompt = `You are an expert requirements analyst. The user wants to build:
-
-"${orch.goal}"
-${contextBlock}
-Generate 2-4 clarifying questions to understand their requirements better.
-
-**CRITICAL RULES:**
-1. DO NOT ask about framework, UI library, state management, database, or build tools - these are already detected above
-2. DO NOT ask generic questions like "What framework?" or "Do you have a modal system?" - CHECK THE DETECTED CONTEXT
-3. ONLY ask about things NOT listed in the detected context
-4. Focus on the SPECIFIC FEATURE they want to build, not the tech stack
-
-Focus on:
-1. Implementation details specific to the feature (where exactly should this appear, what triggers it)
-2. User experience (animations, transitions, behavior on cancel/save)
-3. Edge cases (what if user is mid-edit, what about unsaved changes)
-4. Integration with existing features (should this work with existing task system, etc.)
-
-Output ONLY a JSON array of questions, each with:
-- "id": unique string (e.g., "q1", "q2")
-- "question": the question text
-- "options": optional array of common answers (2-5 options)
-- "type": "choice", "multiselect", or "text"
-- "multiSelect": boolean (true for questions where multiple options can be selected)
-
-Example for a "long press to edit" feature:
-[
-  {"id": "q1", "question": "What should the long-press duration be?", "options": ["300ms (quick)", "500ms (standard)", "800ms (deliberate)"], "type": "choice", "multiSelect": false},
-  {"id": "q2", "question": "Should there be visual feedback during the long press?", "options": ["Progress ring animation", "Subtle scale/pulse", "Haptic feedback only", "No feedback needed"], "type": "choice", "multiSelect": false},
-  {"id": "q3", "question": "What happens if user is offline during edit?", "options": ["Queue changes for sync", "Show warning but allow edit", "Block editing until online"], "type": "choice", "multiSelect": false}
-]`;
-
-    broadcastOrchestration(orch.id, {
-        type: 'phase',
-        phase: 'requirements',
-        message: 'Analyzing your goal and generating clarifying questions...'
-    });
-
-    try {
-        // Spawn Claude to generate questions
-        // Use 'pipe' for stdin and close it immediately to prevent hanging
-        const questionProcess = spawn(CLAUDE_BINARY, [
-            '--print',
-            '-p', prompt
-        ], {
-            cwd: path.join(__dirname, '..'),
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env }
-        });
-
-        // Close stdin immediately - Claude --print doesn't need input
-        questionProcess.stdin.end();
-
-        let output = '';
-        let stderr = '';
-        let timedOut = false;
-
-        // Set timeout to prevent infinite hang (30 seconds)
-        const timeout = setTimeout(() => {
-            timedOut = true;
-            console.log('[Orchestrator] Claude process timed out after 30s, using fallback questions');
-            questionProcess.kill('SIGTERM');
-        }, 30000);
-
-        questionProcess.stdout.on('data', (data) => {
-            output += data.toString();
-            console.log(`[Orchestrator] Claude stdout chunk: ${data.toString().substring(0, 100)}...`);
-        });
-
-        questionProcess.stderr.on('data', (data) => {
-            stderr += data.toString();
-            console.log(`[Orchestrator] Claude stderr: ${data.toString()}`);
-        });
-
-        questionProcess.on('close', (code) => {
-            clearTimeout(timeout);
-
-            if (timedOut) {
-                // Already handled by timeout
-                useFallbackQuestions(orch, 'timeout');
-                return;
-            }
-            if (code === 0) {
-                try {
-                    // Extract JSON from output (may have extra text)
-                    const jsonMatch = output.match(/\[[\s\S]*\]/);
-                    if (jsonMatch) {
-                        const questions = JSON.parse(jsonMatch[0]);
-                        orch.questions = questions;
-
-                        broadcastOrchestration(orch.id, {
-                            type: 'questions',
-                            questions: questions,
-                            message: 'Please answer these questions to help me understand your requirements:'
-                        });
-                        debouncedSave();
-                    } else {
-                        throw new Error('No JSON array found in output');
-                    }
-                } catch (e) {
-                    console.error(`[Orchestrator] Error parsing questions: ${e.message}`);
-                    console.error(`[Orchestrator] Raw output was: ${output.substring(0, 500)}`);
-                    useFallbackQuestions(orch, 'parse_error');
-                }
-            } else {
-                console.error(`[Orchestrator] Claude exited with code ${code}, stderr: ${stderr}`);
-                useFallbackQuestions(orch, `exit_code_${code}`);
-            }
-        });
-
-        questionProcess.on('error', (err) => {
-            console.error(`[Orchestrator] Error spawning Claude: ${err.message}`);
-            useFallbackQuestions(orch, 'spawn_error');
-        });
-
-    } catch (err) {
-        console.error(`[Orchestrator] Error generating questions: ${err.message}`);
-        useFallbackQuestions(orch, 'exception');
-    }
-}
-
-// POST /api/orchestrator/:id/answer - Submit answers to clarifying questions
-app.post('/api/orchestrator/:id/answer', async (req, res) => {
-    const orchId = req.params.id;
-    const { answers } = req.body;
-
-    const orch = orchestrations.get(orchId);
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    // Store answers
-    orch.answers = { ...orch.answers, ...answers };
-    debouncedSave();
-
-    console.log('[Orchestrator] Received answers:', JSON.stringify(answers, null, 2));
-
-    // TEMPORARY: Skip clarification check and proceed directly to planning
-    // TODO: Re-enable when Claude follow-up generation is fixed
-    const SKIP_CLARIFICATION = true;
-
-    if (!SKIP_CLARIFICATION) {
-        // Check if any answers need follow-up clarification
-        const needsClarification = checkAnswersNeedClarification(answers, orch.questions);
-
-        if (needsClarification.length > 0) {
-            // Generate follow-up questions for unclear answers
-            broadcastOrchestration(orch.id, {
-                type: 'phase',
-                phase: 'questions',
-                message: 'Some answers need clarification. Generating follow-up questions...'
-            });
-
-            generateFollowUpQuestions(orch, needsClarification);
-
-            res.json({
-                success: true,
-                phase: 'questions',
-                message: 'Generating follow-up questions for clarification...'
-            });
-            return;
-        }
-    }
-
-    // All answers are clear (or clarification skipped), move to planning phase
-    orch.phase = 'planning';
-    debouncedSave();
-
-    broadcastOrchestration(orch.id, {
-        type: 'phase',
-        phase: 'planning',
-        message: 'Answers received. Creating implementation plan...'
-    });
-
-    // Generate plan based on goal + answers
-    generatePlan(orch);
-
-    res.json({
-        success: true,
-        phase: 'planning',
-        message: 'Moving to planning phase...'
-    });
-});
-
-// Check if answers need follow-up clarification
-function checkAnswersNeedClarification(answers, questions) {
-    const needsClarification = [];
-
-    // Phrases that indicate the user wants to discuss/clarify further
-    const clarificationIndicators = [
-        'need to discuss',
-        'need to go over',
-        'need to decide',
-        'not sure',
-        'depends on',
-        'let\'s talk about',
-        'want to explore',
-        'more information',
-        'clarify',
-        'options',
-        'alternatives',
-        'what do you think',
-        'your recommendation',
-        'help me decide',
-        'pros and cons',
-        'trade-offs',
-        'compare'
-    ];
-
-    for (const [questionId, answer] of Object.entries(answers)) {
-        if (typeof answer !== 'string') continue;
-
-        const lowerAnswer = answer.toLowerCase();
-        const needsFollowUp = clarificationIndicators.some(phrase =>
-            lowerAnswer.includes(phrase)
-        );
-
-        if (needsFollowUp) {
-            const question = questions.find(q => q.id === questionId);
-            needsClarification.push({
-                questionId,
-                question: question?.question || questionId,
-                answer
-            });
-        }
-    }
-
-    return needsClarification;
-}
-
-// Generate follow-up questions for unclear answers
-function generateFollowUpQuestions(orch, unclearAnswers) {
-    const unclearContext = unclearAnswers.map(u =>
-        `Original Question: ${u.question}\nUser's Response: "${u.answer}"`
-    ).join('\n\n');
-
-    const prompt = `You are a requirements analyst helping clarify project requirements.
-
-PROJECT GOAL: "${orch.goal}"
-
-The user gave responses that need clarification:
-
-${unclearContext}
-
-The user seems to want guidance or discussion before deciding. Generate 2-3 specific follow-up questions that will help them make a decision. For each question:
-- Be specific and actionable
-- Offer concrete options when possible
-- Help them understand the trade-offs
-
-Output ONLY a JSON array of questions:
-[{"id": "followup-1", "question": "...", "type": "choice", "options": ["Option A", "Option B", "Option C"]}]
-
-Use type "choice" with options when there are clear alternatives, or "text" for open-ended.`;
-
-    try {
-        const followUpProcess = spawn(CLAUDE_BINARY, ['--print', '-p', prompt], {
-            cwd: path.join(__dirname, '..'),
-            stdio: ['inherit', 'pipe', 'pipe'],
-            env: { ...process.env, ANTHROPIC_API_KEY: '' }
-        });
-
-        let output = '';
-        followUpProcess.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-
-        followUpProcess.stderr.on('data', (data) => {
-            console.log('[Orchestrator] Follow-up stderr:', data.toString());
-        });
-
-        followUpProcess.on('close', (code) => {
-            if (code === 0) {
-                try {
-                    const jsonMatch = output.match(/\[[\s\S]*\]/);
-                    if (jsonMatch) {
-                        const newQuestions = JSON.parse(jsonMatch[0]);
-                        // Add follow-up questions to the list
-                        orch.questions.push(...newQuestions);
-                        debouncedSave();
-
-                        broadcastOrchestration(orch.id, {
-                            type: 'questions',
-                            questions: orch.questions,
-                            message: 'I have some follow-up questions to help clarify your requirements:'
-                        });
-                    }
-                } catch (e) {
-                    console.error('[Orchestrator] Error parsing follow-up questions:', e.message);
-                }
-            }
-        });
-
-        followUpProcess.on('error', (err) => {
-            console.error('[Orchestrator] Error spawning follow-up process:', err.message);
-        });
-    } catch (err) {
-        console.error('[Orchestrator] Error generating follow-up questions:', err.message);
-    }
-}
-
-// Helper: Use fallback plan when Claude fails
-function useFallbackPlan(orch) {
-    console.log('[Orchestrator] Using fallback plan');
-
-    // Generate a basic plan based on the goal
-    const goalLower = orch.goal.toLowerCase();
-    let tasks = [];
-
-    if (goalLower.includes('pwa') || goalLower.includes('progressive')) {
-        tasks = [
-            { id: 'task-1', title: 'Configure PWA manifest', description: 'Set up manifest.json with app name, icons, and display settings', agentType: 'frontend', dependencies: [], priority: 'P1' },
-            { id: 'task-2', title: 'Implement service worker', description: 'Create service worker for offline caching and background sync', agentType: 'frontend', dependencies: ['task-1'], priority: 'P1' },
-            { id: 'task-3', title: 'Add install prompt', description: 'Implement "Add to Home Screen" prompt for mobile users', agentType: 'frontend', dependencies: ['task-2'], priority: 'P2' },
-            { id: 'task-4', title: 'Optimize for offline', description: 'Ensure critical features work offline with local storage fallback', agentType: 'frontend', dependencies: ['task-2'], priority: 'P2' },
-            { id: 'task-5', title: 'Test PWA functionality', description: 'Verify Lighthouse PWA audit passes and test on multiple devices', agentType: 'qa', dependencies: ['task-3', 'task-4'], priority: 'P2' }
-        ];
-    } else {
-        // Generic feature tasks
-        tasks = [
-            { id: 'task-1', title: 'Research & Design', description: 'Analyze requirements and design the solution architecture', agentType: 'frontend', dependencies: [], priority: 'P1' },
-            { id: 'task-2', title: 'Implement core feature', description: 'Build the main functionality as described in the goal', agentType: 'frontend', dependencies: ['task-1'], priority: 'P1' },
-            { id: 'task-3', title: 'Add UI components', description: 'Create necessary UI components and styling', agentType: 'frontend', dependencies: ['task-2'], priority: 'P2' },
-            { id: 'task-4', title: 'Integration & Testing', description: 'Integrate with existing systems and write tests', agentType: 'qa', dependencies: ['task-3'], priority: 'P2' },
-            { id: 'task-5', title: 'Documentation', description: 'Document the new feature and update relevant docs', agentType: 'docs', dependencies: ['task-4'], priority: 'P3' }
-        ];
-    }
-
-    orch.plan = tasks;
-    orch.phase = 'plan';
-    orch.planGenerating = false;
-    debouncedSave();
-
-    broadcastOrchestration(orch.id, {
-        type: 'plan',
-        plan: tasks,
-        message: 'Implementation plan ready for review:'
-    });
-}
-
-// Helper: Generate implementation plan
-async function generatePlan(orch) {
-    console.log('[Orchestrator] generatePlan called for:', orch.id);
-
-    // TEMPORARY: Skip Claude and use fallback plan for faster testing
-    const USE_CLAUDE_FOR_PLAN = true;
-
-    if (!USE_CLAUDE_FOR_PLAN) {
-        console.log('[Orchestrator] Using immediate fallback plan (Claude disabled)');
-        setTimeout(() => useFallbackPlan(orch), 500);
-        return;
-    }
-
-    const answersText = Object.entries(orch.answers)
-        .map(([key, val]) => {
-            const question = orch.questions.find(q => q.id === key);
-            return `Q: ${question?.question || key}\nA: ${val}`;
-        })
-        .join('\n\n');
-
-    const prompt = `You are an expert software architect. Create an implementation plan for:
-
-GOAL: "${orch.goal}"
-
-USER REQUIREMENTS:
-${answersText}
-
-Create a detailed plan broken into tasks. Each task should be:
-- Specific and actionable
-- Assignable to a specialized agent type (backend, frontend, devops, qa, docs)
-- Small enough to complete in one session
-
-Output ONLY a JSON array of tasks:
-[
-  {
-    "id": "task-1",
-    "title": "Set up project structure",
-    "description": "Initialize the project with Vite + Vue 3 + TypeScript",
-    "agentType": "frontend",
-    "dependencies": [],
-    "priority": "P1"
-  },
-  {
-    "id": "task-2",
-    "title": "Create database schema",
-    "description": "Design and implement the PostgreSQL schema for user data",
-    "agentType": "backend",
-    "dependencies": ["task-1"],
-    "priority": "P1"
-  }
-]
-
-Create 5-10 tasks that cover the full implementation.`;
-
-    // Prevent duplicate plan generation
-    if (orch.planGenerating) {
-        console.log('[Orchestrator] Plan already generating, skipping duplicate call');
-        return;
-    }
-    orch.planGenerating = true;
-
-    broadcastOrchestration(orch.id, {
-        type: 'progress',
-        message: 'Analyzing requirements and creating task breakdown...'
-    });
-
-    console.log('[Orchestrator] Generating plan for:', orch.id);
-    console.log('[Orchestrator] Prompt length:', prompt.length);
-
-    try {
-        const planProcess = spawn(CLAUDE_BINARY, [
-            '--print',
-            '-p', prompt
-        ], {
-            cwd: path.join(__dirname, '..'),
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env }
-        });
-
-        // Close stdin immediately - Claude --print doesn't need input
-        planProcess.stdin.end();
-
-        console.log('[Orchestrator] Claude process spawned for plan generation');
-
-        let output = '';
-        let timedOut = false;
-
-        // Set timeout to prevent infinite hang (60 seconds for plan generation)
-        const timeout = setTimeout(() => {
-            timedOut = true;
-            console.log('[Orchestrator] Plan generation timed out after 60s, using fallback');
-            planProcess.kill('SIGTERM');
-            orch.planGenerating = false;
-            useFallbackPlan(orch);
-        }, 60000);
-
-        planProcess.stdout.on('data', (data) => {
-            output += data.toString();
-            console.log(`[Orchestrator] Plan stdout chunk: ${data.toString().substring(0, 100)}...`);
-        });
-
-        planProcess.stderr.on('data', (data) => {
-            console.log(`[Orchestrator] Plan stderr: ${data.toString()}`);
-        });
-
-        planProcess.on('close', (code) => {
-            clearTimeout(timeout);
-            if (timedOut) return;  // Already handled by timeout
-
-            orch.planGenerating = false;  // Reset flag
-
-            if (code === 0) {
-                try {
-                    const jsonMatch = output.match(/\[[\s\S]*\]/);
-                    if (jsonMatch) {
-                        const plan = JSON.parse(jsonMatch[0]);
-                        orch.plan = plan;
-                        debouncedSave();
-
-                        broadcastOrchestration(orch.id, {
-                            type: 'plan',
-                            plan: plan,
-                            message: `Created ${plan.length} tasks. Ready to start execution.`
-                        });
-
-                        // Auto-move to execution if plan looks good
-                        // User can review and modify first
-                    } else {
-                        throw new Error('No JSON array found');
-                    }
-                } catch (e) {
-                    console.error(`[Orchestrator] Error parsing plan: ${e.message}`);
-                    broadcastOrchestration(orch.id, {
-                        type: 'error',
-                        message: 'Failed to generate plan. Please try again.'
-                    });
-                }
-            } else {
-                console.error(`[Orchestrator] Plan generation failed with code ${code}`);
-                broadcastOrchestration(orch.id, {
-                    type: 'error',
-                    message: 'Plan generation failed. Please try again.'
-                });
-            }
-        });
-
-    } catch (err) {
-        console.error(`[Orchestrator] Error generating plan: ${err.message}`);
-    }
-}
-
-// POST /api/orchestrator/:id/execute - Start executing the plan
-app.post('/api/orchestrator/:id/execute', (req, res) => {
-    const orchId = req.params.id;
-    const orch = orchestrations.get(orchId);
-
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    if (!orch.plan || orch.plan.length === 0) {
-        return res.status(400).json({ error: 'No plan to execute' });
-    }
-
-    orch.phase = 'execution';
-    debouncedSave();
-
-    broadcastOrchestration(orch.id, {
-        type: 'phase',
-        phase: 'execution',
-        message: 'Starting execution. Spawning agents for tasks...'
-    });
-
-    // Start executing tasks (respecting dependencies)
-    executeNextTasks(orch);
-
-    res.json({
-        success: true,
-        phase: 'execution',
-        message: 'Execution started'
-    });
-});
-
-// Helper: Get orchestration execution stats
-function getOrchestrationStats(orch) {
-    const completed = orch.subAgents.filter(a => a.status === 'completed').length;
-    const running = orch.subAgents.filter(a => a.status === 'running').length;
-    const failed = orch.subAgents.filter(a => a.status === 'failed').length;
-    const pending = orch.plan.length - orch.subAgents.length;
-    return { completed, running, failed, pending, total: orch.plan.length };
-}
-
-// Helper: Execute next available tasks
-function executeNextTasks(orch) {
-    // Auto-cleanup stale worktrees before starting new tasks (1 hour threshold)
-    cleanupStaleWorktrees(1);
-
-    // Find tasks that are ready (dependencies completed)
-    const completedIds = orch.subAgents
-        .filter(a => a.status === 'completed')
-        .map(a => a.taskId);
-
-    const runningIds = orch.subAgents
-        .filter(a => a.status === 'running')
-        .map(a => a.taskId);
-
-    const readyTasks = orch.plan.filter(task => {
-        // Not already started
-        if (orch.subAgents.some(a => a.taskId === task.id)) return false;
-        // Dependencies met
-        const deps = task.dependencies || [];
-        return deps.every(dep => completedIds.includes(dep));
-    });
-
-    // Limit concurrent agents to 3
-    const availableSlots = 3 - runningIds.length;
-    const tasksToStart = readyTasks.slice(0, availableSlots);
-
-    for (const task of tasksToStart) {
-        spawnSubAgent(orch, task);
-    }
-
-    // Check if all done
-    if (runningIds.length === 0 && readyTasks.length === 0) {
-        const allCompleted = orch.plan.every(t =>
-            orch.subAgents.some(a => a.taskId === t.id && a.status === 'completed')
-        );
-
-        if (allCompleted) {
-            orch.phase = 'review';
-            debouncedSave();
-            broadcastOrchestration(orch.id, {
-                type: 'phase',
-                phase: 'review',
-                message: 'All tasks completed! Ready for review.'
-            });
-        }
-    }
-}
-
-// Helper: Spawn a sub-agent for a task
-function spawnSubAgent(orch, task) {
-    // Create isolated worktree for this agent
-    const worktreeTaskId = `orch-${task.id}`;
-    const { worktreePath, branchName, created } = createAgentWorktree(worktreeTaskId);
-
-    console.log(`[Orchestrator] Agent worktree: ${worktreePath} (branch: ${branchName}, created: ${created})`);
-
-    const subAgentData = {
-        taskId: task.id,
-        task: task,
-        status: 'running',
-        retries: 0,
-        output: [],
-        startTime: Date.now(),
-        worktreePath: worktreePath,
-        branchName: branchName
-    };
-
-    orch.subAgents.push(subAgentData);
-
-    // Broadcast task_started event with stats
-    const stats = getOrchestrationStats(orch);
-    broadcastOrchestration(orch.id, {
-        type: 'task_started',
-        taskId: task.id,
-        task: task,
-        worktree: worktreePath,
-        branch: branchName,
-        stats: stats,
-        message: `🚀 Starting: ${task.title} (${task.agentType})`
-    });
-
-    // Build prompt for this specific task
-    const prompt = `You are a ${task.agentType} specialist working on a larger project.
-
-PROJECT GOAL: ${orch.goal}
-
-YOUR TASK: ${task.title}
-${task.description}
-
-REQUIREMENTS FROM USER:
-${Object.entries(orch.answers).map(([k, v]) => `- ${v}`).join('\n')}
-
-Instructions:
-1. Complete this specific task thoroughly
-2. Test your work by running relevant tests or verifying manually
-3. Commit your changes with a clear message
-4. Report what you accomplished
-
-Focus only on this task. Other tasks are being handled by other specialists.
-You are working in an isolated git worktree. Your changes will be reviewed before merging.`;
-
-    console.log(`[Orchestrator] Spawning Claude agent for task ${task.id} in ${worktreePath}`);
-
-    // TASK-319: Add stream-json output format for proper parsing
-    const agentProcess = spawn(CLAUDE_BINARY, [
-        '--print',
-        '--verbose',
-        '--output-format', 'stream-json',
-        '--dangerously-skip-permissions',
-        '--max-turns', '30',
-        '-p', prompt
-    ], {
-        cwd: worktreePath,  // Work in isolated worktree
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env }  // Preserve API key!
-    });
-
-    // Close stdin after a brief delay to let Claude initialize
-    setTimeout(() => {
-        if (agentProcess.stdin && !agentProcess.stdin.destroyed) {
-            agentProcess.stdin.end();
-        }
-    }, 500);
-
-    subAgentData.process = agentProcess;
-    subAgentData.stderrBuffer = '';  // Track stderr for debugging
-    subAgentData.jsonBuffer = '';    // TASK-319: Buffer for JSON parsing
-
-    // Initialize log file for this agent
-    appendAgentLog(task.id, `=== Agent started for: ${task.title} ===`);
-    appendAgentLog(task.id, `Worktree: ${worktreePath}`);
-
-    // TASK-319: Parse stream-json output and broadcast real-time
-    agentProcess.stdout.on('data', (data) => {
-        subAgentData.jsonBuffer = parseAndBroadcastOrchOutput(
-            orch.id,
-            task.id,
-            data.toString(),
-            subAgentData,
-            subAgentData.jsonBuffer
-        );
-
-        // Also log raw chunk count for debugging
-        console.log(`[Orchestrator] Task ${task.id} output chunks: ${subAgentData.output.length}`);
-    });
-
-    agentProcess.stderr.on('data', (data) => {
-        const error = data.toString();
-        subAgentData.output.push({ type: 'stderr', text: error, time: Date.now() });
-        subAgentData.stderrBuffer += error;
-        appendAgentLog(task.id, `[STDERR] ${error}`);
-        console.log(`[Orchestrator] Task ${task.id} stderr: ${error}`);
-    });
-
-    agentProcess.on('close', (code) => {
-        subAgentData.endTime = Date.now();
-        const stats = getOrchestrationStats(orch);
-        const duration = subAgentData.endTime - subAgentData.startTime;
-
-        console.log(`[Orchestrator] Task ${task.id} closed with code ${code} after ${duration}ms`);
-        if (code !== 0 && subAgentData.stderrBuffer) {
-            console.log(`[Orchestrator] Task ${task.id} stderr: ${subAgentData.stderrBuffer}`);
-        }
-
-        if (code === 0) {
-            subAgentData.status = 'completed';
-
-            // Get diff summary from worktree (don't auto-merge!)
-            let diffSummary = '';
-            let filesChanged = 0;
-            try {
-                if (subAgentData.worktreePath && subAgentData.branchName) {
-                    // Get diff stat against the branch base
-                    diffSummary = execSync(`git diff --stat HEAD~1 2>/dev/null || git diff --stat HEAD`, {
-                        cwd: subAgentData.worktreePath,
-                        encoding: 'utf8',
-                        stdio: ['pipe', 'pipe', 'pipe']
-                    }).trim();
-
-                    // Count files changed
-                    const match = diffSummary.match(/(\d+) files? changed/);
-                    filesChanged = match ? parseInt(match[1]) : 0;
-                }
-            } catch (err) {
-                console.log(`[Orchestrator] Could not get diff summary: ${err.message}`);
-                diffSummary = 'Unable to retrieve diff';
-            }
-
-            // Broadcast task_completed with diff info for review
-            broadcastOrchestration(orch.id, {
-                type: 'task_completed',
-                taskId: task.id,
-                task: task,
-                branch: subAgentData.branchName,
-                worktree: subAgentData.worktreePath,
-                diffSummary: diffSummary,
-                filesChanged: filesChanged,
-                stats: stats,
-                reviewCommands: {
-                    viewDiff: `git diff ${subAgentData.branchName}`,
-                    merge: `git merge ${subAgentData.branchName} --no-ff -m "Orchestrator: ${task.title}"`,
-                    discard: `git worktree remove ${subAgentData.worktreePath} --force && git branch -D ${subAgentData.branchName}`
-                },
-                message: `✅ Completed: ${task.title} (${filesChanged} files changed)`
-            });
-
-            // Cleanup worktree after successful completion
-            if (subAgentData.worktreePath) {
-                cleanupWorktree(`orch-${task.id}`);
-            }
-        } else {
-            // Failed - check retries
-            if (subAgentData.retries < orch.maxRetries) {
-                subAgentData.retries++;
-                subAgentData.status = 'retrying';
-
-                // Cleanup failed worktree before retry
-                if (subAgentData.worktreePath) {
-                    cleanupWorktree(`orch-${task.id}`);
-                }
-
-                broadcastOrchestration(orch.id, {
-                    type: 'task_retrying',
-                    taskId: task.id,
-                    task: task,
-                    retries: subAgentData.retries,
-                    maxRetries: orch.maxRetries,
-                    stats: stats,
-                    message: `⚠️ ${task.title} failed. Retrying (${subAgentData.retries}/${orch.maxRetries})...`
-                });
-
-                // Remove from subAgents to allow retry
-                const idx = orch.subAgents.findIndex(a => a.taskId === task.id);
-                if (idx >= 0) orch.subAgents.splice(idx, 1);
-
-                // Retry after delay
-                setTimeout(() => spawnSubAgent(orch, task), 2000);
-            } else {
-                subAgentData.status = 'failed';
-
-                // Cleanup failed worktree
-                if (subAgentData.worktreePath) {
-                    cleanupWorktree(`orch-${task.id}`);
-                }
-
-                broadcastOrchestration(orch.id, {
-                    type: 'task_failed',
-                    taskId: task.id,
-                    task: task,
-                    stats: stats,
-                    message: `❌ ${task.title} failed after ${orch.maxRetries} retries. Please review.`,
-                    error: subAgentData.output.slice(-5).join('')
-                });
-            }
-        }
-
-        // Execute next tasks
-        executeNextTasks(orch);
-    });
-
-    agentProcess.on('error', (err) => {
-        subAgentData.status = 'error';
-        broadcastOrchestration(orch.id, {
-            type: 'error',
-            taskId: task.id,
-            message: `Error spawning agent: ${err.message}`
-        });
-    });
-}
-
-// ============================================================
-// TASK-SPECIFIC ROUTES - Must be defined BEFORE generic :id routes
-// ============================================================
-
-// GET /api/orchestrator/task/:taskId/diff - Get full diff for a task
-app.get('/api/orchestrator/task/:taskId/diff', (req, res) => {
-    const taskId = req.params.taskId;
-    const branch = req.query.branch;
-
-    if (!branch) {
-        return res.status(400).json({ error: 'Branch parameter required' });
-    }
-
-    const projectRoot = path.join(__dirname, '..');
-
-    try {
-        // Get the diff between the branch and master
-        const diff = execSync(`git diff master...${branch}`, {
-            cwd: projectRoot,
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            maxBuffer: 10 * 1024 * 1024  // 10MB buffer for large diffs
-        });
-
-        res.json({ success: true, diff: diff });
-    } catch (err) {
-        console.error(`[Orchestrator] Error getting diff for ${taskId}:`, err.message);
-        res.status(500).json({ error: `Failed to get diff: ${err.message}` });
-    }
-});
-
-// POST /api/orchestrator/task/:taskId/merge - Merge a task's branch
-app.post('/api/orchestrator/task/:taskId/merge', (req, res) => {
-    const taskId = req.params.taskId;
-    const { branch, worktree } = req.body;
-
-    if (!branch) {
-        return res.status(400).json({ error: 'Branch required' });
-    }
-
-    const projectRoot = path.join(__dirname, '..');
-
-    try {
-        // First, checkout master
-        execSync(`git checkout master`, {
-            cwd: projectRoot,
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
-
-        // Merge the branch with a descriptive commit message
-        execSync(`git merge ${branch} --no-ff -m "Orchestrator: Merge ${branch}"`, {
-            cwd: projectRoot,
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
-
-        console.log(`[Orchestrator] Merged branch ${branch}`);
-
-        // Clean up: remove worktree and branch
-        if (worktree) {
-            try {
-                execSync(`git worktree remove "${worktree}" --force`, {
-                    cwd: projectRoot,
-                    encoding: 'utf8',
-                    stdio: ['pipe', 'pipe', 'pipe']
-                });
-                console.log(`[Orchestrator] Removed worktree ${worktree}`);
-            } catch (e) {
-                console.warn(`[Orchestrator] Could not remove worktree: ${e.message}`);
-            }
-        }
-
-        // Delete the branch after merge
-        try {
-            execSync(`git branch -d ${branch}`, {
-                cwd: projectRoot,
-                encoding: 'utf8',
-                stdio: ['pipe', 'pipe', 'pipe']
-            });
-            console.log(`[Orchestrator] Deleted branch ${branch}`);
-        } catch (e) {
-            console.warn(`[Orchestrator] Could not delete branch: ${e.message}`);
-        }
-
-        res.json({ success: true, message: `Merged ${branch}` });
-    } catch (err) {
-        console.error(`[Orchestrator] Error merging ${taskId}:`, err.message);
-        res.status(500).json({ error: `Merge failed: ${err.message}` });
-    }
-});
-
-// POST /api/orchestrator/task/:taskId/discard - Discard a task's worktree and branch
-app.post('/api/orchestrator/task/:taskId/discard', (req, res) => {
-    const taskId = req.params.taskId;
-    const { branch, worktree } = req.body;
-
-    const projectRoot = path.join(__dirname, '..');
-
-    try {
-        // Remove worktree first (if exists)
-        if (worktree) {
-            try {
-                execSync(`git worktree remove "${worktree}" --force`, {
-                    cwd: projectRoot,
-                    encoding: 'utf8',
-                    stdio: ['pipe', 'pipe', 'pipe']
-                });
-                console.log(`[Orchestrator] Removed worktree ${worktree}`);
-            } catch (e) {
-                console.warn(`[Orchestrator] Worktree removal: ${e.message}`);
-            }
-        }
-
-        // Delete the branch
-        if (branch) {
-            try {
-                execSync(`git branch -D ${branch}`, {
-                    cwd: projectRoot,
-                    encoding: 'utf8',
-                    stdio: ['pipe', 'pipe', 'pipe']
-                });
-                console.log(`[Orchestrator] Force deleted branch ${branch}`);
-            } catch (e) {
-                console.warn(`[Orchestrator] Branch deletion: ${e.message}`);
-            }
-        }
-
-        res.json({ success: true, message: `Discarded task ${taskId}` });
-    } catch (err) {
-        console.error(`[Orchestrator] Error discarding ${taskId}:`, err.message);
-        res.status(500).json({ error: `Discard failed: ${err.message}` });
-    }
-});
-
-// ============================================================
-// GENERIC :id ROUTES - After task-specific routes
-// ============================================================
-
-// GET /api/orchestrator/:id - Get orchestration status
-app.get('/api/orchestrator/:id', (req, res) => {
-    const orch = orchestrations.get(req.params.id);
-
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    res.json({
-        id: orch.id,
-        goal: orch.goal,
-        phase: orch.phase,
-        status: orch.status,
-        questions: orch.questions,
-        answers: orch.answers,
-        plan: orch.plan,
-        subAgents: orch.subAgents.map(a => ({
-            taskId: a.taskId,
-            title: a.task?.title,
-            status: a.status,
-            retries: a.retries,
-            outputLines: a.output?.length || 0
-        })),
-        summary: orch.summary.slice(-20),
-        startTime: orch.startTime,
-        runtime: Date.now() - orch.startTime
-    });
-});
-
-// DELETE /api/orchestrator/:id - Delete an orchestration
-app.delete('/api/orchestrator/:id', (req, res) => {
-    const orchId = req.params.id;
-    const orch = orchestrations.get(orchId);
-
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    // Kill any running sub-agents
-    for (const agent of orch.subAgents) {
-        if (agent.process && !agent.process.killed) {
-            agent.process.kill('SIGTERM');
-        }
-    }
-
-    // Remove from orchestrations map
-    orchestrations.delete(orchId);
-    debouncedSave();
-
-    // Remove SSE clients for this orchestration
-    if (orchestratorClients.has(orchId)) {
-        orchestratorClients.delete(orchId);
-    }
-
-    console.log(`[Orchestrator] Deleted ${orchId}`);
-    res.json({ success: true, message: 'Orchestration deleted' });
-});
-
-// POST /api/orchestrator/:id/chat - Chat with orchestrator at current phase
-app.post('/api/orchestrator/:id/chat', async (req, res) => {
-    const { message, phase } = req.body;
-    const orch = orchestrations.get(req.params.id);
-
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    // Build context-aware prompt based on phase
-    let contextPrompt = `You are an orchestration assistant helping with: "${orch.goal}"
-
-Current phase: ${phase || orch.phase}
-`;
-
-    // Add phase-specific context
-    if (orch.answers && Object.keys(orch.answers).length > 0) {
-        contextPrompt += `\nUser's answers so far:\n${JSON.stringify(orch.answers, null, 2)}`;
-    }
-    if (orch.plan && orch.plan.length > 0) {
-        contextPrompt += `\nCurrent plan:\n${orch.plan.map((t, i) => `${i+1}. ${t.title}`).join('\n')}`;
-    }
-
-    // Add execution-specific context
-    if (phase === 'execution' || orch.phase === 'execution') {
-        contextPrompt += `\nExecution is in progress. Running tasks may include agents working on the plan.`;
-        contextPrompt += `\nYou can help the user understand progress, pause/modify execution, or answer questions about the work being done.`;
-    }
-
-    contextPrompt += `\n\nUser message: "${message}"
-
-Respond helpfully and in a structured way. Use bullet points or numbered lists when listing multiple items.
-If they're asking for clarification, explain clearly with specific details.
-If they're requesting changes, acknowledge and suggest how to proceed.
-Format your response for readability - use **bold** for emphasis, \`code\` for technical terms.
-Keep responses concise but complete (3-5 sentences).`;
-
-    try {
-        const chatProcess = spawn(CLAUDE_BINARY, ['--print', '-p', contextPrompt], {
-            cwd: path.join(__dirname, '..'),
-            stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env }
-        });
-
-        // Close stdin immediately
-        chatProcess.stdin.end();
-
-        let response = '';
-        chatProcess.stdout.on('data', (data) => {
-            response += data.toString();
-        });
-
-        chatProcess.stderr.on('data', (data) => {
-            console.log('[Chat] stderr:', data.toString());
-        });
-
-        chatProcess.on('close', (code) => {
-            if (code === 0 && response.trim()) {
-                // Store in conversation history
-                if (!orch.chatHistory) orch.chatHistory = [];
-                orch.chatHistory.push({ role: 'user', message });
-                orch.chatHistory.push({ role: 'assistant', message: response.trim() });
-
-                res.json({ success: true, response: response.trim() });
-            } else {
-                res.status(500).json({ error: 'Failed to generate response' });
-            }
-        });
-
-        chatProcess.on('error', (err) => {
-            console.error('[Chat] Process error:', err);
-            res.status(500).json({ error: err.message });
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/orchestrator/:id/more-questions - Request more clarifying questions
-app.post('/api/orchestrator/:id/more-questions', async (req, res) => {
-    const orch = orchestrations.get(req.params.id);
-
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    console.log(`[Orchestrator] Generating more questions for ${req.params.id}`);
-
-    // Build a summary of questions already asked
-    const existingQuestions = (orch.questions || []).map(q => q.question).join('\n- ');
-
-    const prompt = `You are a senior requirements analyst. Think carefully before asking more questions.
-
-PROJECT GOAL:
-"${orch.goal}"
-
-QUESTIONS ALREADY ASKED:
-- ${existingQuestions}
-
-USER'S ANSWERS SO FAR:
-${JSON.stringify(orch.answers, null, 2)}
-
-${orch.plan && orch.plan.length > 0 ? `CURRENT PLAN:\n${orch.plan.map((t, i) => `${i+1}. ${t.title}: ${t.description || ''}`).join('\n')}` : ''}
-
-YOUR TASK:
-1. First, carefully analyze what the user has ALREADY told you through their answers
-2. Identify what you STILL DON'T KNOW that would be critical for implementation
-3. DO NOT repeat or rephrase questions that were already asked
-4. Only ask questions that reveal genuinely NEW information
-
-If the user's answers are comprehensive and you have enough information to proceed, respond with:
-{"sufficient": true, "reason": "Brief explanation of why no more questions are needed"}
-
-If you genuinely need more information, output 1-3 NEW questions (not rephrased versions of existing ones):
-[
-  {"id": "deep-1", "question": "...", "options": [...], "type": "choice|multiselect", "multiSelect": true|false}
-]
-
-Rules for new questions:
-- Each question must ask about something NOT covered by previous questions/answers
-- Include 2-5 options when possible (not open-ended unless necessary)
-- Use multiSelect: true when multiple options can apply together
-- Focus on: implementation details, edge cases, technical constraints, UX specifics
-
-Think step by step: What do I already know? What critical gaps remain?`;
-
-    try {
-        const questionsProcess = spawn(CLAUDE_BINARY, ['--print', '-p', prompt], {
-            cwd: path.join(__dirname, '..'),
-            stdio: ['inherit', 'pipe', 'pipe'],
-            env: { ...process.env }
-        });
-
-        let output = '';
-        questionsProcess.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-
-        questionsProcess.stderr.on('data', (data) => {
-            console.log('[MoreQuestions] stderr:', data.toString());
-        });
-
-        questionsProcess.on('close', (code) => {
-            if (code === 0 && output.trim()) {
-                try {
-                    // Check if Claude said no more questions needed
-                    const sufficientMatch = output.match(/\{"sufficient"\s*:\s*true[^}]*\}/);
-                    if (sufficientMatch) {
-                        try {
-                            const sufficientResponse = JSON.parse(sufficientMatch[0]);
-                            console.log('[MoreQuestions] Claude says sufficient:', sufficientResponse.reason);
-                            return res.json({
-                                success: true,
-                                sufficient: true,
-                                reason: sufficientResponse.reason || 'Your answers are comprehensive enough to proceed.',
-                                newQuestions: [],
-                                allQuestions: orch.questions,
-                                message: sufficientResponse.reason || 'No additional questions needed - ready to generate plan!'
-                            });
-                        } catch (e) {
-                            // Fall through to try parsing as questions
-                        }
-                    }
-
-                    // Try to parse as questions array
-                    const jsonMatch = output.match(/\[[\s\S]*\]/);
-                    if (jsonMatch) {
-                        const newQuestions = JSON.parse(jsonMatch[0]);
-
-                        // Ensure unique IDs
-                        const existingIds = new Set(orch.questions?.map(q => q.id) || []);
-                        newQuestions.forEach((q, i) => {
-                            if (existingIds.has(q.id)) {
-                                q.id = `deep-${Date.now()}-${i}`;
-                            }
-                        });
-
-                        // Add to questions list
-                        if (!orch.questions) orch.questions = [];
-                        orch.questions.push(...newQuestions);
-
-                        // Return to questions phase so user can answer
-                        orch.phase = 'questions';
-                        debouncedSave();
-
-                        // Broadcast the update
-                        broadcastOrchestration(orch.id, {
-                            type: 'questions',
-                            questions: orch.questions,
-                            message: `Added ${newQuestions.length} new clarifying questions`
-                        });
-
-                        res.json({
-                            success: true,
-                            newQuestions,
-                            allQuestions: orch.questions,
-                            message: `Added ${newQuestions.length} new questions`
-                        });
-                    } else {
-                        res.status(500).json({ error: 'Could not parse questions from response' });
-                    }
-                } catch (parseErr) {
-                    console.error('[MoreQuestions] Parse error:', parseErr);
-                    res.status(500).json({ error: 'Failed to parse questions JSON' });
-                }
-            } else {
-                res.status(500).json({ error: 'Failed to generate questions' });
-            }
-        });
-
-        questionsProcess.on('error', (err) => {
-            console.error('[MoreQuestions] Process error:', err);
-            res.status(500).json({ error: err.message });
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/orchestrator/:id/task/:taskId/chat - Chat about a specific plan task
-app.post('/api/orchestrator/:id/task/:taskId/chat', async (req, res) => {
-    const { message } = req.body;
-    const orch = orchestrations.get(req.params.id);
-    const taskId = req.params.taskId;
-
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    // Find the task in the plan
-    const task = orch.plan?.find(t => t.id === taskId);
-    if (!task) {
-        return res.status(404).json({ error: 'Task not found in plan' });
-    }
-
-    console.log(`[Orchestrator] Task chat for ${taskId}: ${message.slice(0, 50)}...`);
-
-    // Build context-aware prompt for this specific task
-    const contextPrompt = `You are an orchestration assistant helping refine a software implementation plan.
-
-OVERALL PROJECT GOAL: "${orch.goal}"
-
-USER REQUIREMENTS (from Q&A):
-${JSON.stringify(orch.answers, null, 2)}
-
-CURRENT PLAN:
-${orch.plan.map((t, i) => `${i+1}. [${t.id}] ${t.title}${t.id === taskId ? ' ← DISCUSSING THIS TASK' : ''}`).join('\n')}
-
-SPECIFIC TASK BEING DISCUSSED:
-- ID: ${task.id}
-- Title: ${task.title}
-- Description: ${task.description || 'No description yet'}
-- Agent Type: ${task.agentType || 'Not specified'}
-- Dependencies: ${task.dependencies?.join(', ') || 'None'}
-
-USER'S QUESTION/FEEDBACK ABOUT THIS TASK:
-"${message}"
-
-Respond helpfully about this specific task:
-- If they want changes, suggest how to modify the task
-- If they need clarification, explain the technical approach
-- If they have concerns, address them directly
-- Suggest improvements if relevant
-
-Keep response focused and concise (2-4 sentences). If the user wants to modify the task, explain what changes you recommend.`;
-
-    try {
-        const chatProcess = spawn(CLAUDE_BINARY, ['--print', '-p', contextPrompt], {
-            cwd: path.join(__dirname, '..'),
-            stdio: ['inherit', 'pipe', 'pipe'],
-            env: { ...process.env }
-        });
-
-        let response = '';
-        chatProcess.stdout.on('data', (data) => {
-            response += data.toString();
-        });
-
-        chatProcess.stderr.on('data', (data) => {
-            console.log('[TaskChat] stderr:', data.toString());
-        });
-
-        chatProcess.on('close', (code) => {
-            if (code === 0 && response.trim()) {
-                // Store chat history per task
-                if (!orch.taskChatHistory) orch.taskChatHistory = {};
-                if (!orch.taskChatHistory[taskId]) orch.taskChatHistory[taskId] = [];
-
-                orch.taskChatHistory[taskId].push(
-                    { role: 'user', message, timestamp: Date.now() },
-                    { role: 'assistant', message: response.trim(), timestamp: Date.now() }
-                );
-
-                debouncedSave();
-
-                res.json({
-                    success: true,
-                    response: response.trim(),
-                    taskId,
-                    chatHistory: orch.taskChatHistory[taskId]
-                });
-            } else {
-                res.status(500).json({ error: 'Failed to generate response' });
-            }
-        });
-
-        chatProcess.on('error', (err) => {
-            console.error('[TaskChat] Process error:', err);
-            res.status(500).json({ error: err.message });
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/orchestrator/:id/deepen - Generate more questions or explanations
-app.post('/api/orchestrator/:id/deepen', async (req, res) => {
-    const { mode } = req.body; // 'questions' or 'explain'
-    const orch = orchestrations.get(req.params.id);
-
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    let prompt;
-    if (mode === 'questions') {
-        prompt = `You are a requirements analyst. The user wants to build:
-"${orch.goal}"
-
-They already answered these questions:
-${JSON.stringify(orch.answers, null, 2)}
-
-Generate 2-3 MORE clarifying questions to deepen understanding.
-Focus on:
-- Edge cases they might not have considered
-- Technical trade-offs
-- User experience details
-- Performance/scalability concerns
-
-Output ONLY a JSON array of questions:
-[{"id": "deep-1", "question": "...", "type": "text"}]`;
-    } else {
-        // mode === 'explain'
-        prompt = `You are explaining your planning process. The user wants to build:
-"${orch.goal}"
-
-Current phase: ${orch.phase}
-${orch.plan && orch.plan.length > 0 ? `Current plan:\n${orch.plan.map(t => `- ${t.title}: ${t.description}`).join('\n')}` : ''}
-
-Explain your reasoning:
-1. Why you chose this approach
-2. Key technical decisions made
-3. Potential alternatives considered
-4. What you need more clarity on
-
-Keep it conversational and concise (3-5 sentences).`;
-    }
-
-    try {
-        const deepenProcess = spawn(CLAUDE_BINARY, ['--print', '-p', prompt], {
-            cwd: path.join(__dirname, '..'),
-            stdio: ['inherit', 'pipe', 'pipe'],
-            env: { ...process.env, ANTHROPIC_API_KEY: '' }
-        });
-
-        let output = '';
-        deepenProcess.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-
-        deepenProcess.stderr.on('data', (data) => {
-            console.log('[Deepen] stderr:', data.toString());
-        });
-
-        deepenProcess.on('close', (code) => {
-            if (code === 0 && output.trim()) {
-                if (mode === 'questions') {
-                    // Parse and add new questions
-                    try {
-                        const jsonMatch = output.match(/\[[\s\S]*\]/);
-                        if (jsonMatch) {
-                            const newQuestions = JSON.parse(jsonMatch[0]);
-                            if (!orch.questions) orch.questions = [];
-                            orch.questions.push(...newQuestions);
-
-                            res.json({
-                                success: true,
-                                newQuestions,
-                                questions: orch.questions
-                            });
-                        } else {
-                            res.status(500).json({ error: 'Could not parse questions' });
-                        }
-                    } catch (parseErr) {
-                        res.status(500).json({ error: 'Failed to parse questions JSON' });
-                    }
-                } else {
-                    // Return explanation
-                    res.json({ success: true, explanation: output.trim() });
-                }
-            } else {
-                res.status(500).json({ error: 'Failed to deepen understanding' });
-            }
-        });
-
-        deepenProcess.on('error', (err) => {
-            console.error('[Deepen] Process error:', err);
-            res.status(500).json({ error: err.message });
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET /api/orchestrator/:id/stream - SSE stream for orchestration updates
-app.get('/api/orchestrator/:id/stream', (req, res) => {
-    const orchId = req.params.id;
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    // Send only the last few summaries to avoid flooding on reconnect
-    const orch = orchestrations.get(orchId);
-    if (orch) {
-        // Only send the last 5 entries to avoid repetitive flooding
-        const recentSummaries = orch.summary.slice(-5);
-        for (const entry of recentSummaries) {
-            res.write(`data: ${JSON.stringify({ orchestrationId: orchId, ...entry })}\n\n`);
-        }
-    }
-
-    // Add to clients
-    if (!orchestratorClients.has(orchId)) {
-        orchestratorClients.set(orchId, []);
-    }
-    orchestratorClients.get(orchId).push(res);
-
-    // Keep alive
-    const keepAlive = setInterval(() => {
-        res.write(`: keep-alive\n\n`);
-    }, 15000);
-
-    req.on('close', () => {
-        clearInterval(keepAlive);
-        const clients = orchestratorClients.get(orchId) || [];
-        orchestratorClients.set(orchId, clients.filter(c => c !== res));
-    });
-});
-
-// POST /api/orchestrator/:id/refine - Submit refinements after review
-app.post('/api/orchestrator/:id/refine', (req, res) => {
-    const orchId = req.params.id;
-    const { feedback, action } = req.body;
-
-    const orch = orchestrations.get(orchId);
-    if (!orch) {
-        return res.status(404).json({ error: 'Orchestration not found' });
-    }
-
-    if (action === 'approve') {
-        orch.status = 'completed';
-        broadcastOrchestration(orch.id, {
-            type: 'complete',
-            message: '🎉 Project approved and completed!'
-        });
-
-        return res.json({ success: true, message: 'Project completed!' });
-    }
-
-    if (action === 'refine' && feedback) {
-        // Add refinement tasks based on feedback
-        broadcastOrchestration(orch.id, {
-            type: 'summary',
-            message: `📝 Processing feedback: ${feedback.slice(0, 100)}...`
-        });
-
-        // Generate new tasks from feedback
-        generateRefinementTasks(orch, feedback);
-
-        return res.json({ success: true, message: 'Processing refinements...' });
-    }
-
-    res.status(400).json({ error: 'Invalid action' });
-});
-
-// Helper: Generate tasks from refinement feedback
-async function generateRefinementTasks(orch, feedback) {
-    const prompt = `Based on user feedback, create additional tasks:
-
-ORIGINAL GOAL: ${orch.goal}
-COMPLETED TASKS: ${orch.plan.map(t => t.title).join(', ')}
-
-USER FEEDBACK:
-${feedback}
-
-Create 1-5 new tasks to address this feedback. Output as JSON array:
-[{"id": "refine-1", "title": "...", "description": "...", "agentType": "...", "dependencies": [], "priority": "P1"}]`;
-
-    const refineProcess = spawn(CLAUDE_BINARY, ['--print', '-p', prompt], {
-        cwd: path.join(__dirname, '..'),
-        stdio: ['inherit', 'pipe', 'pipe'],
-        env: { ...process.env, ANTHROPIC_API_KEY: '' }
-    });
-
-    let output = '';
-    refineProcess.stdout.on('data', (d) => output += d.toString());
-    refineProcess.stderr.on('data', (d) => console.log(`[Orchestrator] Refine stderr: ${d.toString()}`));
-
-    refineProcess.on('close', (code) => {
-        if (code === 0) {
-            try {
-                const jsonMatch = output.match(/\[[\s\S]*\]/);
-                if (jsonMatch) {
-                    const newTasks = JSON.parse(jsonMatch[0]);
-                    orch.plan.push(...newTasks);
-                    orch.phase = 'execution';
-
-                    broadcastOrchestration(orch.id, {
-                        type: 'plan',
-                        plan: orch.plan,
-                        message: `Added ${newTasks.length} refinement tasks. Resuming execution...`
-                    });
-
-                    executeNextTasks(orch);
-                }
-            } catch (e) {
-                console.error(`[Orchestrator] Error parsing refinement: ${e.message}`);
-            }
-        }
-    });
-}
-
-// GET /api/locks - List active task locks
-app.get('/api/locks', (req, res) => {
-    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
-    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : '';
-    const locksDir = path.join(projectRoot, '.claude', 'locks');
-
-    try {
-        if (!fs.existsSync(locksDir)) {
-            return res.json({ locks: [] });
-        }
-
-        const files = fs.readdirSync(locksDir).filter(f => f.endsWith('.lock'));
-        const locks = [];
-
-        for (const file of files) {
-            try {
-                const content = fs.readFileSync(path.join(locksDir, file), 'utf8');
-                const lock = JSON.parse(content);
-                const taskId = file.replace('.lock', '');
-
-                locks.push({
-                    task_id: taskId,
-                    session_id: lock.session_id || 'unknown',
-                    session_short: (lock.session_id || '').slice(0, 8),
-                    locked_at: lock.locked_at || new Date(lock.timestamp * 1000).toLocaleString(),
-                    files: lock.files_touched || lock.files || []
-                });
-            } catch (e) {
-                // Skip invalid lock files
-            }
-        }
-
-        res.json({ locks });
-    } catch (err) {
-        res.json({ locks: [], error: err.message });
-    }
-});
 
 // GET /api/deferred - List deferred edits queue
 app.get('/api/deferred', (req, res) => {
@@ -4618,6 +2709,119 @@ app.get('/api/events', (req, res) => {
     });
 });
 
+// ============================================================================
+// NATIVE TASK ENGINE API (/api/tasks/*)
+// ============================================================================
+
+// Middleware: check task engine is ready
+const requireTaskEngine = (req, res, next) => {
+    if (!taskEngineReady) {
+        return res.status(503).json({ error: 'Task engine not initialized. Set MASTER_PLAN_PATH first.' });
+    }
+    next();
+};
+
+// GET /api/tasks/stats - Task statistics
+app.get('/api/tasks/stats', requireTaskEngine, (req, res) => {
+    try {
+        res.json(taskEngine.getStats());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/tasks/list - All tasks (optional ?status=X&priority=X)
+app.get('/api/tasks/list', requireTaskEngine, (req, res) => {
+    try {
+        const filters = {};
+        if (req.query.status) filters.status = req.query.status;
+        if (req.query.priority) filters.priority = req.query.priority;
+        const tasks = taskEngine.getTasks(Object.keys(filters).length ? filters : undefined);
+        res.json({ tasks });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/tasks/ready - Tasks with all deps resolved
+app.get('/api/tasks/ready', requireTaskEngine, (req, res) => {
+    try {
+        res.json({ tasks: taskEngine.getReady() });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/tasks/blocked - Tasks with unresolved deps
+app.get('/api/tasks/blocked', requireTaskEngine, (req, res) => {
+    try {
+        res.json({ tasks: taskEngine.getBlocked() });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/tasks/:id/deps - Task details with dependencies
+app.get('/api/tasks/:id/deps', requireTaskEngine, (req, res) => {
+    try {
+        const task = taskEngine.getTask(req.params.id);
+        if (!task) return res.status(404).json({ error: 'Task not found' });
+        res.json(task);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/tasks/graph - Full dependency graph for D3
+app.get('/api/tasks/graph', requireTaskEngine, (req, res) => {
+    try {
+        res.json(taskEngine.getGraph());
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/tasks/:id/claim - Set task to in_progress
+app.post('/api/tasks/:id/claim', requireTaskEngine, (req, res) => {
+    try {
+        const id = req.params.id;
+        const result = taskEngine.updateStatus(id, 'in_progress');
+        if (result.changes === 0) return res.status(404).json({ error: 'Task not found' });
+        // Write back to markdown
+        const masterPlanPath = getMasterPlanPath();
+        taskEngine.writeBackStatus(masterPlanPath, id, 'in_progress');
+        res.json({ success: true, id, status: 'in_progress' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/tasks/:id/close - Set task to done
+app.post('/api/tasks/:id/close', requireTaskEngine, (req, res) => {
+    try {
+        const id = req.params.id;
+        const result = taskEngine.updateStatus(id, 'done');
+        if (result.changes === 0) return res.status(404).json({ error: 'Task not found' });
+        // Write back to markdown
+        const masterPlanPath = getMasterPlanPath();
+        taskEngine.writeBackStatus(masterPlanPath, id, 'done');
+        res.json({ success: true, id, status: 'done' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/tasks/sync - Re-sync from MASTER_PLAN.md
+app.post('/api/tasks/sync', requireTaskEngine, (req, res) => {
+    try {
+        const masterPlanPath = getMasterPlanPath();
+        const count = taskEngine.syncFromMarkdown(masterPlanPath);
+        res.json({ success: true, synced: count });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.listen(PORT, () => {
     const url = `http://localhost:${PORT}`;
     // Cyan + underline + OSC 8 hyperlink for maximum terminal compatibility
@@ -4639,12 +2843,4 @@ app.listen(PORT, () => {
         cleanupStaleWorktrees(4); // 4 hour threshold (reduced from 24)
     }, 60 * 60 * 1000); // 1 hour
 
-    // Setup file watchers for real-time lock monitoring
-    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
-    if (masterPlanPath) {
-        const projectRoot = getProjectRoot(masterPlanPath);
-        if (projectRoot) {
-            setupFileWatchers(projectRoot);
-        }
-    }
 });

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import { useBoardData } from './hooks/use-board-data.js';
 import { FILTERS, applyFilter, nextStatus, prevStatus } from './lib/columns.js';
-import { bdExec } from './lib/bd-client.js';
+import { bdExecAsync } from './lib/bd-client.js';
 import { buildClaudeCommand, buildResearchCommand, copyToClipboard, tmuxSendKeys, detectStrategy } from './lib/claude-launcher.js';
 import Header from './components/Header.js';
 import FilterBar from './components/FilterBar.js';
@@ -12,6 +12,7 @@ import DetailPanel from './components/DetailPanel.js';
 import HelpOverlay from './components/HelpOverlay.js';
 import SearchOverlay from './components/SearchOverlay.js';
 import CreateOverlay from './components/CreateOverlay.js';
+import SetupWizard from './components/SetupWizard.js';
 
 const h = React.createElement;
 
@@ -22,7 +23,7 @@ export default function App() {
   const termHeight = stdout?.rows || 40;
 
   const { allIssues, readyIds, blockedIds, columns, stats, loading, error, refresh } = useBoardData();
-  const [mode, setMode] = useState('board');          // board | detail | help | search | create
+  const [mode, setMode] = useState('board');          // board | detail | help | search | create | setup
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showDetail, setShowDetail] = useState(false);
@@ -91,40 +92,40 @@ export default function App() {
     return selectedIssue.status;
   }, [selectedIssue, activeFilter]);
 
-  const moveForward = useCallback(() => {
+  const moveForward = useCallback(async () => {
     if (!selectedIssue) return;
     const effStatus = getEffectiveStatus();
     const next = nextStatus(effStatus);
     if (!next) { showMsg('Already at end of pipeline'); return; }
     let res;
     if (next === 'closed') {
-      res = bdExec(`close ${selectedIssue.id}`);
+      res = await bdExecAsync(`close ${selectedIssue.id}`);
       showMsg(res.success ? `Closed ${selectedIssue.id}` : `Error: ${res.output}`);
     } else {
-      res = bdExec(`update ${selectedIssue.id} --status ${next}`);
+      res = await bdExecAsync(`update ${selectedIssue.id} --status ${next}`);
       // Auto-assign when moving to in_progress
       if (next === 'in_progress' && res.success) {
         const user = process.env.USER || process.env.USERNAME || 'me';
-        bdExec(`update ${selectedIssue.id} --assignee ${user}`);
+        await bdExecAsync(`update ${selectedIssue.id} --assignee ${user}`);
       }
       showMsg(res.success ? `→ ${next}: ${selectedIssue.id}` : `Error: ${res.output}`);
     }
     refresh();
   }, [selectedIssue, getEffectiveStatus, showMsg, refresh]);
 
-  const moveBackward = useCallback(() => {
+  const moveBackward = useCallback(async () => {
     if (!selectedIssue) return;
     const effStatus = getEffectiveStatus();
     const prev = prevStatus(effStatus);
     if (!prev) { showMsg('Already at start of pipeline'); return; }
-    const res = bdExec(`update ${selectedIssue.id} --status ${prev}`);
+    const res = await bdExecAsync(`update ${selectedIssue.id} --status ${prev}`);
     showMsg(res.success ? `← ${prev}: ${selectedIssue.id}` : `Error: ${res.output}`);
     refresh();
   }, [selectedIssue, getEffectiveStatus, showMsg, refresh]);
 
-  const closeTask = useCallback(() => {
+  const closeTask = useCallback(async () => {
     if (!selectedIssue) return;
-    const res = bdExec(`close ${selectedIssue.id}`);
+    const res = await bdExecAsync(`close ${selectedIssue.id}`);
     showMsg(res.success ? `✓ Closed ${selectedIssue.id}` : `Error: ${res.output}`);
     refresh();
   }, [selectedIssue, showMsg, refresh]);
@@ -278,6 +279,7 @@ export default function App() {
 
       // Mode switches
       if (input === 'o') { setMode('create'); return; }
+      if (input === 'S') { setMode('setup'); return; }
       if (input === '/') { setMode('search'); return; }
       if (input === '?') { setMode('help'); return; }
     }
@@ -365,6 +367,10 @@ export default function App() {
     mode === 'create' ? h(CreateOverlay, {
       onCreated: () => { refresh(); setMode('board'); showMsg('Task created!'); },
       onClose: () => setMode('board'),
+    }) : null,
+    mode === 'setup' ? h(SetupWizard, {
+      onDone: () => { setMode('board'); showMsg('Setup complete!'); },
+      onCancel: () => setMode('board'),
     }) : null,
   );
 }

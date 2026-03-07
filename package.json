@@ -13,9 +13,11 @@
     "status": "curl -s http://localhost:6010/api/status 2>/dev/null || echo '{\"running\":false}'",
     "tasks": "curl -s http://localhost:6010/api/tasks 2>/dev/null",
     "config": "curl -s http://localhost:6010/api/config 2>/dev/null",
-    "reconfigure": "bash install.sh --reconfigure"
+    "reconfigure": "bash install.sh --reconfigure",
+    "tui": "node tui/src/index.js"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.18.2"

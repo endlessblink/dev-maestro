@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { bd } from '../lib/bd-client.js';
+import { bdAsync } from '../lib/bd-client.js';
 import { bucketIssues } from '../lib/columns.js';
 import { parseMasterPlanDescriptions, getMasterPlanPath } from '../lib/masterplan-parser.js';
 
@@ -14,14 +14,16 @@ export function useBoardData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback(async () => {
     try {
-      // Fetch all data sources
-      const issues = bd('list --limit 0') || [];
-      const readyIssues = bd('ready') || [];
-      const blockedIssues = bd('blocked') || [];
-      const closedIssues = bd('list --limit 0 --status=closed') || [];
-      const statsData = bd('stats');
+      // Fetch all data sources (parallel where possible)
+      const [issues, readyIssues, blockedIssues, closedIssues, statsData] = await Promise.all([
+        bdAsync('list --limit 0').then(r => r || []),
+        bdAsync('ready').then(r => r || []),
+        bdAsync('blocked').then(r => r || []),
+        bdAsync('list --limit 0 --status=closed').then(r => r || []),
+        bdAsync('stats'),
+      ]);
 
       // Build ID sets
       const rIds = new Set(readyIssues.map(i => i.id));

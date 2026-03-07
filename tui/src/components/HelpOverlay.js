@@ -25,6 +25,7 @@ const KEYBINDINGS = [
     ['M', 'Move task backward in pipeline'],
     ['x', 'Close task'],
     ['o', 'Create new task'],
+    ['S', 'Setup wizard (new project)'],
     ['r', 'Refresh data'],
   ]],
   ['Claude', [
