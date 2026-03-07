@@ -731,11 +731,7 @@
                 projects.forEach(p => {
                     const opt = document.createElement('option');
                     opt.value = p.name;
-                    let label = p.name;
-                    if (p.modules && p.modules.length > 0) {
-                        label += ' [' + p.modules.join(', ') + ']';
-                    }
-                    opt.textContent = label;
+                    opt.textContent = p.name;
                     if (p.active) opt.selected = true;
                     projectSelect.appendChild(opt);
                 });

@@ -222,86 +222,159 @@ show_status() {
 
 # ─── Interactive Menu ────────────────────────────────────────────────────────
 
+# Read a single keypress, resolving arrow escape sequences
+read_key() {
+  local key
+  IFS= read -r -s -n1 key
+  if [[ "$key" == $'\x1b' ]]; then
+    local seq
+    IFS= read -r -s -n1 -t 0.1 seq
+    if [[ "$seq" == "[" ]]; then
+      IFS= read -r -s -n1 -t 0.1 seq
+      case "$seq" in
+        A) echo "UP"; return ;;
+        B) echo "DOWN"; return ;;
+      esac
+    fi
+    echo "ESC"; return
+  fi
+  case "$key" in
+    "") echo "ENTER" ;;
+    k|K) echo "UP" ;;
+    j|J) echo "DOWN" ;;
+    q|Q) echo "QUIT" ;;
+    *) echo "$key" ;;
+  esac
+}
+
 show_menu() {
   local server_running=false
   is_server_running && server_running=true
 
-  print_logo
-
-  btop
-
-  # Server status line
+  # Build menu items: (label, description, action_key)
+  local labels=() descs=() actions=()
   if $server_running; then
-    local info
-    info=$(get_server_info)
-    local project_path=$(echo "$info" | grep -o '"masterPlanPath":"[^"]*"' | cut -d'"' -f4)
-    local project_name=$(basename "$(dirname "$(dirname "$project_path")")" 2>/dev/null)
-    bline "${BGRN}●${RST} Server ${GRN}running${RST}  ${DIM}port ${PORT}${RST}  ${DIM}project: ${BCYN}${project_name}${RST}"
+    labels+=("Open TUI")         ; descs+=("terminal kanban board") ; actions+=("tui")
+    labels+=("Open Dashboard")   ; descs+=("browser UI")            ; actions+=("dash")
+    labels+=("Launch Both")      ; descs+=("dashboard + TUI")       ; actions+=("both")
+    labels+=("Status")           ; descs+=("detailed server info")  ; actions+=("status")
+    labels+=("Stop Server")      ; descs+=("shutdown dashboard")    ; actions+=("stop")
   else
-    bline "${BBLK}●${RST} Server ${DIM}stopped${RST}"
+    labels+=("Open TUI")         ; descs+=("starts server + terminal board") ; actions+=("tui")
+    labels+=("Start Dashboard")  ; descs+=("start server + open browser")    ; actions+=("dash")
+    labels+=("Launch Both")      ; descs+=("dashboard + TUI")                ; actions+=("both")
   fi
+  labels+=("Quit") ; descs+=("") ; actions+=("quit")
 
-  bsep
-  bempty
+  local count=${#labels[@]}
+  local cursor=0
 
-  if $server_running; then
-    bline "  ${BOLD}${BCYN}1${RST}  ${BCYN}▸${RST} Open TUI            ${DIM}terminal kanban board${RST}"
-    bline "  ${BOLD}${BCYN}2${RST}  ${BCYN}▸${RST} Open Dashboard      ${DIM}browser UI${RST}"
-    bline "  ${BOLD}${BCYN}3${RST}  ${BCYN}▸${RST} Launch Both         ${DIM}dashboard + TUI${RST}"
+  # Hide cursor
+  tput civis 2>/dev/null
+  trap 'tput cnorm 2>/dev/null' EXIT
+
+  while true; do
+    # Clear screen and draw
+    tput clear 2>/dev/null || printf '\033[2J\033[H'
+
+    print_logo
+    btop
+
+    # Server status line
+    if $server_running; then
+      local info
+      info=$(get_server_info)
+      local project_path=$(echo "$info" | grep -o '"masterPlanPath":"[^"]*"' | cut -d'"' -f4)
+      local project_name=$(basename "$(dirname "$(dirname "$project_path")")" 2>/dev/null)
+      bline "${BGRN}●${RST} Server ${GRN}running${RST}  ${DIM}port ${PORT}${RST}  ${DIM}project: ${BCYN}${project_name}${RST}"
+    else
+      bline "${BBLK}●${RST} Server ${DIM}stopped${RST}"
+    fi
+
+    bsep
     bempty
-    bline "  ${BOLD}${BYEL}s${RST}  ${BYEL}▸${RST} Status              ${DIM}detailed server info${RST}"
-    bline "  ${BOLD}${BRED}x${RST}  ${BRED}▸${RST} Stop Server         ${DIM}shutdown dashboard${RST}"
-  else
-    bline "  ${BOLD}${BCYN}1${RST}  ${BCYN}▸${RST} Open TUI            ${DIM}starts server + terminal board${RST}"
-    bline "  ${BOLD}${BCYN}2${RST}  ${BCYN}▸${RST} Start Dashboard     ${DIM}start server + open browser${RST}"
-    bline "  ${BOLD}${BCYN}3${RST}  ${BCYN}▸${RST} Launch Both         ${DIM}dashboard + TUI${RST}"
-  fi
 
-  bempty
-  bline "  ${BOLD}${BBLK}q${RST}  ${BBLK}▸${RST} Quit"
-  bempty
-  bbot
-  echo ""
-  printf "  ${BOLD}Choose${RST} ${DIM}▸${RST} "
-  read -r -n1 choice
-  echo ""
-  echo ""
+    # Render menu items
+    for i in "${!labels[@]}"; do
+      local label="${labels[$i]}"
+      local desc="${descs[$i]}"
+      local action="${actions[$i]}"
 
-  case "$choice" in
-    1)
-      if ! $server_running; then
-        start_server || exit 1
+      # Pick color based on action type
+      local color="$BCYN"
+      [[ "$action" == "status" ]] && color="$BYEL"
+      [[ "$action" == "stop" ]]   && color="$BRED"
+      [[ "$action" == "quit" ]]   && color="$BBLK"
+
+      if [ "$i" -eq "$cursor" ]; then
+        # Selected: highlighted with arrow
+        bline "  ${BOLD}${color}>${RST} ${BOLD}${color}${label}${RST}  ${DIM}${desc}${RST}"
+      else
+        bline "    ${DIM}${label}  ${desc}${RST}"
       fi
-      start_tui
-      ;;
-    2)
-      if ! $server_running; then
-        start_server || exit 1
+
+      # Add separator before quit (last item) and before status section
+      if $server_running && [ "$i" -eq 2 ]; then
+        bempty
       fi
-      open_dashboard
-      ;;
-    3)
-      if ! $server_running; then
-        start_server || exit 1
+      if [[ "${actions[$((i+1))]:-}" == "quit" ]]; then
+        bempty
       fi
-      open_dashboard
-      echo ""
-      start_tui
-      ;;
-    s|S)
-      show_status
-      ;;
-    x|X)
-      stop_server
-      ;;
-    q|Q|"")
-      exit 0
-      ;;
-    *)
-      echo -e "  ${BRED}Invalid choice${RST}"
-      exit 1
-      ;;
-  esac
+    done
+
+    bempty
+    bbot
+    echo ""
+    echo -e "  ${DIM}Navigate: arrows/j/k  Select: Enter  Quit: q/Esc${RST}"
+
+    # Read input
+    local key
+    key=$(read_key)
+
+    case "$key" in
+      UP)
+        ((cursor > 0)) && ((cursor--))
+        ;;
+      DOWN)
+        ((cursor < count - 1)) && ((cursor++))
+        ;;
+      ENTER)
+        tput cnorm 2>/dev/null
+        echo ""
+        local selected="${actions[$cursor]}"
+        case "$selected" in
+          tui)
+            $server_running || start_server || exit 1
+            start_tui
+            ;;
+          dash)
+            $server_running || start_server || exit 1
+            open_dashboard
+            ;;
+          both)
+            $server_running || start_server || exit 1
+            open_dashboard
+            echo ""
+            start_tui
+            ;;
+          status)
+            show_status
+            ;;
+          stop)
+            stop_server
+            ;;
+          quit)
+            exit 0
+            ;;
+        esac
+        return
+        ;;
+      QUIT|ESC)
+        tput cnorm 2>/dev/null
+        exit 0
+        ;;
+    esac
+  done
 }
 
 # ─── Help ────────────────────────────────────────────────────────────────────
