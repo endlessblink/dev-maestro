@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseMasterPlanTasks, getMasterPlanPath } from './masterplan-parser.js';
 
 // ── Server URL resolution ───────────────────────────────────────────
 
@@ -204,8 +205,49 @@ export function bd(args) {
   return bdFallback(args);
 }
 
+// ── MASTER_PLAN.md fallback (cached per process) ────────────────────
+let _masterPlanTasks = null;
+
+function getMasterPlanFallback(args) {
+  if (!_masterPlanTasks) {
+    const mpPath = getMasterPlanPath();
+    _masterPlanTasks = mpPath ? parseMasterPlanTasks(mpPath) : [];
+  }
+  if (!_masterPlanTasks.length) return null;
+
+  const parts = args.trim().split(/\s+/);
+  const cmd = parts[0];
+
+  if (cmd === 'list') {
+    const statusMatch = args.match(/--status=(\S+)/);
+    if (statusMatch) {
+      const filter = statusMatch[1];
+      return _masterPlanTasks.filter(t => t.status === filter);
+    }
+    // Default: return non-closed
+    return _masterPlanTasks.filter(t => t.status !== 'closed');
+  }
+  if (cmd === 'ready') {
+    // "Ready" = planned tasks (open status, not review)
+    return _masterPlanTasks.filter(t => t.status === 'open' && !t.labels?.includes('review'));
+  }
+  if (cmd === 'blocked') {
+    return []; // No dependency info in MASTER_PLAN.md
+  }
+  if (cmd === 'stats') {
+    const total = _masterPlanTasks.length;
+    const open = _masterPlanTasks.filter(t => t.status === 'open').length;
+    const wip = _masterPlanTasks.filter(t => t.status === 'in_progress').length;
+    const review = _masterPlanTasks.filter(t => t.status === 'inreview').length;
+    const done = _masterPlanTasks.filter(t => t.status === 'closed').length;
+    return { summary: { total, open, in_progress: wip, review, done } };
+  }
+  return null;
+}
+
 /**
- * Async version of bd() — prefers REST API, falls back to bd binary.
+ * Async version of bd() — prefers REST API, falls back to bd binary,
+ * then falls back to parsing MASTER_PLAN.md directly.
  */
 export async function bdAsync(args) {
   try {
@@ -213,7 +255,15 @@ export async function bdAsync(args) {
       return await bdRoute(args);
     }
   } catch { /* fall through */ }
-  return bdFallback(args);
+
+  // Try bd binary
+  const bdResult = bdFallback(args);
+  if (bdResult && (Array.isArray(bdResult) ? bdResult.length > 0 : bdResult)) {
+    return bdResult;
+  }
+
+  // Final fallback: parse MASTER_PLAN.md directly
+  return getMasterPlanFallback(args);
 }
 
 async function bdRoute(args) {

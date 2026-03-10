@@ -1,6 +1,6 @@
 export const COLUMNS = [
   { key: 'backlog', label: 'Backlog', color: 'gray', statuses: ['open'] },
-  { key: 'ready', label: 'Ready', color: 'cyan', statuses: ['open'] },
+  { key: 'ready', label: 'Planned', color: 'cyan', statuses: ['open'] },
   { key: 'in_progress', label: 'In Progress', color: 'yellow', statuses: ['in_progress'] },
   { key: 'review', label: 'Review', color: 'magenta', statuses: ['inreview'] },
   { key: 'done', label: 'Done', color: 'green', statuses: ['closed'] },
@@ -83,12 +83,12 @@ export function bucketIssues(allIssues, readyIds, blockedIds) {
 
 // Filter definitions for the new master-detail layout
 export const FILTERS = [
-  { key: 'all',     label: 'ALL',     color: 'white',   shortcut: '1' },
-  { key: 'ready',   label: 'READY',   color: 'cyan',    shortcut: '2' },
-  { key: 'wip',     label: 'WIP',     color: 'yellow',  shortcut: '3' },
-  { key: 'review',  label: 'REVIEW',  color: 'magenta', shortcut: '4' },
-  { key: 'backlog', label: 'BACKLOG', color: 'gray',    shortcut: '5' },
-  { key: 'done',    label: 'DONE',    color: 'green',   shortcut: '6' },
+  { key: 'ready',   label: 'PLANNED', color: 'cyan',    shortcut: '1' },
+  { key: 'wip',     label: 'WIP',     color: 'yellow',  shortcut: '2' },
+  { key: 'review',  label: 'REVIEW',  color: 'magenta', shortcut: '3' },
+  { key: 'backlog', label: 'BACKLOG', color: 'gray',    shortcut: '4' },
+  { key: 'done',    label: 'DONE',    color: 'green',   shortcut: '5' },
+  { key: 'all',     label: 'ALL',     color: 'white',   shortcut: '6' },
 ];
 
 /**

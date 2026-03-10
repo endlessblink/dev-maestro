@@ -439,6 +439,39 @@
             border-color: rgba(13, 148, 136, 0.2);
         }
 
+        .scan-btn {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.5);
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+            margin-left: 4px;
+        }
+        .scan-btn:hover {
+            color: #60a5fa;
+            border-color: rgba(96,165,250,0.3);
+            background: rgba(96,165,250,0.1);
+        }
+        .scan-btn.scanning {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+        [data-theme="light"] .scan-btn {
+            border-color: rgba(0,0,0,0.15);
+            color: rgba(0,0,0,0.4);
+        }
+        [data-theme="light"] .scan-btn:hover {
+            color: #2563eb;
+            border-color: rgba(37,99,235,0.3);
+            background: rgba(37,99,235,0.1);
+        }
+
         /* Project switch notification */
         .project-toast {
             position: fixed;
@@ -551,6 +584,12 @@
             <select id="project-select" title="Switch project">
                 <option value="">Loading...</option>
             </select>
+            <button id="project-scan-btn" class="scan-btn" title="Scan for new projects" type="button">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+            </button>
         </div>
 
         <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode">
@@ -760,6 +799,29 @@
                 refreshKanban();
             } catch (err) {
                 showToast('Network error switching project');
+            }
+        });
+
+        // Scan for new projects button
+        const scanBtn = document.getElementById('project-scan-btn');
+        scanBtn.addEventListener('click', async () => {
+            scanBtn.classList.add('scanning');
+            scanBtn.disabled = true;
+            try {
+                const res = await fetch('/api/projects/scan');
+                const data = await res.json();
+                const added = (data.added || []).length;
+                if (added > 0) {
+                    showToast('Found ' + added + ' new project' + (added > 1 ? 's' : ''));
+                    await loadProjects();
+                } else {
+                    showToast('No new projects found');
+                }
+            } catch (err) {
+                showToast('Scan failed');
+            } finally {
+                scanBtn.classList.remove('scanning');
+                scanBtn.disabled = false;
             }
         });
 

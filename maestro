@@ -83,7 +83,7 @@ get_task_stats() {
 
 start_server() {
   cd "$DIR"
-  node server.js > /tmp/maestro-server.log 2>&1 &
+  MAESTRO_CWD="${MAESTRO_CWD:-$(pwd)}" node server.js > /tmp/maestro-server.log 2>&1 &
   local pid=$!
 
   # Animated spinner while waiting
@@ -115,6 +115,7 @@ open_dashboard() {
 }
 
 start_tui() {
+  export MAESTRO_CWD="${MAESTRO_CWD:-$(pwd)}"
   cd "$DIR"
   exec node "$DIR/tui/src/index.js"
 }
@@ -393,6 +394,7 @@ show_help() {
   bline "  ${BCYN}stop${RST}          Stop dashboard server"
   bline "  ${BCYN}install${RST}       Install/configure a project"
   bline "  ${BCYN}archive${RST}       Archive done tasks"
+  bline "  ${BCYN}discover${RST}      Scan for new projects"
   bline "  ${BCYN}help${RST}          This help screen"
   bempty
   bbot
@@ -434,6 +436,36 @@ case "${1:-}" in
   install)
     shift
     exec bash "$DIR/install.sh" "$@"
+    ;;
+  discover)
+    echo -e "\n  ${BCYN}${BOLD}Scanning for projects...${RST}\n"
+    if is_server_running; then
+      result=$(curl -s "http://localhost:${PORT}/api/projects/scan")
+      added=$(echo "$result" | grep -o '"added":\[[^]]*\]' | grep -o '"name":"[^"]*"' | wc -l)
+      total=$(echo "$result" | grep -o '"total":[0-9]*' | cut -d: -f2)
+      echo -e "  ${BGRN}✓${RST} Scan complete: ${BOLD}${total}${RST} projects found, ${BOLD}${added}${RST} new"
+      if [ "$added" -gt 0 ]; then
+        echo -e "  ${DIM}New projects:${RST}"
+        echo "$result" | grep -o '"added":\[[^]]*\]' | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | while read -r name; do
+          echo -e "    ${BGRN}+${RST} ${name}"
+        done
+      fi
+    else
+      echo -e "  ${DIM}Server not running, scanning locally...${RST}"
+      node -e "
+        const s = require('$DIR/modules/project-scanner.js');
+        const cfg = require('$DIR/local/config.json') || {};
+        const paths = cfg.projectScanPaths || [process.env.HOME];
+        const r = s.syncDiscoveredProjects(paths, '$DIR/projects.json', { maxDepth: cfg.projectScanDepth || 5 });
+        console.log(JSON.stringify(r));
+      " 2>/dev/null | {
+        read -r result
+        added=$(echo "$result" | grep -o '"added":\[[^]]*\]' | grep -o '"name":"[^"]*"' | wc -l)
+        total=$(echo "$result" | grep -o '"total":[0-9]*' | cut -d: -f2)
+        echo -e "  ${BGRN}✓${RST} Scan complete: ${BOLD}${total:-0}${RST} projects found, ${BOLD}${added:-0}${RST} new"
+      }
+    fi
+    echo ""
     ;;
   help|--help|-h)
     show_help

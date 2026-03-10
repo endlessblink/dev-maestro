@@ -55,6 +55,11 @@ function closeDb() {
 const TASK_HEADER_RE = /^###\s+(~~)?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE)-\d+)(~~)?:\s*(.+?)(?:\s*\(([^)]+)\))?\s*$/;
 const FIELD_RE = /^\*\*([\w \/]+)\*\*[^:]*:\s*(.*)/;
 
+// Table row: | ID | title | priority | status | deps |
+// Handles: bold (**TASK-001**), strikethrough (~~TASK-001~~), combined (~~**TASK-001**~~)
+// Cells may be wrapped in ~~ and/or ** for done tasks
+const TABLE_ROW_RE = /^\|\s*(?:~~)?(?:\*\*)?(?:\`?)?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE)-\d+)(?:\`?)?(?:\*\*)?(?:~~)?\s*\|/;
+
 const STATUS_EMOJI_MAP = {
   '🔄 IN PROGRESS': 'in_progress',
   '🔄 in progress': 'in_progress',
@@ -140,6 +145,77 @@ function parseMarkdown(mdContent) {
         priority: 'P2',
         deps: [],
       };
+      continue;
+    }
+
+    // ── Table row parsing ────────────────────────────────────────────
+    const tableMatch = line.match(TABLE_ROW_RE);
+    if (tableMatch) {
+      flush();
+      current = null; // table rows are standalone, not nested under headers
+
+      const taskId = tableMatch[1];
+      const isStrikethrough = line.includes('~~');
+
+      // Split cells by |, trim each, filter empties
+      const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+      // cells[0] = ID (possibly wrapped in ~~ or **)
+      // Remaining cells vary by format — detect which format we have
+
+      let title = '';
+      let priority = 'P2';
+      let status = isStrikethrough ? 'done' : 'planned';
+      let deps = [];
+
+      // Clean markdown formatting from a cell value
+      const clean = (s) => s.replace(/\*\*/g, '').replace(/~~/g, '').replace(/`/g, '').trim();
+
+      if (cells.length >= 5) {
+        // Format A: ID | Title | Priority | Status | Deps
+        title = clean(cells[1]);
+        priority = parsePriority(clean(cells[2]));
+        const rawStatus = clean(cells[3]);
+        if (!isStrikethrough) status = parseStatus(null, rawStatus);
+        const depStr = clean(cells[4]);
+        if (depStr && depStr !== '-') deps = parseDeps(depStr);
+      } else if (cells.length >= 3) {
+        // Format B: ID | Priority | Title (with possible emoji status)
+        const cell1 = clean(cells[1]);
+        const cell2 = clean(cells[2]);
+
+        // Detect if cell1 is a priority (P0/P1/P2/P3) or a title
+        if (/^P[0-4]$/i.test(cell1)) {
+          priority = parsePriority(cell1);
+          title = cell2;
+        } else {
+          // cell1 is the title, cell2 might be priority or deps
+          title = cell1;
+          if (/^P[0-4]$/i.test(cell2)) {
+            priority = parsePriority(cell2);
+          }
+        }
+
+        // Check for emoji status in the title or raw cells
+        const rawLine = cells.join(' ');
+        if (!isStrikethrough) {
+          if (/DONE|done/.test(rawLine)) status = 'done';
+          else if (/IN.?PROGRESS|WIP|wip/i.test(rawLine)) status = 'in_progress';
+          else if (/REVIEW|review/i.test(rawLine)) status = 'review';
+          else if (/PAUSED|FROZEN|paused|frozen/i.test(rawLine)) status = 'paused';
+          else if (/TODO|PLANNED|todo|planned/i.test(rawLine)) status = 'planned';
+        }
+      } else if (cells.length >= 2) {
+        // Format C: ID | Title (no status/priority)
+        title = clean(cells[1]);
+      }
+
+      // Strip leading emoji status markers from title
+      title = title.replace(/^[\u2705\u{1F9CA}\u{1F440}\u{1F6A7}\u26A0\uFE0F\u{1F525}\u2B50]\s*/u, '').trim();
+
+      // Skip template/example rows
+      if (title && !taskId.includes('XXX')) {
+        tasks.push({ id: taskId, title, status, priority, deps });
+      }
       continue;
     }
 

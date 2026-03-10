@@ -4,7 +4,108 @@
       "name": "flow-state",
       "root": "/media/endlessblink/data/my-projects/ai-development/productivity/flow-state",
       "masterPlan": "/media/endlessblink/data/my-projects/ai-development/productivity/flow-state/docs/MASTER_PLAN.md",
-      "modules": ["dashboard", "tui", "skills", "beads"],
+      "modules": [
+        "dashboard",
+        "tui",
+        "skills",
+        "beads"
+      ],
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "claude-and-conquer",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/claude-and-conquer",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/bots+automation/claude-and-conquer/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "newsletter-maker",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/newsletter-maker",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/bots+automation/newsletter-maker/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "dev-board",
+      "root": "/media/endlessblink/data/my-projects/ai-development/cc-linux-enhancments/dev-board",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/cc-linux-enhancments/dev-board/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "action!",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/action!",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/action!/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "capture-studio",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "legacy_v1",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio/legacy_v1",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio/legacy_v1/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "remote-control",
+      "root": "/media/endlessblink/data/my-projects/ai-development/devops/remote-control",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/devops/remote-control/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "bina-meatzevet-courses",
+      "root": "/media/endlessblink/data/my-projects/ai-development/freelance/bina-meatzevet-courses",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/freelance/bina-meatzevet-courses/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "palladio-flow",
+      "root": "/media/endlessblink/data/my-projects/ai-development/freelance/kanopia/palladio-flow",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/freelance/kanopia/palladio-flow/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "Claude-of-war",
+      "root": "/media/endlessblink/data/my-projects/ai-development/game-dev/Claude-of-war",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/game-dev/Claude-of-war/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "master_plan_demo",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/master_plan_demo",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/misc/master_plan_demo/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-03-07"
+    },
+    {
+      "name": "templates",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/master-plan/templates",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/productivity/master-plan/templates/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
       "addedAt": "2026-03-07"
     }
   ]

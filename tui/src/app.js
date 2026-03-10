@@ -24,7 +24,7 @@ export default function App() {
 
   const { allIssues, readyIds, blockedIds, columns, stats, loading, error, refresh } = useBoardData();
   const [mode, setMode] = useState('board');          // board | detail | help | search | create | setup
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('ready');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showDetail, setShowDetail] = useState(false);
   const [message, setMessage] = useState('');

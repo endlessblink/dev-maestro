@@ -54,9 +54,30 @@ export default function TaskCard({ issue, isSelected, isBlocked, width }) {
     indicatorDim = true;
   }
 
+  // ── Type icon ────────────────────────────────────────────────────────
+  const issueType = (issue.issue_type || '').toLowerCase();
+  let typeIcon;
+  switch (issueType) {
+    case 'bug':     typeIcon = '\u{1F41B}'; break;  // bug emoji
+    case 'feature': typeIcon = '\u2728'; break;      // sparkles
+    case 'epic':    typeIcon = '\u{1F3D4}\uFE0F'; break; // mountain
+    default:        typeIcon = '\u{1F4CB}'; break;   // clipboard
+  }
+
+  // ── Priority badge ──────────────────────────────────────────────────
+  const priority = issue.priority ?? 2;
+  let prioLabel, prioColor;
+  switch (priority) {
+    case 0: prioLabel = 'P0'; prioColor = 'red'; break;
+    case 1: prioLabel = 'P1'; prioColor = 'yellow'; break;
+    case 2: prioLabel = 'P2'; prioColor = undefined; break;
+    case 3: prioLabel = 'P3'; prioColor = 'gray'; break;
+    default: prioLabel = 'P2'; prioColor = undefined; break;
+  }
+
   // ── Title ─────────────────────────────────────────────────────────────────
-  // indicator(1) + space(1) = 2 chars consumed; rest for title
-  const titleAvail = Math.max(4, textWidth - 2);
+  // indicator(1) + space(1) + typeIcon(2) + space(1) + prioLabel(2) + space(1) = 8 chars
+  const titleAvail = Math.max(4, textWidth - 8);
   const rawTitle = issue.title || '(untitled)';
   const titleText = truncate(rawTitle, titleAvail);
 
@@ -121,20 +142,26 @@ export default function TaskCard({ issue, isSelected, isBlocked, width }) {
   }
   if (isBlocked) barColor = 'red';
 
-  // ── Border color ──────────────────────────────────────────────────────────
+  // ── Border color (by status for visual grouping) ──────────────────────
   let borderColor;
   if (isSelected) {
     borderColor = 'cyan';
   } else if (isBlocked) {
     borderColor = 'red';
   } else {
-    const type = (issue.issue_type || '').toLowerCase();
-    switch (type) {
-      case 'bug':     borderColor = 'red';     break;
-      case 'feature': borderColor = 'green';   break;
-      case 'task':    borderColor = 'cyan';    break;
-      case 'epic':    borderColor = 'magenta'; break;
-      default:        borderColor = 'gray';    break;
+    switch (status) {
+      case 'in_progress':
+      case 'wip':
+        borderColor = 'yellow'; break;
+      case 'review':
+      case 'inreview':
+      case 'in_review':
+        borderColor = 'magenta'; break;
+      case 'done':
+      case 'closed':
+        borderColor = 'green'; break;
+      default:
+        borderColor = 'gray'; break;
     }
   }
 
@@ -164,10 +191,13 @@ export default function TaskCard({ issue, isSelected, isBlocked, width }) {
     borderStyle: 'single',
     borderColor,
   },
-    // ── Line 1: indicator + title ─────────────────────────────────────────
+    // ── Line 1: typeIcon + indicator + priority + title ──────────────────
     h(Box, { flexDirection: 'row' },
       h(Text, null, ' '),
+      h(Text, null, typeIcon + ' '),
       h(Text, { color: indicatorColor, dimColor: indicatorDim, bold: true }, indicator),
+      h(Text, null, ' '),
+      h(Text, { color: prioColor, bold: priority <= 1 }, prioLabel),
       h(Text, null, ' '),
       h(Text, {
         color: isSelected ? 'cyan' : 'white',

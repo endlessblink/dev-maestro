@@ -137,6 +137,138 @@ export function parseMasterPlanDescriptions(masterPlanPath) {
 }
 
 /**
+ * Parse MASTER_PLAN.md table rows AND section headers into full task objects.
+ * This is the standalone fallback when neither the server nor bd binary is available.
+ * Returns an array in the same shape as transformTask() output from bd-client.js.
+ * @param {string} masterPlanPath - absolute path to MASTER_PLAN.md
+ * @returns {Array<Object>} - array of task objects
+ */
+export function parseMasterPlanTasks(masterPlanPath) {
+  if (!masterPlanPath || !fs.existsSync(masterPlanPath)) return [];
+
+  const content = fs.readFileSync(masterPlanPath, 'utf8');
+  const lines = content.split('\n');
+  const tasks = new Map(); // id → task object (dedup by id)
+
+  // Priority string → numeric
+  const priorityMap = { P0: 0, P1: 1, P2: 2, P3: 3 };
+  function parsePriority(str) {
+    const m = str.match(/P[0-3]/);
+    return m ? (priorityMap[m[0]] ?? 2) : 2;
+  }
+
+  // Detect status from text
+  function parseStatus(text) {
+    if (/✅\s*(DONE|Done)|~~/.test(text)) return 'closed';
+    if (/🔄|IN.?PROGRESS/i.test(text)) return 'in_progress';
+    if (/👀|REVIEW/i.test(text)) return 'inreview';
+    if (/⏸️|PAUSED/i.test(text)) return 'open';
+    if (/📋|PLANNED/i.test(text)) return 'open';
+    return 'open';
+  }
+
+  // ── Parse table rows: | **ID** | **Priority** | **Title/Status** |
+  // Format varies but ID is always (TASK|BUG|FEATURE|...)-NNN
+  const TABLE_RE = /\|\s*(?:~~)?\*?\*?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE|INQUIRY)-\d+)\*?\*?(?:~~)?\s*\|([^|]*)\|([^|]*)\|?/;
+  for (const line of lines) {
+    const m = line.match(TABLE_RE);
+    if (!m) continue;
+    const id = m[1];
+    const col2 = m[2].trim();
+    const col3 = m[3].trim();
+
+    // Determine which column has priority and which has the title
+    // Common formats:
+    //   | **ID** | **P2** | **Title text** |
+    //   | ID | P2 | Title text |
+    let priority = 2;
+    let title = '';
+    let statusText = '';
+
+    if (/P[0-3]/.test(col2)) {
+      priority = parsePriority(col2);
+      // col3 has the title + status
+      title = col3.replace(/\*\*/g, '').replace(/[📋🔄👀⏸️✅]/g, '').trim();
+      statusText = col3;
+    } else {
+      // Maybe col2 is title, col3 is status
+      title = col2.replace(/\*\*/g, '').replace(/[📋🔄👀⏸️✅]/g, '').trim();
+      statusText = col2 + col3;
+      const pm = col3.match(/P[0-3]/);
+      if (pm) priority = priorityMap[pm[0]] ?? 2;
+    }
+
+    // Clean up title — remove status markers, dates, parens at end
+    title = title
+      .replace(/\((?:📋|🔄|👀|⏸️|✅)\s*(?:PLANNED|IN PROGRESS|REVIEW|PAUSED|DONE).*?\)/gi, '')
+      .replace(/\(✅ DONE[^)]*\)/gi, '')
+      .replace(/~~([^~]+)~~/g, '$1')
+      .trim();
+
+    // Remove trailing date like "2026-03-08"
+    title = title.replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, '').trim();
+
+    if (!title) continue;
+
+    const status = parseStatus(statusText + line);
+    const isDone = /~~/.test(line) || status === 'closed';
+    const hasReview = status === 'inreview';
+
+    tasks.set(id, {
+      id,
+      title,
+      status: isDone ? 'closed' : status,
+      priority,
+      issue_type: id.match(/^([A-Z]+)-/)?.[1]?.toLowerCase() || 'task',
+      created_at: '',
+      updated_at: '',
+      closed_at: isDone ? new Date().toISOString() : '',
+      labels: hasReview ? ['review'] : [],
+      external_ref: id,
+    });
+  }
+
+  // ── Also parse ### section headers (they have richer status info)
+  const HEADER_RE = /^###\s+(~~)?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE|INQUIRY)-\d+)(?:~~)?[:\s]+(.+)/;
+  for (let i = 0; i < lines.length; i++) {
+    const hm = lines[i].match(HEADER_RE);
+    if (!hm) continue;
+    const isDone = !!hm[1];
+    const id = hm[2];
+    const rest = hm[3];
+
+    // Extract title (before status parens)
+    let title = rest.replace(/\((?:📋|🔄|👀|⏸️|✅)[^)]*\)/gi, '').replace(/\*\*/g, '').trim();
+    const status = isDone ? 'closed' : parseStatus(rest);
+
+    // Look for priority on next lines
+    let priority = 2;
+    for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+      const pm = lines[j].match(/P([0-3])/);
+      if (pm) { priority = parseInt(pm[1], 10); break; }
+    }
+
+    // Only add if not already from table (table rows are authoritative for status)
+    if (!tasks.has(id)) {
+      tasks.set(id, {
+        id,
+        title,
+        status,
+        priority,
+        issue_type: id.match(/^([A-Z]+)-/)?.[1]?.toLowerCase() || 'task',
+        created_at: '',
+        updated_at: '',
+        closed_at: isDone ? new Date().toISOString() : '',
+        labels: status === 'inreview' ? ['review'] : [],
+        external_ref: id,
+      });
+    }
+  }
+
+  return Array.from(tasks.values());
+}
+
+/**
  * Get the MASTER_PLAN.md path from environment or .env file.
  * Priority: MASTER_PLAN_PATH env → auto-detect from caller's CWD → .env fallback.
  * @returns {string|null}

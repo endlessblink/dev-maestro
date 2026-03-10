@@ -5,6 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 require('dotenv').config();
 const taskEngine = require('./modules/task-engine');
+const projectScanner = require('./modules/project-scanner');
 
 // ============================================================================
 // LOCAL OVERRIDES SYSTEM
@@ -482,8 +483,50 @@ app.delete('/api/projects/:name', (req, res) => {
     res.json({ removed });
 });
 
+// GET /api/projects/scan - Trigger manual project scan
+app.get('/api/projects/scan', (req, res) => {
+    const scanPaths = localConfig.projectScanPaths || [process.env.HOME];
+    const scanDepth = localConfig.projectScanDepth || 5;
+
+    try {
+        const result = projectScanner.syncDiscoveredProjects(scanPaths, projectsJsonPath, { maxDepth: scanDepth });
+        console.log(`[Scanner] Manual scan: ${result.total} projects (${result.added.length} new)`);
+        res.json(result);
+    } catch (err) {
+        console.error('[Scanner] Manual scan failed:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/projects/scan-paths - Update scan paths configuration
+app.post('/api/projects/scan-paths', express.json(), (req, res) => {
+    const { scanPaths, scanDepth } = req.body;
+
+    if (scanPaths && !Array.isArray(scanPaths)) {
+        return res.status(400).json({ error: 'scanPaths must be an array of directory paths' });
+    }
+
+    if (scanPaths) localConfig.projectScanPaths = scanPaths;
+    if (typeof scanDepth === 'number') localConfig.projectScanDepth = scanDepth;
+
+    // Persist to local/config.json
+    try {
+        const localConfigDir = path.join(__dirname, 'local');
+        if (!fs.existsSync(localConfigDir)) fs.mkdirSync(localConfigDir, { recursive: true });
+        const configPath = path.join(localConfigDir, 'config.json');
+        const existing = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
+        if (scanPaths) existing.projectScanPaths = scanPaths;
+        if (typeof scanDepth === 'number') existing.projectScanDepth = scanDepth;
+        fs.writeFileSync(configPath, JSON.stringify(existing, null, 2) + '\n');
+    } catch (err) {
+        console.error('[Config] Failed to persist scan paths:', err.message);
+    }
+
+    res.json({ scanPaths: localConfig.projectScanPaths, scanDepth: localConfig.projectScanDepth });
+});
+
 // POST /api/projects/:name/activate - Switch active project without restart
-app.post('/api/projects/:name/activate', (req, res) => {
+app.post('/api/projects/:name/activate', async (req, res) => {
     const { name } = req.params;
     const data = readProjects();
 
@@ -508,7 +551,18 @@ app.post('/api/projects/:name/activate', (req, res) => {
 
     // Re-sync task engine with new project
     taskEngine.closeDb();
-    initTaskEngine();
+
+    // Small delay to ensure WAL lock is fully released
+    let success = initTaskEngine();
+    if (!success) {
+        console.log('[Projects] Retrying task engine init after 500ms...');
+        await new Promise(r => setTimeout(r, 500));
+        success = initTaskEngine();
+    }
+
+    if (!success) {
+        console.error(`[Projects] Task engine init failed for ${name} after retry`);
+    }
 
     // Broadcast project change to SSE clients
     const payload = JSON.stringify({
@@ -519,7 +573,11 @@ app.post('/api/projects/:name/activate', (req, res) => {
         client.write(`data: ${payload}\n\n`);
     });
 
-    res.json({ activated: { ...project, active: true } });
+    const response = { activated: { ...project, active: true } };
+    if (!success) {
+        response.warning = 'Task engine sync failed — tasks may not load';
+    }
+    res.json(response);
 });
 
 // Helper to get Master Plan path
@@ -541,7 +599,7 @@ function initTaskEngine() {
         if (!masterPlanPath || !fs.existsSync(masterPlanPath)) {
             console.log('[TaskEngine] No MASTER_PLAN.md found, skipping init');
             taskEngineReady = false;
-            return;
+            return false;
         }
         const projectRoot = getProjectRoot(masterPlanPath);
         const maestroDir = path.join(projectRoot, '.maestro');
@@ -551,9 +609,11 @@ function initTaskEngine() {
         const count = taskEngine.syncFromMarkdown(masterPlanPath);
         taskEngineReady = true;
         console.log(`[TaskEngine] Initialized: ${count} tasks synced from ${path.basename(masterPlanPath)}`);
+        return true;
     } catch (err) {
-        console.error('[TaskEngine] Init failed:', err.message);
+        console.error('[TaskEngine] Init failed:', err.message, err.stack);
         taskEngineReady = false;
+        return false;
     }
 }
 
@@ -2842,5 +2902,57 @@ app.listen(PORT, () => {
         console.log('[Periodic] Running worktree cleanup...');
         cleanupStaleWorktrees(4); // 4 hour threshold (reduced from 24)
     }, 60 * 60 * 1000); // 1 hour
+
+    // Auto-discover projects on startup
+    if (localConfig.projectAutoScan !== false) {
+        const scanPaths = localConfig.projectScanPaths || [process.env.HOME];
+        const scanDepth = localConfig.projectScanDepth || 5;
+        try {
+            console.log(`[Scanner] Auto-scanning for projects in: ${scanPaths.join(', ')}`);
+            const result = projectScanner.syncDiscoveredProjects(scanPaths, projectsJsonPath, { maxDepth: scanDepth });
+            console.log(`[Scanner] Found ${result.total} projects (${result.added.length} new)`);
+            if (result.added.length > 0) {
+                result.added.forEach(p => console.log(`[Scanner]   + ${p.name} (${p.root})`));
+            }
+        } catch (err) {
+            console.error('[Scanner] Auto-scan failed:', err.message);
+        }
+    }
+
+    // Auto-activate project matching MAESTRO_CWD (if set from wrapper script)
+    if (process.env.MAESTRO_CWD) {
+        const cwd = process.env.MAESTRO_CWD;
+        const data = readProjects();
+        // Find the project whose root is a prefix of (or equals) CWD
+        const match = data.projects.find(p => cwd.startsWith(p.root));
+        if (match && match.masterPlan && match.masterPlan !== process.env.MASTER_PLAN_PATH) {
+            process.env.MASTER_PLAN_PATH = match.masterPlan;
+            updateEnvFile('MASTER_PLAN_PATH', match.masterPlan);
+            console.log(`[Startup] Auto-activated project from CWD: ${match.name} (${match.root})`);
+            // Re-init task engine for the correct project
+            taskEngine.closeDb();
+            initTaskEngine();
+        }
+    }
+
+    // Periodic re-scan every 5 minutes (if auto-scan enabled)
+    if (localConfig.projectAutoScan !== false) {
+        setInterval(() => {
+            const scanPaths = localConfig.projectScanPaths || [process.env.HOME];
+            const scanDepth = localConfig.projectScanDepth || 5;
+            try {
+                const result = projectScanner.syncDiscoveredProjects(scanPaths, projectsJsonPath, { maxDepth: scanDepth });
+                if (result.added.length > 0) {
+                    console.log(`[Scanner] Periodic scan: found ${result.added.length} new project(s)`);
+                    result.added.forEach(p => console.log(`[Scanner]   + ${p.name} (${p.root})`));
+                    // Notify SSE clients about new projects
+                    const payload = JSON.stringify({ type: 'projects-updated', added: result.added.map(p => p.name) });
+                    clients.forEach(client => client.write(`data: ${payload}\n\n`));
+                }
+            } catch (err) {
+                console.error('[Scanner] Periodic scan error:', err.message);
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+    }
 
 });
