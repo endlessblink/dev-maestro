@@ -684,6 +684,9 @@
             if (event.data?.type === 'tab-activated') {
                 loadCachedResults();
             }
+            if (event.data && event.data.type === 'project-switch') {
+                window.location.reload();
+            }
         });
 
         async function loadCachedResults() {

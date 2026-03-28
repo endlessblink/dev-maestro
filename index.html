@@ -34,6 +34,7 @@
             --color-docs: #8b5cf6;
             --color-stats: #06b6d4;
             --color-health: #22c55e;
+            --color-changelog: #4ECDC4;
 
             /* Transitions */
             --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -229,6 +230,11 @@
         .tab.health:hover .icon svg,
         .tab.health.active .icon svg {
             stroke: var(--color-health);
+        }
+
+        .tab.changelog:hover .icon svg,
+        .tab.changelog.active .icon svg {
+            stroke: var(--color-changelog);
         }
 
         .spacer {
@@ -576,6 +582,14 @@
                 </span>
                 <span>Health</span>
             </button>
+            <button class="tab changelog" data-panel="changelog">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </span>
+                <span>Agent Log</span>
+            </button>
         </nav>
 
         <div class="spacer"></div>
@@ -641,6 +655,10 @@
         <div id="health" class="panel">
             <!-- Lazy load: src set on first tab activation -->
             <iframe data-src="health/index.html" title="Health Dashboard"></iframe>
+        </div>
+        <div id="changelog" class="panel">
+            <!-- Lazy load: src set on first tab activation -->
+            <iframe data-src="changelog/index.html" title="Agent Changelog"></iframe>
         </div>
     </main>
 
@@ -797,6 +815,7 @@
 
                 showToast('Switched to ' + name);
                 refreshKanban();
+                broadcastProjectSwitch(name);
             } catch (err) {
                 showToast('Network error switching project');
             }
@@ -832,6 +851,15 @@
             }
         }
 
+        // Notify ALL loaded iframes about project switch
+        function broadcastProjectSwitch(projectName) {
+            document.querySelectorAll('.panel iframe').forEach(iframe => {
+                if (iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'project-switch', project: projectName }, '*');
+                }
+            });
+        }
+
         // SSE: listen for project-changed events from other clients
         const evtSource = new EventSource('/api/events');
         evtSource.addEventListener('message', (e) => {
@@ -846,6 +874,7 @@
                     }
                     showToast('Project changed to ' + msg.project.name);
                     refreshKanban();
+                    broadcastProjectSwitch(msg.project.name);
                 }
             } catch (_) {}
         });

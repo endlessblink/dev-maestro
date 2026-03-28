@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Log</title>
+    <style>
+        :root {
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-hover: rgba(255, 255, 255, 0.05);
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-subtle: #6e7681;
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+            --brand-primary: #4ECDC4;
+            --brand-dim: rgba(78, 205, 196, 0.12);
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+
+            /* Tool badge colors */
+            --tool-write: #10b981;
+            --tool-write-bg: rgba(16, 185, 129, 0.12);
+            --tool-edit: #3b82f6;
+            --tool-edit-bg: rgba(59, 130, 246, 0.12);
+            --tool-bash: #f59e0b;
+            --tool-bash-bg: rgba(245, 158, 11, 0.12);
+            --tool-agent: #8b5cf6;
+            --tool-agent-bg: rgba(139, 92, 246, 0.12);
+            --tool-read: #6e7681;
+            --tool-read-bg: rgba(110, 118, 129, 0.12);
+            --tool-grep: #4ECDC4;
+            --tool-grep-bg: rgba(78, 205, 196, 0.12);
+            --tool-glob: #06b6d4;
+            --tool-glob-bg: rgba(6, 182, 212, 0.12);
+            --tool-default: #6e7681;
+            --tool-default-bg: rgba(110, 118, 129, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+        }
+
+        /* ── Layout ── */
+        .page {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* ── Header ── */
+        .header {
+            flex-shrink: 0;
+            background: var(--surface-secondary);
+            border-bottom: 1px solid var(--border-medium);
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.625rem;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-title svg {
+            width: 16px;
+            height: 16px;
+            stroke: var(--brand-primary);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            flex-shrink: 0;
+        }
+
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--brand-primary);
+            box-shadow: 0 0 6px var(--brand-primary);
+            animation: pulse 2s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.85); }
+        }
+
+        .header-stats {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-left: auto;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-sep {
+            color: var(--border-medium);
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        /* Time range buttons */
+        .range-group {
+            display: flex;
+            border: 1px solid var(--border-medium);
+            border-radius: 6px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .range-btn {
+            padding: 0.3rem 0.625rem;
+            background: transparent;
+            border: none;
+            border-right: 1px solid var(--border-medium);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+        }
+
+        .range-btn:last-child {
+            border-right: none;
+        }
+
+        .range-btn:hover {
+            background: var(--surface-hover);
+            color: var(--text-secondary);
+        }
+
+        .range-btn.active {
+            background: var(--brand-dim);
+            color: var(--brand-primary);
+        }
+
+        /* Tool filter dropdown */
+        .filter-select {
+            padding: 0.3rem 0.625rem;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-medium);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            outline: none;
+            transition: border-color var(--transition-fast);
+        }
+
+        .filter-select:hover, .filter-select:focus {
+            border-color: var(--brand-primary);
+        }
+
+        /* Search input */
+        .search-input {
+            padding: 0.3rem 0.625rem 0.3rem 1.75rem;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-medium);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color var(--transition-fast);
+            width: 180px;
+            position: relative;
+        }
+
+        .search-wrapper {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .search-wrapper svg {
+            position: absolute;
+            left: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 12px;
+            height: 12px;
+            stroke: var(--text-subtle);
+            stroke-width: 2;
+            fill: none;
+            pointer-events: none;
+        }
+
+        .search-input:hover, .search-input:focus {
+            border-color: var(--brand-primary);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-subtle);
+        }
+
+        /* Clear filters button */
+        .clear-btn {
+            padding: 0.3rem 0.625rem;
+            background: transparent;
+            border: 1px solid var(--border-medium);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            white-space: nowrap;
+            display: none;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .clear-btn.visible {
+            display: flex;
+        }
+
+        .clear-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+        }
+
+        .clear-btn svg {
+            width: 12px;
+            height: 12px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* ── Timeline scroll container ── */
+        .timeline-container {
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 1rem 1.25rem;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-medium) transparent;
+        }
+
+        .timeline-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .timeline-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .timeline-container::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+
+        /* ── Session group ── */
+        .session-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .session-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.625rem;
+            position: sticky;
+            top: 0;
+            background: var(--surface-primary);
+            padding: 0.25rem 0;
+            z-index: 10;
+        }
+
+        .session-header-line {
+            height: 1px;
+            flex: 1;
+            background: var(--border-subtle);
+        }
+
+        .session-header-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-subtle);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .session-id-chip {
+            font-size: 0.75rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            letter-spacing: 0;
+        }
+
+        .session-id-chip:hover {
+            opacity: 0.8;
+        }
+
+        /* ── Action card ── */
+        .action-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .action-card {
+            display: grid;
+            grid-template-columns: 110px auto 1fr auto;
+            align-items: start;
+            gap: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            cursor: default;
+            transition: background var(--transition-fast), border-color var(--transition-fast);
+            animation: slideIn 250ms ease-out both;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .action-card:hover {
+            background: var(--surface-hover);
+            border-color: var(--border-subtle);
+        }
+
+        .action-card.expanded {
+            background: var(--surface-tertiary);
+            border-color: var(--border-medium);
+        }
+
+        /* Timestamp */
+        .action-time {
+            font-size: 0.82rem;
+            color: var(--text-subtle);
+            white-space: nowrap;
+            padding-top: 2px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .action-time[title] {
+            cursor: help;
+            text-decoration-line: underline;
+            text-decoration-style: dotted;
+            text-decoration-color: var(--text-subtle);
+        }
+
+        /* Tool badge */
+        .tool-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            align-self: start;
+            margin-top: 1px;
+        }
+
+        /* Main content area */
+        .action-body {
+            min-width: 0;
+        }
+
+        .action-path {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+            font-size: 0.87rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+            max-width: 100%;
+            display: block;
+        }
+
+        .action-path:hover {
+            color: var(--brand-primary);
+            text-decoration: underline;
+            text-decoration-color: rgba(78, 205, 196, 0.5);
+        }
+
+        .action-command {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: var(--tool-bash);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .action-summary {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+            margin-top: 1px;
+        }
+
+        .action-card.expanded .action-summary {
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .action-expand-hint {
+            font-size: 0.75rem;
+            color: var(--text-subtle);
+            cursor: pointer;
+            margin-top: 2px;
+            display: none;
+        }
+
+        .action-card.has-more .action-expand-hint {
+            display: block;
+        }
+
+        .action-card.expanded .action-expand-hint {
+            display: none;
+        }
+
+        /* Project badge (right side) */
+        .action-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.25rem;
+            flex-shrink: 0;
+        }
+
+        .project-badge {
+            font-size: 0.75rem;
+            color: var(--text-subtle);
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-subtle);
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .agent-label {
+            font-size: 0.75rem;
+            color: var(--text-subtle);
+            white-space: nowrap;
+        }
+
+        /* ── Empty state ── */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 4rem 2rem;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .empty-icon {
+            width: 48px;
+            height: 48px;
+            opacity: 0.25;
+        }
+
+        .empty-icon svg {
+            width: 100%;
+            height: 100%;
+            stroke: var(--text-secondary);
+            stroke-width: 1.5;
+            fill: none;
+        }
+
+        .empty-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .empty-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            max-width: 320px;
+            line-height: 1.5;
+        }
+
+        /* ── Loading spinner ── */
+        .loading-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 3rem;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border-medium);
+            border-top-color: var(--brand-primary);
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ── Error state ── */
+        .error-state {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            padding: 0.75rem 1rem;
+            margin: 1rem 0;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #ef4444;
+        }
+
+        /* ── New items notification ── */
+        .new-items-bar {
+            display: none;
+            position: sticky;
+            top: 0.5rem;
+            z-index: 20;
+            justify-content: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .new-items-bar.visible {
+            display: flex;
+        }
+
+        .new-items-pill {
+            background: var(--brand-primary);
+            color: #000;
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 0.3rem 0.75rem;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(78, 205, 196, 0.35);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .new-items-pill:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(78, 205, 196, 0.45);
+        }
+
+        .new-items-pill svg {
+            width: 12px;
+            height: 12px;
+            stroke: currentColor;
+            stroke-width: 2.5;
+            fill: none;
+        }
+
+        /* ── Filter active indicator in search area ── */
+        .filter-active-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--brand-primary);
+            display: none;
+            flex-shrink: 0;
+        }
+
+        .filter-active-dot.visible {
+            display: block;
+        }
+
+        /* ── Split layout ── */
+        .content-area {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .timeline-container {
+            flex: 0 0 60%;
+            /* keep existing overflow/padding/scrollbar styles */
+        }
+
+        .detail-panel {
+            flex: 0 0 40%;
+            border-left: 1px solid var(--border-medium);
+            background: var(--surface-secondary);
+            overflow-y: auto;
+            padding: 1.25rem;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-medium) transparent;
+        }
+
+        .detail-panel::-webkit-scrollbar { width: 6px; }
+        .detail-panel::-webkit-scrollbar-track { background: transparent; }
+        .detail-panel::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 3px; }
+
+        /* Detail panel content */
+        .detail-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-subtle);
+            font-size: 0.9rem;
+            text-align: center;
+            gap: 0.5rem;
+        }
+
+        .detail-empty svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--text-subtle);
+            stroke-width: 1.5;
+            fill: none;
+            opacity: 0.4;
+        }
+
+        .detail-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .detail-header .tool-badge {
+            font-size: 0.85rem;
+            padding: 0.25rem 0.6rem;
+        }
+
+        .detail-header-text {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .detail-header-time {
+            margin-left: auto;
+            font-size: 0.82rem;
+            color: var(--text-subtle);
+        }
+
+        .detail-section {
+            margin-bottom: 1.25rem;
+        }
+
+        .detail-section-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-subtle);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-value {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+            font-size: 0.87rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+            line-height: 1.5;
+            padding: 0.5rem 0.75rem;
+            background: var(--surface-tertiary);
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .detail-value.summary {
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .detail-meta {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.375rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .detail-meta-key {
+            color: var(--text-subtle);
+            font-weight: 500;
+        }
+
+        .detail-meta-val {
+            color: var(--text-secondary);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+            font-size: 0.82rem;
+            word-break: break-all;
+        }
+
+        /* Highlight selected card */
+        .action-card.selected {
+            background: var(--surface-tertiary);
+            border-color: var(--brand-primary);
+            border-left: 3px solid var(--brand-primary);
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-top">
+            <div class="header-title">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Agent Log
+                <div class="live-dot" id="live-dot" title="Live updates connected"></div>
+            </div>
+            <div class="header-stats" id="header-stats">
+                <span class="stat-item">
+                    <span class="stat-value" id="stat-actions">—</span>
+                    <span>actions</span>
+                </span>
+                <span class="stat-sep">·</span>
+                <span class="stat-item">
+                    <span class="stat-value" id="stat-sessions">—</span>
+                    <span>sessions</span>
+                </span>
+                <span class="stat-sep">·</span>
+                <span class="stat-item">
+                    <span class="stat-value" id="stat-files">—</span>
+                    <span>files changed</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="header-controls">
+            <!-- Time range -->
+            <div class="range-group">
+                <button class="range-btn" data-range="1h">1h</button>
+                <button class="range-btn" data-range="6h">6h</button>
+                <button class="range-btn active" data-range="24h">24h</button>
+                <button class="range-btn" data-range="7d">7d</button>
+                <button class="range-btn" data-range="all">All</button>
+            </div>
+
+            <!-- Project filter -->
+            <select class="filter-select" id="project-filter" title="Filter by project" style="min-width:140px;">
+                <option value="all">All projects</option>
+                <!-- Populated dynamically -->
+            </select>
+
+            <!-- Tool filter -->
+            <select class="filter-select" id="tool-filter" title="Filter by tool">
+                <option value="all">All tools</option>
+                <option value="Write">Write</option>
+                <option value="Edit">Edit</option>
+                <option value="Bash">Bash</option>
+                <option value="Agent">Agent</option>
+                <option value="Read">Read</option>
+                <option value="Grep">Grep</option>
+                <option value="Glob">Glob</option>
+            </select>
+
+            <!-- File search -->
+            <div class="search-wrapper">
+                <svg viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                    type="text"
+                    class="search-input"
+                    id="file-search"
+                    placeholder="Search files or commands…"
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+            </div>
+
+            <div class="filter-active-dot" id="filter-dot" title="Filters active"></div>
+
+            <!-- Clear filters -->
+            <button class="clear-btn" id="clear-filters">
+                <svg viewBox="0 0 24 24">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+                Clear filters
+            </button>
+        </div>
+    </div>
+
+    <!-- Content area: timeline + detail -->
+    <div class="content-area">
+    <div class="timeline-container" id="timeline-container">
+        <!-- New items notification -->
+        <div class="new-items-bar" id="new-items-bar">
+            <div class="new-items-pill" id="new-items-pill">
+                <svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+                <span id="new-items-text">New actions</span>
+            </div>
+        </div>
+
+        <!-- Content rendered by JS -->
+        <div id="timeline-content">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                Fetching agent actions…
+            </div>
+        </div>
+    </div><!-- end timeline-container -->
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detail-panel">
+        <div class="detail-empty" id="detail-empty">
+            <svg viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+            <div>Click an action to see details</div>
+        </div>
+        <div id="detail-content" style="display:none;"></div>
+    </div>
+
+    </div><!-- end content-area -->
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let allActions = [];
+let pendingNewActions = [];
+let activeRange = '24h';
+let activeToolFilter = 'all';
+let activeFileFilter = '';
+let activeSessionFilter = '';
+let activeProjectFilter = 'all';
+let sseSource = null;
+let sseConnected = false;
+
+// Session color palette (deterministic from session ID)
+const SESSION_COLORS = [
+    '#4ECDC4', '#f59e0b', '#8b5cf6', '#10b981',
+    '#3b82f6', '#ec4899', '#06b6d4', '#ef4444',
+    '#84cc16', '#f97316',
+];
+
+function sessionColor(sessionId) {
+    if (!sessionId) return '#6e7681';
+    let hash = 0;
+    for (let i = 0; i < sessionId.length; i++) {
+        hash = (hash * 31 + sessionId.charCodeAt(i)) >>> 0;
+    }
+    return SESSION_COLORS[hash % SESSION_COLORS.length];
+}
+
+// ─────────────────────────────────────────────
+// Tool badge config
+// ─────────────────────────────────────────────
+const TOOL_CONFIG = {
+    Write:  { color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)' },
+    Edit:   { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)' },
+    Bash:   { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)' },
+    Agent:  { color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' },
+    Task:   { color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.12)' },
+    Read:   { color: '#6e7681', bg: 'rgba(110, 118, 129, 0.12)' },
+    Grep:   { color: '#4ECDC4', bg: 'rgba(78, 205, 196, 0.12)' },
+    Glob:   { color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.12)' },
+};
+
+function toolStyle(tool) {
+    const cfg = TOOL_CONFIG[tool] || { color: '#6e7681', bg: 'rgba(110, 118, 129, 0.1)' };
+    return `color:${cfg.color};background:${cfg.bg};`;
+}
+
+// ─────────────────────────────────────────────
+// Time helpers
+// ─────────────────────────────────────────────
+function relativeTime(iso) {
+    const now = Date.now();
+    const ts = new Date(iso).getTime();
+    const diff = Math.floor((now - ts) / 1000);
+    if (diff < 5) return 'just now';
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function absoluteTime(iso) {
+    return new Date(iso).toLocaleString(undefined, {
+        month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+}
+
+function sinceISO(range) {
+    const now = new Date();
+    if (range === 'all') return null;
+    const map = { '1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800 };
+    const secs = map[range] || 86400;
+    return new Date(now.getTime() - secs * 1000).toISOString();
+}
+
+// ─────────────────────────────────────────────
+// API
+// ─────────────────────────────────────────────
+const API_BASE = '';
+
+async function fetchActions(since) {
+    const params = new URLSearchParams({ limit: '300' });
+    if (since) params.set('since', since);
+    if (activeProjectFilter !== 'all') params.set('project', activeProjectFilter);
+    const res = await fetch(`${API_BASE}/api/changelog/actions?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.actions || [];
+}
+
+async function fetchStats(period) {
+    const params = new URLSearchParams({ period });
+    if (activeProjectFilter !== 'all') params.set('project', activeProjectFilter);
+    const res = await fetch(`${API_BASE}/api/changelog/stats?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.stats || {};
+}
+
+async function loadProjects() {
+    try {
+        const res = await fetch('/api/changelog/sessions?limit=100');
+        if (!res.ok) return;
+        const data = await res.json();
+        const projects = [...new Set((data.sessions || []).map(s => s.project).filter(Boolean))].sort();
+        const select = document.getElementById('project-filter');
+        // Keep "All projects" option, remove others
+        while (select.options.length > 1) select.remove(1);
+        for (const p of projects) {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            select.appendChild(opt);
+        }
+        // Re-apply active selection if set
+        if (activeProjectFilter !== 'all') select.value = activeProjectFilter;
+    } catch {}
+}
+
+// ─────────────────────────────────────────────
+// SSE
+// ─────────────────────────────────────────────
+function connectSSE() {
+    if (sseSource) { sseSource.close(); sseSource = null; }
+
+    try {
+        sseSource = new EventSource(`${API_BASE}/api/changelog/events`);
+
+        sseSource.addEventListener('new-actions', async (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                const count = data.count || 1;
+                // Fetch latest actions since the most recent we have
+                const latestTs = allActions.length ? allActions[0].ts : null;
+                const newOnes = await fetchActions(latestTs);
+                if (newOnes.length > 0) {
+                    // Auto-merge new actions into the timeline
+                    const existingIds = new Set(allActions.map(a => a.id));
+                    const fresh = newOnes.filter(a => !existingIds.has(a.id));
+                    if (fresh.length > 0) {
+                        allActions = [...fresh, ...allActions];
+                        rerender();
+                        // Also refresh stats
+                        fetchStats(activeRange === 'all' ? '30d' : activeRange)
+                            .then(updateStats).catch(() => {});
+                    }
+                }
+            } catch(err) {
+                console.warn('SSE fetch error:', err);
+            }
+        });
+
+        sseSource.onopen = () => {
+            sseConnected = true;
+            const dot = document.getElementById('live-dot');
+            if (dot) dot.title = 'Live — connected';
+        };
+
+        sseSource.onerror = () => {
+            sseConnected = false;
+            const dot = document.getElementById('live-dot');
+            if (dot) {
+                dot.style.background = '#6e7681';
+                dot.style.boxShadow = 'none';
+                dot.style.animation = 'none';
+                dot.title = 'Disconnected — will retry';
+            }
+            // Auto-reconnect after 10s
+            setTimeout(connectSSE, 10000);
+        };
+    } catch (err) {
+        console.warn('SSE not available:', err);
+    }
+}
+
+// ─────────────────────────────────────────────
+// Rendering
+// ─────────────────────────────────────────────
+function truncatePath(path, maxLen = 60) {
+    if (!path || path.length <= maxLen) return path || '';
+    const parts = path.split('/');
+    if (parts.length <= 2) return '…' + path.slice(-(maxLen - 1));
+    // Show filename + a few parent dirs
+    let result = parts[parts.length - 1];
+    let i = parts.length - 2;
+    while (i >= 0 && result.length + parts[i].length + 1 < maxLen - 4) {
+        result = parts[i] + '/' + result;
+        i--;
+    }
+    return (i >= 0 ? '…/' : '') + result;
+}
+
+function renderActionCard(action, idx) {
+    const tool = action.tool || 'Unknown';
+    const style = toolStyle(tool);
+    const relTime = relativeTime(action.ts);
+    const absTime = absoluteTime(action.ts);
+
+    let mainContent = '';
+    if (action.file_path) {
+        const displayPath = truncatePath(action.file_path);
+        mainContent += `<span class="action-path" title="${escHtml(action.file_path)}" data-path="${escHtml(action.file_path)}">${escHtml(displayPath)}</span>`;
+    }
+    if (action.command) {
+        const cmd = action.command.length > 100 ? action.command.slice(0, 97) + '…' : action.command;
+        mainContent += `<div class="action-command" title="${escHtml(action.command)}">${escHtml(cmd)}</div>`;
+    }
+    if (action.input_summary) {
+        let summary = action.input_summary;
+        // Try to extract description from JSON summary
+        try {
+            const parsed = JSON.parse(summary);
+            summary = parsed.description || parsed.file_path || parsed.command || summary;
+        } catch (e) { /* use as-is */ }
+        const truncated = summary.length > 120 ? summary.slice(0, 117) + '…' : summary;
+        const hasMore = summary.length > 120;
+        mainContent += `<div class="action-summary" title="${escHtml(summary)}">${escHtml(truncated)}</div>`;
+        if (hasMore) {
+            mainContent += `<div class="action-expand-hint">click to expand</div>`;
+        }
+    }
+
+    const projectBadge = action.project
+        ? `<span class="project-badge">${escHtml(action.project)}</span>`
+        : '';
+    const agentLabel = action.agent_id
+        ? `<span class="agent-label">${escHtml(action.agent_id)}</span>`
+        : '';
+
+    const hasMore = action.input_summary && action.input_summary.length > 120;
+
+    return `<div class="action-card ${hasMore ? 'has-more' : ''}" data-id="${action.id}" data-session="${escHtml(action.session_id || '')}" style="animation-delay:${Math.min(idx * 20, 300)}ms">
+        <div class="action-time" title="${absTime}">${relTime}</div>
+        <div class="tool-badge" style="${style}">${escHtml(tool)}</div>
+        <div class="action-body">${mainContent}</div>
+        <div class="action-meta">${projectBadge}${agentLabel}</div>
+    </div>`;
+}
+
+function groupBySession(actions) {
+    const groups = [];
+    let current = null;
+    for (const action of actions) {
+        const sid = action.session_id || '__nosession__';
+        if (!current || current.sessionId !== sid) {
+            current = { sessionId: sid, actions: [] };
+            groups.push(current);
+        }
+        current.actions.push(action);
+    }
+    return groups;
+}
+
+function renderGroups(actions) {
+    if (actions.length === 0) {
+        return `<div class="empty-state">
+            <div class="empty-icon"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+            <div class="empty-title">No actions recorded yet</div>
+            <div class="empty-desc">The changelog hook captures actions automatically as agents run.</div>
+        </div>`;
+    }
+
+    const groups = groupBySession(actions);
+    return groups.map(group => {
+        const sid = group.sessionId;
+        const firstAction = group.actions[0];
+        const sessionStart = firstAction ? absoluteTime(firstAction.ts) : '';
+        const shortId = sid === '__nosession__' ? 'no session' : sid.slice(0, 8);
+        const color = sessionColor(sid);
+        const count = group.actions.length;
+
+        const sessionHeader = `<div class="session-header">
+            <div class="session-header-line"></div>
+            <div class="session-header-label">
+                Session
+                <span class="session-id-chip" data-session="${escHtml(sid)}" style="color:${color};background:${color}22;" title="Filter to this session">${escHtml(shortId)}</span>
+                · ${sessionStart} · ${count} action${count !== 1 ? 's' : ''}
+            </div>
+            <div class="session-header-line"></div>
+        </div>`;
+
+        const cards = group.actions.map((a, i) => renderActionCard(a, i)).join('');
+        return `<div class="session-group">${sessionHeader}<div class="action-list">${cards}</div></div>`;
+    }).join('');
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// ─────────────────────────────────────────────
+// Filtering
+// ─────────────────────────────────────────────
+function applyFilters(actions) {
+    let result = actions;
+
+    if (activeToolFilter !== 'all') {
+        result = result.filter(a => {
+            const tool = (a.tool || '').toLowerCase();
+            const filter = activeToolFilter.toLowerCase();
+            // Agent filter matches both "Agent" and "Task"
+            if (filter === 'agent') return tool === 'agent' || tool === 'task';
+            return tool === filter;
+        });
+    }
+
+    if (activeFileFilter) {
+        const q = activeFileFilter.toLowerCase();
+        result = result.filter(a => {
+            return (a.file_path && a.file_path.toLowerCase().includes(q))
+                || (a.command && a.command.toLowerCase().includes(q))
+                || (a.input_summary && a.input_summary.toLowerCase().includes(q));
+        });
+    }
+
+    if (activeSessionFilter) {
+        result = result.filter(a => a.session_id === activeSessionFilter);
+    }
+
+    return result;
+}
+
+function updateFilterIndicators() {
+    const anyActive = activeToolFilter !== 'all' || activeFileFilter || activeSessionFilter || activeProjectFilter !== 'all';
+    document.getElementById('filter-dot').classList.toggle('visible', !!anyActive);
+    document.getElementById('clear-filters').classList.toggle('visible', !!anyActive);
+}
+
+function rerender() {
+    const filtered = applyFilters(allActions);
+    document.getElementById('timeline-content').innerHTML = renderGroups(filtered);
+    attachCardListeners();
+    updateFilterIndicators();
+}
+
+// ─────────────────────────────────────────────
+// Detail panel
+// ─────────────────────────────────────────────
+let selectedActionId = null;
+
+function showDetail(action) {
+    selectedActionId = action.id;
+
+    // Highlight selected card
+    document.querySelectorAll('.action-card.selected').forEach(c => c.classList.remove('selected'));
+    const card = document.querySelector(`.action-card[data-id="${action.id}"]`);
+    if (card) card.classList.add('selected');
+
+    document.getElementById('detail-empty').style.display = 'none';
+    const content = document.getElementById('detail-content');
+    content.style.display = 'block';
+
+    const tool = action.tool || 'Unknown';
+    const style = toolStyle(tool);
+
+    // Parse and pretty-print the summary JSON
+    let prettyInput = action.input_summary || '—';
+    try {
+        const parsed = JSON.parse(prettyInput);
+        prettyInput = JSON.stringify(parsed, null, 2);
+    } catch (e) { /* use as-is */ }
+
+    // Build human-readable description
+    let humanDesc = '';
+    if (tool === 'Write' || tool === 'Edit' || tool === 'Read') {
+        const verb = tool === 'Write' ? 'Wrote' : tool === 'Edit' ? 'Edited' : 'Read';
+        const filename = action.file_path ? action.file_path.split('/').pop() : 'unknown file';
+        humanDesc = `${verb} <strong>${escHtml(filename)}</strong>`;
+        if (tool === 'Edit') {
+            try {
+                const p = JSON.parse(action.input_summary);
+                if (p.old_string && p.new_string) {
+                    humanDesc += `<br><span style="color:var(--text-muted)">Replaced text in the file</span>`;
+                }
+            } catch(e) {}
+        }
+    } else if (tool === 'Bash') {
+        humanDesc = `Ran command: <code style="color:var(--tool-bash)">${escHtml(action.command || '?')}</code>`;
+    } else if (tool === 'Agent') {
+        try {
+            const p = JSON.parse(action.input_summary);
+            humanDesc = `Spawned agent: <strong>${escHtml(p.description || p.subagent_type || '?')}</strong>`;
+            if (p.subagent_type) humanDesc += `<br><span style="color:var(--text-muted)">Type: ${escHtml(p.subagent_type)}</span>`;
+        } catch(e) {
+            humanDesc = 'Spawned a sub-agent';
+        }
+    } else if (tool === 'Grep') {
+        try {
+            const p = JSON.parse(action.input_summary);
+            humanDesc = `Searched for <code>${escHtml(p.pattern || '?')}</code>`;
+            if (p.path) humanDesc += ` in <span style="color:var(--text-secondary)">${escHtml(truncatePath(p.path, 40))}</span>`;
+        } catch(e) {
+            humanDesc = 'Searched code';
+        }
+    } else if (tool === 'Glob') {
+        try {
+            const p = JSON.parse(action.input_summary);
+            humanDesc = `Found files matching <code>${escHtml(p.pattern || '?')}</code>`;
+        } catch(e) {
+            humanDesc = 'Found files';
+        }
+    } else {
+        humanDesc = `${escHtml(tool)} action`;
+    }
+
+    let sections = '';
+
+    // Human-readable description
+    sections += `<div class="detail-section">
+        <div class="detail-section-title">What happened</div>
+        <div style="font-size:0.95rem;color:var(--text-primary);line-height:1.6">${humanDesc}</div>
+    </div>`;
+
+    // File path
+    if (action.file_path) {
+        sections += `<div class="detail-section">
+            <div class="detail-section-title">File</div>
+            <div class="detail-value">${escHtml(action.file_path)}</div>
+        </div>`;
+    }
+
+    // Command
+    if (action.command) {
+        sections += `<div class="detail-section">
+            <div class="detail-section-title">Command</div>
+            <div class="detail-value">${escHtml(action.command)}</div>
+        </div>`;
+    }
+
+    // Full input (pretty-printed JSON)
+    sections += `<div class="detail-section">
+        <div class="detail-section-title">Full Input</div>
+        <div class="detail-value summary">${escHtml(prettyInput)}</div>
+    </div>`;
+
+    // Metadata grid
+    sections += `<div class="detail-section">
+        <div class="detail-section-title">Metadata</div>
+        <div class="detail-meta">
+            <span class="detail-meta-key">Session</span>
+            <span class="detail-meta-val">${escHtml(action.session_id || '—')}</span>
+            <span class="detail-meta-key">Agent</span>
+            <span class="detail-meta-val">${escHtml(action.agent_id || 'conductor')}</span>
+            <span class="detail-meta-key">Project</span>
+            <span class="detail-meta-val">${escHtml(action.project || '—')}</span>
+            <span class="detail-meta-key">Tool Use ID</span>
+            <span class="detail-meta-val">${escHtml(action.tool_use_id || '—')}</span>
+            <span class="detail-meta-key">Timestamp</span>
+            <span class="detail-meta-val">${absoluteTime(action.ts)}</span>
+            ${action.git_branch ? `<span class="detail-meta-key">Branch</span><span class="detail-meta-val">${escHtml(action.git_branch)}</span>` : ''}
+        </div>
+    </div>`;
+
+    content.innerHTML = `
+        <div class="detail-header">
+            <div class="tool-badge" style="${style}">${escHtml(tool)}</div>
+            <div class="detail-header-text">${escHtml(action.agent_id || 'conductor')}</div>
+            <div class="detail-header-time">${relativeTime(action.ts)}</div>
+        </div>
+        ${sections}
+    `;
+}
+
+// ─────────────────────────────────────────────
+// Card interaction listeners
+// ─────────────────────────────────────────────
+function attachCardListeners() {
+    // Click card → show detail (and expand if has-more)
+    document.querySelectorAll('.action-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.action-path') || e.target.closest('.session-id-chip')) return;
+            const id = parseInt(card.dataset.id, 10);
+            const action = allActions.find(a => a.id === id);
+            if (action) showDetail(action);
+            if (card.classList.contains('has-more')) card.classList.toggle('expanded');
+        });
+    });
+
+    // File path click — filter to that path
+    document.querySelectorAll('.action-path[data-path]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const path = el.dataset.path;
+            const searchEl = document.getElementById('file-search');
+            searchEl.value = path;
+            activeFileFilter = path;
+            rerender();
+        });
+    });
+
+    // Session chip click — filter to that session
+    document.querySelectorAll('.session-id-chip[data-session]').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const sid = el.dataset.session;
+            if (sid === '__nosession__') return;
+            activeSessionFilter = sid;
+            rerender();
+        });
+    });
+}
+
+// ─────────────────────────────────────────────
+// New items bar
+// ─────────────────────────────────────────────
+function showNewItemsBar(count) {
+    const bar = document.getElementById('new-items-bar');
+    const text = document.getElementById('new-items-text');
+    text.textContent = `${count} new action${count !== 1 ? 's' : ''} — click to load`;
+    bar.classList.add('visible');
+}
+
+function hideNewItemsBar() {
+    document.getElementById('new-items-bar').classList.remove('visible');
+}
+
+document.getElementById('new-items-pill').addEventListener('click', () => {
+    // Merge pending into allActions (dedupe by id)
+    const existingIds = new Set(allActions.map(a => a.id));
+    const fresh = pendingNewActions.filter(a => !existingIds.has(a.id));
+    allActions = [...fresh, ...allActions];
+    pendingNewActions = [];
+    hideNewItemsBar();
+    rerender();
+    // Scroll to top to see new items
+    document.getElementById('timeline-container').scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// ─────────────────────────────────────────────
+// Stats display
+// ─────────────────────────────────────────────
+function updateStats(stats) {
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val ?? '—';
+    };
+    set('stat-actions', stats.total_actions != null ? stats.total_actions.toLocaleString() : '—');
+    set('stat-sessions', stats.sessions != null ? stats.sessions.toLocaleString() : '—');
+    set('stat-files', stats.files_changed != null ? stats.files_changed.toLocaleString() : '—');
+}
+
+// ─────────────────────────────────────────────
+// Load
+// ─────────────────────────────────────────────
+async function loadData() {
+    const content = document.getElementById('timeline-content');
+    content.innerHTML = '<div class="loading-state"><div class="spinner"></div>Fetching agent actions…</div>';
+
+    try {
+        const since = sinceISO(activeRange);
+        const period = activeRange === 'all' ? '30d' : activeRange;
+
+        const [actions, stats] = await Promise.allSettled([
+            fetchActions(since),
+            fetchStats(period),
+        ]);
+
+        if (actions.status === 'fulfilled') {
+            allActions = actions.value;
+        } else {
+            allActions = [];
+            content.innerHTML = `<div class="error-state">Could not fetch actions: ${escHtml(actions.reason?.message || 'Unknown error')}</div>
+                <div class="empty-state">
+                    <div class="empty-icon"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                    <div class="empty-title">No actions recorded yet</div>
+                    <div class="empty-desc">The changelog hook captures actions automatically as agents run.</div>
+                </div>`;
+            return;
+        }
+
+        if (stats.status === 'fulfilled') {
+            updateStats(stats.value);
+        }
+
+        rerender();
+    } catch (err) {
+        content.innerHTML = `<div class="error-state">Error loading data: ${escHtml(err.message)}</div>`;
+    }
+}
+
+// ─────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────
+document.querySelectorAll('.range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeRange = btn.dataset.range;
+        pendingNewActions = [];
+        hideNewItemsBar();
+        loadData();
+    });
+});
+
+document.getElementById('tool-filter').addEventListener('change', (e) => {
+    activeToolFilter = e.target.value;
+    rerender();
+});
+
+document.getElementById('project-filter').addEventListener('change', (e) => {
+    activeProjectFilter = e.target.value;
+    pendingNewActions = [];
+    hideNewItemsBar();
+    loadData();
+});
+
+document.getElementById('file-search').addEventListener('input', (e) => {
+    activeFileFilter = e.target.value.trim();
+    rerender();
+});
+
+document.getElementById('clear-filters').addEventListener('click', () => {
+    activeToolFilter = 'all';
+    activeFileFilter = '';
+    activeSessionFilter = '';
+    activeProjectFilter = 'all';
+    document.getElementById('tool-filter').value = 'all';
+    document.getElementById('file-search').value = '';
+    document.getElementById('project-filter').value = 'all';
+    loadData();
+});
+
+// ─────────────────────────────────────────────
+// Periodic relative time refresh
+// ─────────────────────────────────────────────
+setInterval(() => {
+    document.querySelectorAll('.action-time[title]').forEach(el => {
+        const absTime = el.title;
+        // Find the corresponding action by walking up to action-card
+        const card = el.closest('.action-card');
+        if (!card) return;
+        const id = parseInt(card.dataset.id, 10);
+        const action = allActions.find(a => a.id === id);
+        if (action) el.textContent = relativeTime(action.ts);
+    });
+}, 30000);
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+
+// Auto-select project from URL params (for iframe integration)
+const urlParams = new URLSearchParams(window.location.search);
+const autoProject = urlParams.get('project');
+if (autoProject) {
+    activeProjectFilter = autoProject;
+}
+
+// Listen for project-switch messages from parent
+window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'project-switch' && e.data.project) {
+        activeProjectFilter = e.data.project;
+        const select = document.getElementById('project-filter');
+        if (select) select.value = e.data.project;
+        loadData();
+    }
+});
+
+loadProjects();
+loadData();
+connectSSE();
+</script>
+</body>
+</html>

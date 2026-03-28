@@ -6,6 +6,7 @@ const { execSync } = require('child_process');
 require('dotenv').config();
 const taskEngine = require('./modules/task-engine');
 const projectScanner = require('./modules/project-scanner');
+const changelogEngine = require('./modules/changelog-engine');
 
 // ============================================================================
 // LOCAL OVERRIDES SYSTEM
@@ -105,6 +106,7 @@ let healthScanInProgress = false;
 
 // SSE Clients
 let clients = [];
+let changelogClients = [];
 
 // Helper to broadcast logs to SSE clients
 const broadcastLog = (message) => {
@@ -1208,14 +1210,22 @@ app.get('/api/skills', (req, res) => {
 
             try {
                 const content = fs.readFileSync(skillPath, 'utf8');
-                const lines = content.split('\n');
+                const contentLength = content.length;
+
+                // Strip YAML frontmatter before parsing
+                let parseContent = content;
+                if (parseContent.startsWith('---')) {
+                    const endIdx = parseContent.indexOf('---', 3);
+                    if (endIdx > 0) parseContent = parseContent.substring(endIdx + 3).trim();
+                }
+                const lines = parseContent.split('\n');
 
                 // Extract title from first # heading
                 const titleLine = lines.find(l => l.startsWith('# '));
                 const title = titleLine ? titleLine.replace('# ', '').trim() : dir.name;
 
-                // Extract description from first paragraph
-                const descStart = lines.findIndex(l => l.trim() && !l.startsWith('#'));
+                // Extract description from first real paragraph (skip headings, empty lines)
+                const descStart = lines.findIndex(l => l.trim() && !l.startsWith('#') && !l.startsWith('---'));
                 const description = descStart >= 0 ? lines[descStart].slice(0, 150) : '';
 
                 // Detect category from name or content
@@ -1235,6 +1245,7 @@ app.get('/api/skills', (req, res) => {
                     description,
                     category,
                     color: categoryColors[category] || categoryColors.default,
+                    contentLength,
                     usage: 0
                 });
 
@@ -1337,7 +1348,8 @@ app.get('/api/docs', (req, res) => {
                             type: 'file',
                             path: relativePath,
                             category: 'default',
-                            color: '#6b7280'
+                            color: '#6b7280',
+                            contentLength: content.length
                         });
 
                         if (parentId) {
@@ -1354,6 +1366,365 @@ app.get('/api/docs', (req, res) => {
         res.json({ nodes, links });
     } catch (err) {
         res.json({ nodes: [], links: [], error: err.message });
+    }
+});
+
+// GET /api/docs/content - Return raw markdown content of a doc file
+app.get('/api/docs/content', (req, res) => {
+    const relPath = req.query.path;
+    if (!relPath) {
+        return res.status(400).json({ error: 'Missing path parameter' });
+    }
+    // Sanitize: no directory traversal
+    if (relPath.includes('..') || path.isAbsolute(relPath)) {
+        return res.status(400).json({ error: 'Invalid path' });
+    }
+
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+    const docsDir = path.join(projectRoot, 'docs');
+    const fullPath = path.join(docsDir, relPath);
+
+    // Ensure resolved path is within docs dir
+    const resolved = path.resolve(fullPath);
+    if (!resolved.startsWith(path.resolve(docsDir))) {
+        return res.status(400).json({ error: 'Path outside docs directory' });
+    }
+
+    try {
+        if (!fs.existsSync(resolved)) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+        const content = fs.readFileSync(resolved, 'utf8');
+        res.json({ content, path: relPath });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/skills/content - Return raw SKILL.md content
+app.get('/api/skills/content', (req, res) => {
+    const skillName = req.query.name;
+    if (!skillName) {
+        return res.status(400).json({ error: 'Missing name parameter' });
+    }
+    // Sanitize: no directory traversal, only alphanumeric + hyphens + underscores
+    if (skillName.includes('..') || skillName.includes('/') || skillName.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid skill name' });
+    }
+
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+    const skillPath = path.join(projectRoot, '.claude/skills', skillName, 'SKILL.md');
+
+    // Ensure resolved path is within skills dir
+    const resolved = path.resolve(skillPath);
+    const skillsDir = path.resolve(path.join(projectRoot, '.claude/skills'));
+    if (!resolved.startsWith(skillsDir)) {
+        return res.status(400).json({ error: 'Path outside skills directory' });
+    }
+
+    try {
+        if (!fs.existsSync(resolved)) {
+            return res.status(404).json({ error: 'Skill not found' });
+        }
+        const content = fs.readFileSync(resolved, 'utf8');
+        res.json({ content, name: skillName });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/skills/analytics - Real usage analytics from conversation logs
+app.get('/api/skills/analytics', (req, res) => {
+    const skillName = req.query.name;
+    if (!skillName || skillName.includes('..') || skillName.includes('/')) {
+        return res.status(400).json({ error: 'Invalid skill name' });
+    }
+
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+    const homeDir = process.env.HOME || '/home/endlessblink';
+
+    try {
+        // 1. File metadata
+        const skillDir = path.join(projectRoot, '.claude/skills', skillName);
+        const skillFile = path.join(skillDir, 'SKILL.md');
+        let fileMeta = null;
+        if (fs.existsSync(skillFile)) {
+            const stat = fs.statSync(skillFile);
+            fileMeta = {
+                size: stat.size,
+                created: stat.birthtime,
+                modified: stat.mtime,
+                sizeKB: Math.round(stat.size / 1024 * 10) / 10
+            };
+        }
+
+        // 2. Scan conversation logs for skill invocations
+        const projSlug = projectRoot.replace(/\//g, '-');
+        const sessionsDir = path.join(homeDir, '.claude/projects', projSlug);
+        let invocations = 0;
+        let invocationDates = [];
+        let fileReads = 0;
+        let fileReadDates = [];
+        let agentDelegations = 0;
+        let agentBreakdown = {};
+        let lastInvoked = null;
+
+        // Clean skill name for matching (strip emoji prefix + spaces)
+        const cleanName = skillName.replace(/^[^a-zA-Z0-9_-]+/, '').toLowerCase();
+        // Also try matching without hyphens (e.g. "dev-debugging" matches "dev-debugging" or "devdebugging")
+        const nameVariants = [cleanName, cleanName.replace(/-/g, '')].filter(Boolean);
+
+        if (fs.existsSync(sessionsDir)) {
+            const sessionFiles = fs.readdirSync(sessionsDir)
+                .filter(f => f.endsWith('.jsonl'))
+                .map(f => ({ name: f, path: path.join(sessionsDir, f), mtime: fs.statSync(path.join(sessionsDir, f)).mtimeMs }))
+                .sort((a, b) => b.mtime - a.mtime)
+                .slice(0, 500); // Last 500 sessions
+
+            for (const sf of sessionFiles) {
+                try {
+                    const content = fs.readFileSync(sf.path, 'utf8');
+
+                    // Count skill invocations (Skill tool calls)
+                    for (const variant of nameVariants) {
+                        const escaped = variant.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+                        const skillMatches = content.match(new RegExp(`"skill":"[^"]*${escaped}[^"]*"`, 'gi'));
+                        if (skillMatches) {
+                            invocations += skillMatches.length;
+                            invocationDates.push(sf.mtime);
+                            break; // Don't double-count
+                        }
+                    }
+
+                    // Count SKILL.md file reads - try both emoji and clean name patterns
+                    const readPatterns = [
+                        new RegExp(`skills/${skillName.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}/SKILL\\.md`, 'g'),
+                        new RegExp(`skills/[^/]*${cleanName.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}[^/]*/SKILL\\.md`, 'gi')
+                    ];
+                    for (const readPattern of readPatterns) {
+                        const readMatches = content.match(readPattern);
+                        if (readMatches) {
+                            fileReads += readMatches.length;
+                            fileReadDates.push(sf.mtime);
+                            break; // Don't double count
+                        }
+                    }
+
+                    // Count agent delegations mentioning this skill + track agent types
+                    const agentPattern = new RegExp(`${cleanName.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}`, 'gi');
+                    const delegationSection = content.match(/"subagent_type"[^}]*}/g);
+                    if (delegationSection) {
+                        for (const d of delegationSection) {
+                            if (agentPattern.test(d)) {
+                                agentDelegations++;
+                                const agentMatch = d.match(/"subagent_type"\s*:\s*"([^"]+)"/);
+                                if (agentMatch) {
+                                    const agentType = agentMatch[1];
+                                    agentBreakdown[agentType] = (agentBreakdown[agentType] || 0) + 1;
+                                }
+                            }
+                        }
+                    }
+
+                    // Also scan for agent types near skill invocations
+                    const lines = content.split('\n');
+                    for (let li = 0; li < lines.length; li++) {
+                        const line = lines[li];
+                        if (agentPattern.test(line)) {
+                            // Check nearby lines (within 5 lines) for subagent_type
+                            for (let offset = -5; offset <= 5; offset++) {
+                                const nearby = lines[li + offset];
+                                if (nearby) {
+                                    const agentMatch = nearby.match(/"subagent_type"\s*:\s*"([^"]+)"/);
+                                    if (agentMatch && !delegationSection) {
+                                        const agentType = agentMatch[1];
+                                        agentBreakdown[agentType] = (agentBreakdown[agentType] || 0) + 1;
+                                    }
+                                }
+                            }
+                            agentPattern.lastIndex = 0; // Reset regex state
+                        }
+                    }
+                } catch (e) { /* skip unreadable files */ }
+            }
+        }
+
+        // Sort and deduplicate dates
+        invocationDates.sort((a, b) => a - b);
+        if (invocationDates.length > 0) {
+            lastInvoked = new Date(invocationDates[invocationDates.length - 1]);
+        }
+
+        // 3. Build daily activity for last 90 days (from both invocations and file reads)
+        const now = Date.now();
+        const dayMs = 86400000;
+        const activityDays = 90;
+        const dailyActivity = new Array(activityDays).fill(0);
+        const allDates = [...invocationDates, ...fileReadDates];
+        allDates.forEach(ts => {
+            const daysAgo = Math.floor((now - ts) / dayMs);
+            if (daysAgo >= 0 && daysAgo < activityDays) {
+                dailyActivity[activityDays - 1 - daysAgo]++;
+            }
+        });
+
+        // 4. Complexity assessment
+        let complexity = 'simple';
+        if (fileMeta) {
+            if (fileMeta.size > 30000) complexity = 'comprehensive';
+            else if (fileMeta.size > 15000) complexity = 'detailed';
+            else if (fileMeta.size > 5000) complexity = 'moderate';
+        }
+
+        // Build recent sessions list (unique dates, most recent first)
+        const recentSessionDates = [...new Set(allDates.map(ts => new Date(ts).toISOString().split('T')[0]))]
+            .sort((a, b) => b.localeCompare(a))
+            .slice(0, 5);
+
+        res.json({
+            name: skillName,
+            fileMeta,
+            usage: {
+                invocations,
+                fileReads,
+                agentDelegations,
+                totalInteractions: invocations + fileReads,
+                lastInvoked,
+                complexity,
+                agentBreakdown: Object.entries(agentBreakdown)
+                    .map(([agent, count]) => ({ agent, count }))
+                    .sort((a, b) => b.count - a.count)
+            },
+            recentSessions: recentSessionDates,
+            activity: {
+                days: activityDays,
+                daily: dailyActivity,
+                activeDays: dailyActivity.filter(d => d > 0).length,
+                peakDay: Math.max(...dailyActivity),
+                sessionsScanned: 200
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/docs/analytics - Real usage analytics for docs
+app.get('/api/docs/analytics', (req, res) => {
+    const docPath = req.query.path;
+    if (!docPath || docPath.includes('..')) {
+        return res.status(400).json({ error: 'Invalid path' });
+    }
+
+    const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+    const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+    const homeDir = process.env.HOME || '/home/endlessblink';
+
+    try {
+        // 1. File metadata
+        const fullPath = path.join(projectRoot, 'docs', docPath);
+        let fileMeta = null;
+        if (fs.existsSync(fullPath)) {
+            const stat = fs.statSync(fullPath);
+            fileMeta = {
+                size: stat.size,
+                created: stat.birthtime,
+                modified: stat.mtime,
+                sizeKB: Math.round(stat.size / 1024 * 10) / 10
+            };
+        }
+
+        // 2. Scan conversation logs for doc reads
+        const projSlug = projectRoot.replace(/\//g, '-');
+        const sessionsDir = path.join(homeDir, '.claude/projects', projSlug);
+        let fileReads = 0;
+        let readDates = [];
+        let agentBreakdown = {};
+
+        const searchPath = 'docs/' + docPath;
+
+        if (fs.existsSync(sessionsDir)) {
+            const sessionFiles = fs.readdirSync(sessionsDir)
+                .filter(f => f.endsWith('.jsonl'))
+                .map(f => ({ name: f, path: path.join(sessionsDir, f), mtime: fs.statSync(path.join(sessionsDir, f)).mtimeMs }))
+                .sort((a, b) => b.mtime - a.mtime)
+                .slice(0, 500);
+
+            for (const sf of sessionFiles) {
+                try {
+                    const content = fs.readFileSync(sf.path, 'utf8');
+                    const pattern = new RegExp(searchPath.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'g');
+                    const matches = content.match(pattern);
+                    if (matches) {
+                        fileReads += matches.length;
+                        readDates.push(sf.mtime);
+
+                        // Track which agents read this doc
+                        const lines = content.split('\n');
+                        const docPatternLocal = new RegExp(searchPath.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'), 'i');
+                        for (let li = 0; li < lines.length; li++) {
+                            if (docPatternLocal.test(lines[li])) {
+                                // Check nearby lines for subagent_type
+                                for (let offset = -5; offset <= 5; offset++) {
+                                    const nearby = lines[li + offset];
+                                    if (nearby) {
+                                        const agentMatch = nearby.match(/"subagent_type"\s*:\s*"([^"]+)"/);
+                                        if (agentMatch) {
+                                            const agentType = agentMatch[1];
+                                            agentBreakdown[agentType] = (agentBreakdown[agentType] || 0) + 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+
+        readDates.sort((a, b) => a - b);
+
+        // 3. Daily activity (90 days)
+        const now = Date.now();
+        const dayMs = 86400000;
+        const activityDays = 90;
+        const dailyActivity = new Array(activityDays).fill(0);
+        readDates.forEach(ts => {
+            const daysAgo = Math.floor((now - ts) / dayMs);
+            if (daysAgo >= 0 && daysAgo < activityDays) {
+                dailyActivity[activityDays - 1 - daysAgo]++;
+            }
+        });
+
+        // Build recent sessions list (unique dates, most recent first)
+        const recentSessionDates = [...new Set(readDates.map(ts => new Date(ts).toISOString().split('T')[0]))]
+            .sort((a, b) => b.localeCompare(a))
+            .slice(0, 5);
+
+        res.json({
+            path: docPath,
+            fileMeta,
+            usage: {
+                fileReads,
+                lastRead: readDates.length > 0 ? new Date(readDates[readDates.length - 1]) : null,
+                agentBreakdown: Object.entries(agentBreakdown)
+                    .map(([agent, count]) => ({ agent, count }))
+                    .sort((a, b) => b.count - a.count)
+            },
+            recentSessions: recentSessionDates,
+            activity: {
+                days: activityDays,
+                daily: dailyActivity,
+                activeDays: dailyActivity.filter(d => d > 0).length,
+                peakDay: Math.max(...dailyActivity),
+                sessionsScanned: 200
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -2882,6 +3253,84 @@ app.post('/api/tasks/sync', requireTaskEngine, (req, res) => {
     }
 });
 
+// ============================================================================
+// CHANGELOG API — Agent action audit trail
+// ============================================================================
+
+// GET /api/changelog/actions - Query actions with filters
+app.get('/api/changelog/actions', (req, res) => {
+  try {
+    const actions = changelogEngine.queryActions({
+      project: req.query.project,
+      session: req.query.session,
+      tool: req.query.tool,
+      file: req.query.file,
+      since: req.query.since,
+      until: req.query.until,
+      limit: parseInt(req.query.limit) || 100,
+      offset: parseInt(req.query.offset) || 0
+    });
+    res.json({ success: true, count: actions.length, actions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/changelog/sessions - List sessions
+app.get('/api/changelog/sessions', (req, res) => {
+  try {
+    const sessions = changelogEngine.querySessions({
+      project: req.query.project,
+      limit: parseInt(req.query.limit) || 20
+    });
+    res.json({ success: true, count: sessions.length, sessions });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/changelog/file-history - All changes to a file
+app.get('/api/changelog/file-history', (req, res) => {
+  try {
+    if (!req.query.file) return res.status(400).json({ error: 'file parameter required' });
+    const history = changelogEngine.queryFileHistory({
+      file: req.query.file,
+      project: req.query.project,
+      limit: parseInt(req.query.limit) || 50
+    });
+    res.json({ success: true, count: history.length, history });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/changelog/stats - Action statistics
+app.get('/api/changelog/stats', (req, res) => {
+  try {
+    const stats = changelogEngine.queryStats({
+      project: req.query.project,
+      period: req.query.period || '24h'
+    });
+    res.json({ success: true, stats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/changelog/events - SSE stream for real-time changelog
+app.get('/api/changelog/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+  changelogClients.push(res);
+  const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 15000);
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    changelogClients = changelogClients.filter(c => c !== res);
+  });
+});
+
 app.listen(PORT, () => {
     const url = `http://localhost:${PORT}`;
     // Cyan + underline + OSC 8 hyperlink for maximum terminal compatibility
@@ -2902,6 +3351,62 @@ app.listen(PORT, () => {
         console.log('[Periodic] Running worktree cleanup...');
         cleanupStaleWorktrees(4); // 4 hour threshold (reduced from 24)
     }, 60 * 60 * 1000); // 1 hour
+
+    // Initialize changelog engine
+    try {
+        const changelogDbPath = path.join(__dirname, 'data', 'changelog.db');
+        changelogEngine.initDb(changelogDbPath);
+        console.log('[Changelog] Database initialized');
+
+        // Initial ingestion
+        const initialCount = changelogEngine.ingestNewEntries();
+        if (initialCount > 0) {
+            console.log(`[Changelog] Ingested ${initialCount} entries from JSONL files`);
+            // Enrich agent IDs from Claude session data
+            try {
+                const enriched = changelogEngine.enrichAgentIds();
+                if (enriched > 0) console.log(`[Changelog] Enriched ${enriched} entries with agent IDs`);
+            } catch (err) {
+                console.error('[Changelog] Enrichment error:', err.message);
+            }
+        }
+
+        // Poll for new entries every 5 seconds
+        setInterval(() => {
+            try {
+                const newEntries = changelogEngine.ingestNewEntries();
+                if (newEntries > 0) {
+                    // Enrich agent IDs from Claude session data
+                    try {
+                        const enriched = changelogEngine.enrichAgentIds();
+                        if (enriched > 0) console.log(`[Changelog] Enriched ${enriched} entries with agent IDs`);
+                    } catch (err) {
+                        console.error('[Changelog] Enrichment error:', err.message);
+                    }
+                    // Broadcast to SSE clients
+                    const payload = JSON.stringify({ type: 'new-actions', count: newEntries });
+                    changelogClients.forEach(client => {
+                        try { client.write(`data: ${payload}\n\n`); } catch {}
+                    });
+                }
+            } catch (err) {
+                console.error('[Changelog] Ingestion error:', err.message);
+            }
+        }, 5000);
+
+        // Weekly cleanup (90 day retention)
+        setInterval(() => {
+            try {
+                const deleted = changelogEngine.cleanup(90);
+                const rotated = changelogEngine.rotateJsonlFiles(30);
+                if (deleted > 0 || rotated > 0) {
+                    console.log(`[Changelog] Cleaned ${deleted} DB entries, rotated ${rotated} JSONL files`);
+                }
+            } catch {}
+        }, 7 * 24 * 60 * 60 * 1000);
+    } catch (err) {
+        console.error('[Changelog] Failed to initialize:', err.message);
+    }
 
     // Auto-discover projects on startup
     if (localConfig.projectAutoScan !== false) {

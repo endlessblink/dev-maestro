@@ -2829,51 +2829,6 @@
             </svg></span>
           Status Board
         </button>
-        <button class="nav-tab" data-view="ideas">
-          <span class="icon"><svg viewBox="0 0 24 24">
-              <path
-                d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
-              <line x1="9" y1="21" x2="15" y2="21" />
-            </svg></span>
-          Ideas
-        </button>
-        <button class="nav-tab" data-view="roadmap">
-          <span class="icon"><svg viewBox="0 0 24 24">
-              <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
-              <line x1="9" y1="3" x2="9" y2="18" />
-              <line x1="15" y1="6" x2="15" y2="21" />
-            </svg></span>
-          Roadmap
-        </button>
-        <button class="nav-tab" data-view="archive">
-          <span class="icon"><svg viewBox="0 0 24 24">
-              <polyline points="21 8 21 21 3 21 3 8" />
-              <rect x="1" y="3" width="22" height="5" />
-              <line x1="10" y1="12" x2="14" y2="12" />
-            </svg></span>
-          Archive
-        </button>
-        <button class="nav-tab" data-view="status">
-          <span class="icon"><svg viewBox="0 0 24 24">
-              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-              <line x1="4" y1="22" x2="4" y2="15" />
-            </svg></span>
-          Priority Board
-        </button>
-        <button class="nav-tab" data-view="beads">
-          <span class="icon"><svg viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3" />
-              <circle cx="4" cy="12" r="2" />
-              <circle cx="20" cy="12" r="2" />
-              <circle cx="12" cy="4" r="2" />
-              <circle cx="12" cy="20" r="2" />
-              <line x1="9" y1="12" x2="6" y2="12" />
-              <line x1="18" y1="12" x2="15" y2="12" />
-              <line x1="12" y1="9" x2="12" y2="6" />
-              <line x1="12" y1="18" x2="12" y2="15" />
-            </svg></span>
-          Beads
-        </button>
       </div>
     </div>
 
@@ -3589,7 +3544,7 @@
           // (?:.*?)          - Non-greedy match for any chars (emojis like ✅, 🔴, text like "BUG:")
           // ((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+) - CAPTURE GROUP 1: The ID itself
           // (?:~~)?          - Optional strikethrough end
-          if (currentSection === 'activeWork' && trimmed.match(/^###\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?/)) {
+          if (currentSection === 'activeWork' && trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?/)) {
             // Save previous task's subtasks before starting new one
             if (currentItem && currentItem.id?.match(/^(?:TASK|BUG|ISSUE|FEATURE|ROAD)-/)) {
               const taskIdx = data.activeWork.findIndex(t => t.id === currentItem.id);
@@ -3623,7 +3578,7 @@
               }
             }
 
-            const match = trimmed.match(/^###\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/);
+            const match = trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/);
             if (match) {
               // Check both parentheses status AND title for status indicators
               // Title might contain "✅ DONE" or similar without parentheses
@@ -3657,8 +3612,8 @@
                 subtasks: [],
                 progress: status === 'done' ? 100 : (status === 'in-progress' || status === 'paused' ? 50 : 0)
               });
-            } else if (trimmed.startsWith('### ')) {
-              // Non-matching ### header (e.g., FEATURE-XXX, ROAD-XXX) - reset currentItem
+            } else if (trimmed.startsWith('### ') || trimmed.startsWith('#### ')) {
+              // Non-matching ###/#### header (e.g., FEATURE-XXX, ROAD-XXX) - reset currentItem
               // to prevent subsequent **Priority**: or **Status**: lines from affecting the previous task
               currentItem = null;
             }
@@ -3821,20 +3776,32 @@
                 cells.some(c => c.includes('DONE') || c.includes('FIXED') || c.includes('✅'));
 
               // Map columns based on headers
+              // Detect column order: cells[1] might be priority (P0-P3) or title
+              let titleCell = cells[1] || '';
+              let priorityFromTable = '';
+              const cell1Clean = titleCell.replace(/[~*`]/g, '').trim();
+              if (/^P[0-4]$/i.test(cell1Clean) && cells.length >= 3) {
+                // cells[1] is priority, cells[2] is title
+                priorityFromTable = cell1Clean.toUpperCase();
+                titleCell = cells[2] || '';
+              }
+
               const item = {
                 id: id,
-                title: cells[1]?.replace(/~~/g, '').replace(/\*\*/g, '') || '',
+                title: titleCell.replace(/~~/g, '').replace(/\*\*/g, '') || '',
                 status: isDone ? 'done' : 'todo',
-                priority: '',
+                priority: priorityFromTable,
                 notes: '',
                 section: currentSection,
                 progress: isDone ? 100 : 0  // Set progress based on done status
               };
 
-              // Extract priority
-              const priorityCell = cells.find(c => c.match(/P[1-3]|HIGH|MEDIUM|LOW/i));
-              if (priorityCell) {
-                item.priority = priorityCell.replace(/~~/g, '').trim();
+              // Extract priority (if not already found from column order detection)
+              if (!item.priority) {
+                const priorityCell = cells.find(c => c.match(/P[0-3]|HIGH|MEDIUM|LOW/i));
+                if (priorityCell) {
+                  item.priority = priorityCell.replace(/~~/g, '').trim();
+                }
               }
 
               // Extract notes (usually last meaningful column)
@@ -7123,6 +7090,13 @@
     }, 5000);
 
     // ===== END BEADS AGENT TRACKER =====
+
+    // Reload on project switch from parent
+    window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'project-switch') {
+            window.location.reload();
+        }
+    });
 
   </script>
 </body>

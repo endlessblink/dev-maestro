@@ -839,11 +839,12 @@
                 if (match[0].includes('~~') && !match[0].match(/^###\s+[^~]/)) continue;
 
                 const parsedStatus = parseTaskStatus(statusText || title_raw);
-                if (parsedStatus !== 'in-progress' && parsedStatus !== 'review') continue;
+                // Include in-progress, review, AND todo tasks (skip only done)
+                if (parsedStatus === 'done') continue;
                 if (seenActive.has(id)) continue;
 
                 seenActive.add(id);
-                const status = parsedStatus === 'review' ? 'monitoring' : 'progress';
+                const status = parsedStatus === 'review' ? 'monitoring' : parsedStatus === 'in-progress' ? 'progress' : 'todo';
 
                 // Clean up title
                 let title = title_raw.replace(/\*\*/g, '').replace(/~~.*?~~/g, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
@@ -865,10 +866,11 @@
 
                 const statusCol = match[3].trim();
                 const parsedStatus = parseTaskStatus(statusCol);
-                if (parsedStatus !== 'in-progress' && parsedStatus !== 'review') continue;
+                // Include in-progress, review, AND todo tasks (skip only done)
+                if (parsedStatus === 'done') continue;
 
                 seenActive.add(id);
-                const status = parsedStatus === 'review' ? 'monitoring' : 'progress';
+                const status = parsedStatus === 'review' ? 'monitoring' : parsedStatus === 'in-progress' ? 'progress' : 'todo';
                 const filesCol = match[4].trim();
 
                 const titlePattern = new RegExp(`###\\s*(?:~~)?${id}(?:~~)?[:\\s]+([^\\n(]+)`, 'i');
@@ -879,6 +881,10 @@
 
                 data.active.push({ id, title, status, files: filesCol });
             }
+
+            // Sort: in-progress first, then review, then todo
+            const statusOrder = { progress: 0, monitoring: 1, todo: 2 };
+            data.active.sort((a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3));
 
             // Extract completed items with dates
             const completedPattern = /~~(TASK|BUG|ROAD|ISSUE|IDEA)-(\d+)~~[^~\n]*?(?:DONE|FIXED|✅)[^\n]*?(?:Dec\s*(\d+)|(\d{4}))?/gi;
@@ -1092,7 +1098,15 @@
                 return;
             }
 
-            subtitle.textContent = `${data.active.length} items in progress`;
+            const inProgressCount = data.active.filter(i => i.status === 'progress').length;
+            const todoCount = data.active.filter(i => i.status === 'todo').length;
+            const parts = [];
+            if (inProgressCount) parts.push(`${inProgressCount} in progress`);
+            if (todoCount) parts.push(`${todoCount} planned`);
+            subtitle.textContent = parts.join(', ') || `${data.active.length} items`;
+
+            const badgeLabel = { progress: 'in progress', monitoring: 'review', todo: 'planned' };
+            const badgeClass = { progress: 'bug', monitoring: 'task', todo: 'road' };
 
             container.innerHTML = data.active.map(item => `
                 <div class="active-item ${item.status}">
@@ -1101,7 +1115,7 @@
                         <div class="active-item-title">${item.title}</div>
                         <div class="active-item-meta">${item.files}</div>
                     </div>
-                    <span class="badge ${item.status === 'monitoring' ? 'task' : 'bug'}">${item.status}</span>
+                    <span class="badge ${badgeClass[item.status] || 'task'}">${badgeLabel[item.status] || item.status}</span>
                 </div>
             `).join('');
         }
@@ -1291,6 +1305,9 @@
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'tab-activated') {
                 init();
+            }
+            if (event.data && event.data.type === 'project-switch') {
+                window.location.reload();
             }
         });
 

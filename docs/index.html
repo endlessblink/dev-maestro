@@ -6,6 +6,8 @@
     <title>Documentation Graph</title>
     <script src="https://unpkg.com/d3@7"></script>
     <script src="https://unpkg.com/force-graph"></script>
+    <script src="https://unpkg.com/marked@9.1.6/marked.min.js"></script>
+    <script src="https://unpkg.com/mermaid@11/dist/mermaid.min.js"></script>
     <style>
         /* Design tokens - Pure black theme (matching Storybook) */
         :root {
@@ -174,109 +176,561 @@
             border-color: var(--brand-primary);
         }
 
+        /* Old detail panel - hidden, replaced by content panel */
         .detail-panel {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            width: 280px;
-            background: rgba(31, 31, 31, 0.95);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--border-medium);
-            border-radius: 12px;
-            padding: 1rem;
-            display: none;
-            z-index: 100;
+            display: none !important;
         }
 
-        .detail-panel.visible {
-            display: block;
+        /* Content panel - slide-in from right */
+        .content-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50%;
+            height: 100%;
+            background: rgba(13, 17, 23, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-left: 1px solid var(--border-medium);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .detail-close {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            background: none;
-            border: none;
+        .content-panel.visible {
+            transform: translateX(0);
+        }
+
+        .content-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+            flex-shrink: 0;
+        }
+
+        .content-panel-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            margin-right: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .content-panel-path {
+            font-size: 0.75rem;
             color: var(--text-subtle);
-            cursor: pointer;
-            font-size: 1.25rem;
-            line-height: 1;
-            transition: color var(--transition-fast);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            padding: 0.25rem 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            margin-right: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
         }
 
-        .detail-close:hover {
+        .content-panel-close {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-medium);
+            border-radius: 6px;
             color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all var(--transition-fast);
+            flex-shrink: 0;
         }
 
-        .detail-title {
+        .content-panel-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        .usage-stats {
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            flex-shrink: 0;
+        }
+
+        .usage-chart-container {
+            position: relative;
+            background: rgba(255,255,255,0.02);
+            border-radius: 10px;
+            padding: 12px 14px 8px;
+            border: 1px solid rgba(255,255,255,0.04);
+            margin-bottom: 12px;
+        }
+
+        .usage-chart {
+            display: block;
+            width: 100%;
+            height: 100px;
+            border-radius: 4px;
+        }
+
+        .usage-chart-axis {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 2px 0;
+        }
+
+        .usage-chart-axis span {
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        .usage-dates {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 4px;
+        }
+
+        .usage-date-item {
+            font-size: 11px;
+            color: rgba(255,255,255,0.35);
+        }
+
+        .usage-date-item strong {
+            color: rgba(255,255,255,0.65);
+            font-weight: 600;
+        }
+
+        .content-panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .content-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100px;
+            color: var(--text-subtle);
+        }
+
+        /* Markdown rendered content styles */
+        .markdown-body {
+            color: var(--text-secondary);
+            line-height: 1.7;
+            font-size: 0.9rem;
+        }
+
+        .markdown-body h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 1rem 0;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .markdown-body h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 1.5rem 0 0.75rem 0;
+            padding-bottom: 0.3rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .markdown-body h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 1.25rem 0 0.5rem 0;
+        }
+
+        .markdown-body h4, .markdown-body h5, .markdown-body h6 {
             font-size: 1rem;
             font-weight: 600;
             color: var(--text-primary);
-            margin-bottom: 0.5rem;
-            padding-right: 1.5rem;
+            margin: 1rem 0 0.5rem 0;
         }
 
-        .detail-path {
-            font-size: 0.75rem;
-            color: var(--text-subtle);
-            word-break: break-all;
-            margin-bottom: 0.75rem;
-            font-family: monospace;
+        .markdown-body p {
+            margin: 0 0 0.75rem 0;
         }
 
-        .detail-category {
-            display: inline-block;
-            padding: 0.25rem 0.5rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: 500;
-            margin-bottom: 0.75rem;
+        .markdown-body ul, .markdown-body ol {
+            margin: 0 0 0.75rem 0;
+            padding-left: 1.5rem;
         }
 
-        .detail-description {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            line-height: 1.4;
-            margin-bottom: 0.75rem;
-            max-height: 80px;
-            overflow-y: auto;
+        .markdown-body li {
+            margin-bottom: 0.25rem;
         }
 
-        .detail-actions {
-            display: flex;
-            gap: 0.5rem;
+        .markdown-body code {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 0.85em;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            color: var(--brand-primary);
         }
 
-        .detail-btn {
-            flex: 1;
-            padding: 0.5rem;
-            border-radius: 8px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all var(--transition-fast);
-        }
-
-        .detail-btn-primary {
-            background: var(--brand-primary);
-            border: none;
-            color: var(--surface-primary);
-        }
-
-        .detail-btn-primary:hover {
-            background: var(--brand-hover);
-        }
-
-        .detail-btn-secondary {
-            background: transparent;
+        .markdown-body pre {
+            background: rgba(0, 0, 0, 0.5);
             border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 0 0 1rem 0;
+            overflow-x: auto;
+        }
+
+        .markdown-body pre code {
+            background: none;
+            padding: 0;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .markdown-body blockquote {
+            border-left: 3px solid var(--brand-primary);
+            padding: 0.5rem 1rem;
+            margin: 0 0 1rem 0;
+            background: rgba(78, 205, 196, 0.05);
             color: var(--text-muted);
         }
 
-        .detail-btn-secondary:hover {
-            background: var(--surface-hover);
-            border-color: var(--border-subtle);
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0 0 1rem 0;
+        }
+
+        .markdown-body th {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-primary);
+            border: 1px solid var(--border-medium);
+        }
+
+        .markdown-body td {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-medium);
+        }
+
+        .markdown-body a {
+            color: var(--brand-primary);
+            text-decoration: none;
+        }
+
+        .markdown-body a:hover {
+            text-decoration: underline;
+        }
+
+        .markdown-body hr {
+            border: none;
+            border-top: 1px solid var(--border-medium);
+            margin: 1.5rem 0;
+        }
+
+        .markdown-body strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .markdown-body img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        /* Collapsible chapter styles */
+        .content-chapter {
+            margin: 0 0 4px;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.015);
+            overflow: hidden;
+        }
+
+        .content-chapter[open] {
+            border-color: rgba(78, 205, 196, 0.15);
+            background: rgba(255,255,255,0.02);
+        }
+
+        .chapter-summary {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            font-size: 15px;
+            font-weight: 700;
+            color: rgba(255,255,255,0.85);
+            cursor: pointer;
+            user-select: none;
+            list-style: none;
+            transition: background 0.15s;
+        }
+
+        .chapter-summary::-webkit-details-marker { display: none; }
+
+        .chapter-summary::before {
+            content: '\25B6';
+            font-size: 10px;
+            color: rgba(255,255,255,0.35);
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .content-chapter[open] > .chapter-summary::before {
+            transform: rotate(90deg);
+            color: #4ecdc4;
+        }
+
+        .chapter-summary:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        .chapter-badge {
+            margin-left: auto;
+            font-size: 10px;
+            font-weight: 500;
+            color: rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.05);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .analytics-stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .analytics-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            padding: 16px 14px 12px;
+            text-align: center;
+            transition: border-color 150ms ease;
+        }
+
+        .analytics-card:hover {
+            border-color: rgba(255,255,255,0.12);
+        }
+
+        .analytics-card-value {
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.5px;
+        }
+
+        .analytics-card-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.55);
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .analytics-card-sub {
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+            margin-top: 3px;
+        }
+
+        .analytics-chart-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.4);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .analytics-verdict {
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .analytics-verdict.high-usage {
+            background: rgba(78, 205, 196, 0.08);
+            border: 1px solid rgba(78, 205, 196, 0.2);
+            color: rgba(78, 205, 196, 0.9);
+        }
+
+        .analytics-verdict.moderate-usage {
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            color: rgba(245, 158, 11, 0.9);
+        }
+
+        .analytics-verdict.low-usage {
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: rgba(239, 68, 68, 0.9);
+        }
+
+        .analytics-verdict.no-usage {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .analytics-breakdown {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 10px;
+            padding: 14px 16px 10px;
+            margin-bottom: 12px;
+        }
+
+        .breakdown-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .breakdown-label {
+            font-size: 11px;
+            color: rgba(255,255,255,0.6);
+            min-width: 100px;
+            text-transform: capitalize;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .breakdown-bar-wrap {
+            flex: 1;
+            height: 14px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 7px;
+            overflow: hidden;
+        }
+
+        .breakdown-bar {
+            height: 100%;
+            background: linear-gradient(90deg, rgba(78,205,196,0.7), rgba(78,205,196,0.3));
+            border-radius: 7px;
+            transition: width 300ms ease;
+        }
+
+        .breakdown-count {
+            font-size: 12px;
+            font-weight: 700;
+            color: rgba(255,255,255,0.7);
+            min-width: 28px;
+            text-align: right;
+        }
+
+        .analytics-sessions {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 10px;
+            padding: 14px 16px 10px;
+            margin-bottom: 12px;
+        }
+
+        .session-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+        }
+
+        .session-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #4ecdc4;
+            flex-shrink: 0;
+        }
+
+        .session-date {
+            color: rgba(255,255,255,0.6);
+        }
+
+        .chapter-content {
+            padding: 0 14px 12px;
+            border-top: 1px solid rgba(255,255,255,0.04);
+        }
+
+        /* Mermaid diagram styles */
+        .mermaid-diagram {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            text-align: center;
+        }
+
+        .mermaid-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .auto-diagram {
+            margin: 0.75rem 0;
+            border: 1px solid rgba(78, 205, 196, 0.2);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .overview-diagram {
+            background: rgba(78, 205, 196, 0.05);
+            border-color: rgba(78, 205, 196, 0.3);
+            padding: 0.5rem;
+        }
+
+        .overview-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #4ECDC4;
+            padding: 0.25rem 0.5rem;
+            font-weight: 600;
+        }
+
+        .mermaid-error {
+            color: #ef4444;
+            font-size: 0.8rem;
+            padding: 0.5rem;
+        }
+
+        /* Scrollbar styling */
+        .content-panel-body::-webkit-scrollbar {
+            width: 6px;
+        }
+        .content-panel-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .content-panel-body::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+        .content-panel-body::-webkit-scrollbar-thumb:hover {
+            background: var(--text-subtle);
         }
 
         .legend {
@@ -325,7 +779,7 @@
     <div class="container">
         <header class="header">
             <div class="title">
-                <span>📚</span>
+                <span>&#x1F4DA;</span>
                 <span>Documentation</span>
             </div>
 
@@ -357,19 +811,20 @@
 
             <div class="controls">
                 <button class="control-btn" id="zoomIn" title="Zoom in">+</button>
-                <button class="control-btn" id="zoomOut" title="Zoom out">−</button>
-                <button class="control-btn" id="zoomFit" title="Fit to view">⊡</button>
+                <button class="control-btn" id="zoomOut" title="Zoom out">&#x2212;</button>
+                <button class="control-btn" id="zoomFit" title="Fit to view">&#x22A1;</button>
             </div>
 
-            <div class="detail-panel" id="detailPanel">
-                <button class="detail-close" id="detailClose">×</button>
-                <div class="detail-title" id="detailTitle"></div>
-                <div class="detail-path" id="detailPath"></div>
-                <div class="detail-category" id="detailCategory"></div>
-                <div class="detail-description" id="detailDescription"></div>
-                <div class="detail-actions">
-                    <button class="detail-btn detail-btn-primary" id="openDoc">Open Doc</button>
-                    <button class="detail-btn detail-btn-secondary" id="copyPath">Copy Path</button>
+            <!-- Content panel - slide-in from right -->
+            <div class="content-panel" id="contentPanel">
+                <div class="content-panel-header">
+                    <div class="content-panel-title" id="contentTitle"></div>
+                    <div class="content-panel-path" id="contentPath"></div>
+                    <button class="content-panel-close" id="contentClose" title="Close (Esc)">&#x2715;</button>
+                </div>
+                <div class="usage-stats" id="usageStats"></div>
+                <div class="content-panel-body" id="contentBody">
+                    <div class="content-loading">Loading...</div>
                 </div>
             </div>
 
@@ -395,27 +850,626 @@
 
         let graphData = null;
         let graph = null;
+        window._graph = null;
         let selectedNode = null;
         let hoveredNode = null;
 
         // Category emojis
         const CATEGORY_EMOJIS = {
-            'reports': '📊',
-            'conflict-systems-resolution': '⚔️',
-            'archive': '📦',
-            'debug': '🐛',
-            'guides': '📖',
-            'planning': '📋',
-            'reference': '📚',
-            'other': '📄'
+            'reports': '\u{1F4CA}',
+            'conflict-systems-resolution': '\u{2694}\uFE0F',
+            'archive': '\u{1F4E6}',
+            'debug': '\u{1F41B}',
+            'guides': '\u{1F4D6}',
+            'planning': '\u{1F4CB}',
+            'reference': '\u{1F4DA}',
+            'other': '\u{1F4C4}'
         };
 
-        function getNodeSize(node) {
-            if (node.isCategory) return 20;
-            // Larger nodes for important docs, smaller for archived
-            if (node.isArchived) return 8;
-            return 12;
+        // =============================================
+        // Usage tracking via localStorage (timestamped)
+        // =============================================
+        const USAGE_STORAGE_KEY = 'docs-graph-usage';
+        const USAGE_HISTORY_KEY = 'docs-graph-usage-history';
+
+        function getUsageCounts() {
+            try {
+                return JSON.parse(localStorage.getItem(USAGE_STORAGE_KEY) || '{}');
+            } catch { return {}; }
         }
+
+        function getUsageHistory() {
+            try {
+                return JSON.parse(localStorage.getItem(USAGE_HISTORY_KEY) || '{}');
+            } catch { return {}; }
+        }
+
+        function incrementUsage(nodeId) {
+            const counts = getUsageCounts();
+            counts[nodeId] = (counts[nodeId] || 0) + 1;
+            localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(counts));
+            const history = getUsageHistory();
+            if (!history[nodeId]) history[nodeId] = [];
+            history[nodeId].push(Date.now());
+            if (history[nodeId].length > 500) history[nodeId] = history[nodeId].slice(-500);
+            localStorage.setItem(USAGE_HISTORY_KEY, JSON.stringify(history));
+        }
+
+        async function renderUsageStats(container, nodeId, nodePath) {
+            container.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:12px;padding:8px 0">Loading analytics...</div>';
+
+            try {
+                const resp = await fetch('/api/docs/analytics?path=' + encodeURIComponent(nodePath));
+                if (!resp.ok) throw new Error('API error');
+                const data = await resp.json();
+                container.innerHTML = '';
+                renderAnalyticsPanel(container, data, 'doc');
+            } catch (err) {
+                container.innerHTML = '<div style="color:rgba(255,255,255,0.25);font-size:11px;padding:4px 0">Analytics unavailable</div>';
+            }
+        }
+
+        function renderAnalyticsPanel(container, data, type) {
+            const usage = data.usage || {};
+            const activity = data.activity || {};
+            const meta = data.fileMeta || {};
+            const now = Date.now();
+
+            const fmtDate = d => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '\u2014';
+            const fmtRelative = d => {
+                if (!d) return 'never';
+                const diff = Math.floor((now - new Date(d).getTime()) / 60000);
+                if (diff < 1) return 'just now';
+                if (diff < 60) return diff + 'm ago';
+                if (diff < 1440) return Math.floor(diff / 60) + 'h ago';
+                return Math.floor(diff / 1440) + 'd ago';
+            };
+
+            // Stat cards row
+            const statsRow = document.createElement('div');
+            statsRow.className = 'analytics-stats-row';
+
+            const cards = [
+                { value: usage.fileReads || 0, label: 'File Reads', sub: 'by Claude agents', color: '#4ecdc4' },
+                { value: activity.activeDays || 0, label: 'Active Days', sub: 'of ' + (activity.days || 90), color: '#f59e0b' },
+                { value: meta.sizeKB ? meta.sizeKB + 'KB' : '\u2014', label: 'File Size', sub: '', color: '#a78bfa' }
+            ];
+
+            cards.forEach(card => {
+                const el = document.createElement('div');
+                el.className = 'analytics-card';
+                el.innerHTML =
+                    '<div class="analytics-card-value" style="color:' + card.color + '">' + card.value + '</div>' +
+                    '<div class="analytics-card-label">' + card.label + '</div>' +
+                    (card.sub ? '<div class="analytics-card-sub">' + card.sub + '</div>' : '');
+                statsRow.appendChild(el);
+            });
+            container.appendChild(statsRow);
+
+            // Agent breakdown section
+            const agents = (usage.agentBreakdown || []);
+            if (agents.length > 0) {
+                const breakdownSection = document.createElement('div');
+                breakdownSection.className = 'analytics-breakdown';
+
+                const breakdownTitle = document.createElement('div');
+                breakdownTitle.className = 'analytics-chart-title';
+                breakdownTitle.textContent = 'Agent Breakdown';
+                breakdownSection.appendChild(breakdownTitle);
+
+                const maxCount = agents[0].count;
+                agents.slice(0, 6).forEach(item => {
+                    const row = document.createElement('div');
+                    row.className = 'breakdown-row';
+
+                    const label = document.createElement('div');
+                    label.className = 'breakdown-label';
+                    const displayName = item.agent.replace('oh-my-claudecode:', '').replace(/-/g, ' ');
+                    label.textContent = displayName;
+
+                    const barWrap = document.createElement('div');
+                    barWrap.className = 'breakdown-bar-wrap';
+
+                    const bar = document.createElement('div');
+                    bar.className = 'breakdown-bar';
+                    bar.style.width = Math.max(4, (item.count / maxCount) * 100) + '%';
+                    barWrap.appendChild(bar);
+
+                    const count = document.createElement('div');
+                    count.className = 'breakdown-count';
+                    count.textContent = item.count;
+
+                    row.appendChild(label);
+                    row.appendChild(barWrap);
+                    row.appendChild(count);
+                    breakdownSection.appendChild(row);
+                });
+
+                container.appendChild(breakdownSection);
+            }
+
+            // Recent sessions
+            const sessions = data.recentSessions || [];
+            if (sessions.length > 0) {
+                const sessionsSection = document.createElement('div');
+                sessionsSection.className = 'analytics-sessions';
+
+                const sessTitle = document.createElement('div');
+                sessTitle.className = 'analytics-chart-title';
+                sessTitle.textContent = 'Recent Sessions';
+                sessionsSection.appendChild(sessTitle);
+
+                sessions.slice(0, 5).forEach(s => {
+                    const item = document.createElement('div');
+                    item.className = 'session-item';
+                    item.innerHTML = '<span class="session-dot"></span><span class="session-date">' + fmtRelative(s) + '</span>';
+                    sessionsSection.appendChild(item);
+                });
+
+                container.appendChild(sessionsSection);
+            }
+
+            // Activity chart (90 days)
+            const daily = activity.daily || [];
+            if (daily.length > 0) {
+                const chartContainer = document.createElement('div');
+                chartContainer.className = 'usage-chart-container';
+
+                const chartTitle = document.createElement('div');
+                chartTitle.className = 'analytics-chart-title';
+                chartTitle.textContent = 'Activity \u2014 Last ' + daily.length + ' Days';
+                chartContainer.appendChild(chartTitle);
+
+                const canvas = document.createElement('canvas');
+                canvas.className = 'usage-chart';
+                const dpr = window.devicePixelRatio || 1;
+                const cWidth = container.offsetWidth - 36 || 380;
+                const cHeight = 100;
+                canvas.style.width = '100%';
+                canvas.style.height = cHeight + 'px';
+                canvas.width = cWidth * dpr;
+                canvas.height = cHeight * dpr;
+                chartContainer.appendChild(canvas);
+
+                // Axis
+                const axis = document.createElement('div');
+                axis.className = 'usage-chart-axis';
+                const dayMs = 86400000;
+                const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                axis.innerHTML =
+                    '<span>' + fmtShort(new Date(now - (daily.length - 1) * dayMs)) + '</span>' +
+                    '<span>' + fmtShort(new Date(now - Math.floor(daily.length / 2) * dayMs)) + '</span>' +
+                    '<span>' + fmtShort(new Date()) + '</span>';
+                chartContainer.appendChild(axis);
+
+                container.appendChild(chartContainer);
+
+                // Draw
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr);
+                const maxVal = Math.max(1, ...daily);
+                const barW = cWidth / daily.length;
+                const gap = daily.length > 60 ? 1 : 2;
+
+                // Grid
+                for (let g = 0; g <= 3; g++) {
+                    const y = cHeight - (g / 3) * (cHeight - 8) - 2;
+                    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cWidth, y); ctx.stroke();
+                }
+
+                daily.forEach((val, i) => {
+                    const barH = val > 0 ? Math.max(3, (val / maxVal) * (cHeight - 12)) : 1;
+                    const x = i * barW + gap / 2;
+                    const y = cHeight - barH - 2;
+                    const w = barW - gap;
+
+                    const gradient = ctx.createLinearGradient(0, y, 0, y + barH);
+                    if (val > 0) {
+                        gradient.addColorStop(0, 'rgba(78, 205, 196, 0.95)');
+                        gradient.addColorStop(1, 'rgba(78, 205, 196, 0.35)');
+                    } else {
+                        gradient.addColorStop(0, 'rgba(255,255,255,0.04)');
+                        gradient.addColorStop(1, 'rgba(255,255,255,0.01)');
+                    }
+                    ctx.fillStyle = gradient;
+                    const r = Math.min(2, w / 2);
+                    ctx.beginPath();
+                    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+                    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                    ctx.lineTo(x + w, y + barH); ctx.lineTo(x, y + barH);
+                    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+                    ctx.fill();
+
+                    if (val > 0 && barH > 16 && barW > 8) {
+                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                        ctx.font = '600 8px system-ui';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(val, x + w / 2, y + 10);
+                    }
+                });
+            }
+
+            // Timeline row
+            const timeline = document.createElement('div');
+            timeline.className = 'usage-dates';
+            const items = [];
+            if (meta.created) items.push('Created: <strong>' + fmtDate(meta.created) + '</strong>');
+            if (meta.modified) items.push('Modified: <strong>' + fmtRelative(meta.modified) + '</strong>');
+            if (usage.lastRead) items.push('Last read: <strong>' + fmtRelative(usage.lastRead) + '</strong>');
+            timeline.innerHTML = items.map(i => '<div class="usage-date-item">' + i + '</div>').join('');
+            container.appendChild(timeline);
+
+            // Verdict - help user decide to keep or remove
+            const totalReads = (usage.fileReads || 0);
+            const days = activity.activeDays || 0;
+            const verdict = document.createElement('div');
+            verdict.className = 'analytics-verdict';
+
+            if (totalReads >= 50 && days >= 5) {
+                verdict.classList.add('high-usage');
+                verdict.innerHTML = '<strong>⚡ Heavily Used</strong> — This doc is actively referenced by Claude across multiple sessions. Core part of the workflow.';
+            } else if (totalReads >= 10 || days >= 3) {
+                verdict.classList.add('moderate-usage');
+                verdict.innerHTML = '<strong>📊 Moderately Used</strong> — Referenced occasionally. Worth keeping if the content is still relevant.';
+            } else if (totalReads >= 1) {
+                verdict.classList.add('low-usage');
+                verdict.innerHTML = '<strong>⚠️ Rarely Used</strong> — Only ' + totalReads + ' read' + (totalReads !== 1 ? 's' : '') + ' in ' + (activity.days || 90) + ' days. Consider reviewing if this is still needed.';
+            } else {
+                verdict.classList.add('no-usage');
+                verdict.innerHTML = '<strong>🗑 Never Used</strong> — No usage detected in the last ' + (activity.days || 90) + ' days. Candidate for removal or consolidation.';
+            }
+            container.appendChild(verdict);
+        }
+
+        function getNodeSize(node) {
+            if (node.isCategory) return 30;
+            if (node.isArchived) return 5;
+            const counts = getUsageCounts();
+            const clicks = counts[node.id] || 0;
+            const maxClicks = Math.max(1, ...Object.values(counts));
+            const contentLen = node.contentLength || 0;
+            // Tiered sizing based on content length for clear visual distinction
+            let sizeTier;
+            if (contentLen > 50000) sizeTier = 1.0;        // massive docs (MASTER_PLAN etc)
+            else if (contentLen > 20000) sizeTier = 0.75;   // large docs
+            else if (contentLen > 8000) sizeTier = 0.5;     // medium docs
+            else if (contentLen > 3000) sizeTier = 0.25;    // small docs
+            else sizeTier = 0.0;                             // tiny docs
+            // Folder bonus
+            const folderBonus = node.type === 'folder' ? 0.3 : 0;
+            const clickFactor = clicks / maxClicks;
+            const combined = sizeTier * 0.7 + clickFactor * 0.1 + folderBonus;
+            return 6 + combined * 42; // Range: 6-48 (8x area difference!)
+        }
+
+        // =============================================
+        // Mermaid initialization
+        // =============================================
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+                primaryColor: '#4ECDC4',
+                primaryTextColor: '#e6edf3',
+                primaryBorderColor: '#30363d',
+                lineColor: '#8b949e',
+                secondaryColor: '#161b22',
+                tertiaryColor: '#0d1117',
+                background: '#0d1117',
+                mainBkg: '#161b22',
+                nodeBorder: '#4ECDC4',
+                clusterBkg: '#161b22',
+                titleColor: '#e6edf3',
+                edgeLabelBackground: '#0d1117'
+            }
+        });
+
+        // =============================================
+        // Custom marked renderer for mermaid blocks
+        // =============================================
+        const renderer = new marked.Renderer();
+        const originalCode = renderer.code.bind(renderer);
+        renderer.code = function(codeArg, langArg) {
+            // marked v12+ passes { text, lang } object; older passes (code, lang)
+            let text, lang;
+            if (typeof codeArg === 'object' && codeArg !== null) {
+                text = codeArg.text;
+                lang = codeArg.lang;
+            } else {
+                text = codeArg;
+                lang = langArg;
+            }
+            if (lang === 'mermaid') {
+                const id = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+                return '<div class="mermaid-diagram" id="' + id + '">' + text + '</div>';
+            }
+            return originalCode(codeArg, langArg);
+        };
+        marked.setOptions({ renderer });
+
+        // =============================================
+        // Auto-diagram generation from content patterns
+        // =============================================
+        function autoGenerateDiagrams(bodyEl) {
+            let diagramCounter = 0;
+
+            // Pattern A: ASCII flow arrows in <p> tags
+            const paragraphs = bodyEl.querySelectorAll('.markdown-body p');
+            for (const p of paragraphs) {
+                const text = p.textContent;
+                // Match lines with arrow chains (at least 2 arrows)
+                const arrowMatch = text.match(/(.+?)\s*(?:\u2192|->)\s*(.+)/);
+                if (!arrowMatch) continue;
+                // Count arrows to ensure it's a chain (2+ segments)
+                const arrowCount = (text.match(/\u2192|->/g) || []).length;
+                if (arrowCount < 2) continue;
+
+                // Split by arrows
+                const parts = text.split(/\s*(?:\u2192|->)\s*/).map(s => s.trim()).filter(Boolean);
+                if (parts.length < 3) continue;
+
+                // Build mermaid flowchart
+                const lines = ['graph LR'];
+                for (let i = 0; i < parts.length; i++) {
+                    const nodeId = String.fromCharCode(65 + i);
+                    const label = parts[i].replace(/"/g, "'");
+                    if (i < parts.length - 1) {
+                        const nextId = String.fromCharCode(65 + i + 1);
+                        const nextLabel = parts[i + 1].replace(/"/g, "'");
+                        if (i === 0) {
+                            lines.push('    ' + nodeId + '["' + label + '"] --> ' + nextId + '["' + nextLabel + '"]');
+                        } else {
+                            lines.push('    ' + nodeId + ' --> ' + nextId + '["' + nextLabel + '"]');
+                        }
+                    }
+                }
+
+                const diagramId = 'auto-' + (++diagramCounter) + '-' + Math.random().toString(36).substr(2, 5);
+                const diagramDiv = document.createElement('div');
+                diagramDiv.className = 'auto-diagram';
+                diagramDiv.innerHTML =
+                    '<div class="mermaid-diagram" id="' + diagramId + '">' + lines.join('\n') + '</div>';
+                p.insertAdjacentElement('afterend', diagramDiv);
+            }
+
+            // Pattern B: Ordered lists with action verbs (3+ items)
+            const actionVerbs = /\b(run|create|check|deploy|build|start|install|configure|set|execute|push|pull|add|remove|update|verify|test|open|close|stop|restart|download|upload|copy|move|delete|sign|generate|bump|commit|tag|merge|release|fetch|init)\b/i;
+            const orderedLists = bodyEl.querySelectorAll('.markdown-body ol');
+            for (const ol of orderedLists) {
+                const items = ol.querySelectorAll(':scope > li');
+                if (items.length < 3) continue;
+
+                // Check if items contain action verbs
+                let actionCount = 0;
+                for (const li of items) {
+                    if (actionVerbs.test(li.textContent)) actionCount++;
+                }
+                if (actionCount < 2) continue;
+
+                // Build mermaid flowchart
+                const lines = ['graph TD'];
+                const stepTexts = [];
+                for (const li of items) {
+                    let txt = li.textContent.trim();
+                    if (txt.length > 40) txt = txt.substring(0, 37) + '...';
+                    txt = txt.replace(/"/g, "'");
+                    stepTexts.push(txt);
+                }
+                for (let i = 0; i < stepTexts.length; i++) {
+                    const nodeId = 'S' + i;
+                    if (i < stepTexts.length - 1) {
+                        const nextId = 'S' + (i + 1);
+                        lines.push('    ' + nodeId + '["' + stepTexts[i] + '"] --> ' + nextId + '["' + stepTexts[i + 1] + '"]');
+                    }
+                }
+
+                const diagramId = 'auto-' + (++diagramCounter) + '-' + Math.random().toString(36).substr(2, 5);
+                const diagramDiv = document.createElement('div');
+                diagramDiv.className = 'auto-diagram';
+                diagramDiv.innerHTML =
+                    '<div class="mermaid-diagram" id="' + diagramId + '">' + lines.join('\n') + '</div>';
+                ol.insertAdjacentElement('afterend', diagramDiv);
+            }
+
+            // Pattern D: Tables with state/status/transition columns
+            const tables = bodyEl.querySelectorAll('.markdown-body table');
+            for (const table of tables) {
+                const headers = Array.from(table.querySelectorAll('th')).map(th => th.textContent.toLowerCase());
+                const hasStateCol = headers.some(h => /status|state|transition|phase|stage/.test(h));
+                if (!hasStateCol) continue;
+
+                const rows = table.querySelectorAll('tbody tr');
+                if (rows.length < 2) continue;
+
+                // Find the state column index
+                const stateIdx = headers.findIndex(h => /status|state|transition|phase|stage/.test(h));
+                const states = [];
+                for (const row of rows) {
+                    const cells = row.querySelectorAll('td');
+                    if (cells[stateIdx]) {
+                        let st = cells[stateIdx].textContent.trim();
+                        if (st.length > 30) st = st.substring(0, 27) + '...';
+                        st = st.replace(/"/g, "'");
+                        if (st && !states.includes(st)) states.push(st);
+                    }
+                }
+                if (states.length < 2) continue;
+
+                const lines = ['stateDiagram-v2'];
+                for (let i = 0; i < states.length - 1; i++) {
+                    lines.push('    ' + states[i].replace(/[^a-zA-Z0-9]/g, '_') + ' --> ' + states[i + 1].replace(/[^a-zA-Z0-9]/g, '_'));
+                }
+
+                const diagramId = 'auto-' + (++diagramCounter) + '-' + Math.random().toString(36).substr(2, 5);
+                const diagramDiv = document.createElement('div');
+                diagramDiv.className = 'auto-diagram';
+                diagramDiv.innerHTML =
+                    '<div class="mermaid-diagram" id="' + diagramId + '">' + lines.join('\n') + '</div>';
+                table.insertAdjacentElement('afterend', diagramDiv);
+            }
+        }
+
+        // =============================================
+        // Overview diagram - document structure as mindmap
+        // =============================================
+        function generateOverviewDiagram(bodyEl) {
+            const headers = bodyEl.querySelectorAll('.markdown-body h2, .markdown-body h3');
+            if (headers.length < 3) return;
+
+            const h1 = bodyEl.querySelector('.markdown-body h1');
+            const title = h1 ? h1.textContent.trim() : 'Document';
+
+            const lines = ['graph LR'];
+            const rootId = 'ROOT';
+            lines.push('    ' + rootId + '(("' + (title.length > 25 ? title.substring(0, 22) + '...' : title) + '"))');
+
+            let h2Count = 0;
+            let lastH2Id = '';
+            for (const h of headers) {
+                let text = h.textContent.trim();
+                if (text.length > 30) text = text.substring(0, 27) + '...';
+                text = text.replace(/"/g, "'");
+
+                if (h.tagName === 'H2') {
+                    h2Count++;
+                    const id = 'H2_' + h2Count;
+                    lastH2Id = id;
+                    lines.push('    ' + rootId + ' --> ' + id + '["' + text + '"]');
+                } else if (h.tagName === 'H3' && lastH2Id) {
+                    const id = 'H3_' + h2Count + '_' + Math.random().toString(36).substr(2, 3);
+                    lines.push('    ' + lastH2Id + ' --> ' + id + '["' + text + '"]');
+                }
+
+                if (h2Count >= 8) break;
+            }
+
+            if (h2Count < 2) return;
+
+            const diagramId = 'overview-' + Math.random().toString(36).substr(2, 5);
+            const overviewDiv = document.createElement('div');
+            overviewDiv.className = 'auto-diagram overview-diagram';
+            overviewDiv.innerHTML = '<div class="overview-label">Document Structure</div>' +
+                '<div class="mermaid-diagram" id="' + diagramId + '">' + lines.join('\n') + '</div>';
+
+            const firstH1 = bodyEl.querySelector('.markdown-body h1');
+            if (firstH1) {
+                firstH1.insertAdjacentElement('afterend', overviewDiv);
+            } else {
+                bodyEl.querySelector('.markdown-body').prepend(overviewDiv);
+            }
+        }
+
+        // Render all mermaid diagrams in a container
+        async function renderMermaidDiagrams(bodyEl) {
+            const mermaidDivs = bodyEl.querySelectorAll('.mermaid-diagram');
+            for (const div of mermaidDivs) {
+                try {
+                    const { svg } = await mermaid.render(div.id + '-svg', div.textContent.trim());
+                    div.innerHTML = svg;
+                } catch (e) {
+                    console.warn('Mermaid render failed:', e);
+                    div.innerHTML = '<pre class="mermaid-error">' + div.textContent + '</pre>';
+                }
+            }
+        }
+
+        // =============================================
+        // Content panel
+        // =============================================
+        async function showContentPanel(node) {
+            const panel = document.getElementById('contentPanel');
+            const titleEl = document.getElementById('contentTitle');
+            const pathEl = document.getElementById('contentPath');
+            const bodyEl = document.getElementById('contentBody');
+
+            titleEl.textContent = node.title;
+            pathEl.textContent = 'docs/' + node.path;
+            bodyEl.innerHTML = '<div class="content-loading">Loading...</div>';
+            panel.classList.add('visible');
+
+            // Render usage stats (counter + chart)
+            renderUsageStats(document.getElementById('usageStats'), node.id, node.path);
+            // Re-render graph to update node sizes
+            if (graph) graph.nodeColor(graph.nodeColor());
+
+            try {
+                const resp = await fetch('/api/docs/content?path=' + encodeURIComponent(node.path));
+                if (!resp.ok) throw new Error('Failed to load');
+                const data = await resp.json();
+                let content = data.content;
+                // Strip YAML frontmatter
+                if (content.startsWith('---')) {
+                    const endIdx = content.indexOf('---', 3);
+                    if (endIdx > 0) content = content.substring(endIdx + 3).trim();
+                }
+                bodyEl.innerHTML = '<div class="markdown-body">' + marked.parse(content) + '</div>';
+
+                // Overview diagram showing document structure
+                generateOverviewDiagram(bodyEl);
+
+                // Auto-generate diagrams from content patterns
+                autoGenerateDiagrams(bodyEl);
+
+                // Collapse sections into expandable chapters
+                collapseSections(bodyEl);
+
+                // Render all mermaid diagrams (explicit + auto-generated)
+                await renderMermaidDiagrams(bodyEl);
+            } catch (err) {
+                bodyEl.innerHTML = '<div class="content-loading">Failed to load document content</div>';
+            }
+        }
+
+        function collapseSections(bodyEl) {
+            const md = bodyEl.querySelector('.markdown-body');
+            if (!md) return;
+
+            const headings = Array.from(md.querySelectorAll('h2'));
+            if (headings.length < 2) return;
+
+            headings.forEach((h2, idx) => {
+                const section = [];
+                let sibling = h2.nextElementSibling;
+                while (sibling && sibling.tagName !== 'H2') {
+                    section.push(sibling);
+                    sibling = sibling.nextElementSibling;
+                }
+
+                const details = document.createElement('details');
+                details.className = 'content-chapter';
+                if (idx === 0) details.open = true;
+
+                const summary = document.createElement('summary');
+                summary.className = 'chapter-summary';
+                summary.innerHTML = h2.innerHTML;
+                const badge = document.createElement('span');
+                badge.className = 'chapter-badge';
+                badge.textContent = section.length + ' items';
+                summary.appendChild(badge);
+
+                details.appendChild(summary);
+
+                const content = document.createElement('div');
+                content.className = 'chapter-content';
+                section.forEach(el => content.appendChild(el));
+                details.appendChild(content);
+
+                h2.replaceWith(details);
+            });
+        }
+
+        function hideContentPanel() {
+            document.getElementById('contentPanel').classList.remove('visible');
+            selectedNode = null;
+            if (graph) graph.nodeColor(graph.nodeColor());
+        }
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') hideContentPanel();
+        });
 
         // Load data and initialize
         async function init() {
@@ -449,10 +1503,9 @@
             categories.forEach(cat => {
                 const item = document.createElement('div');
                 item.className = 'legend-item';
-                item.innerHTML = `
-                    <div class="legend-dot" style="background: ${COLORS[cat] || COLORS.other}"></div>
-                    <span>${cat.charAt(0).toUpperCase() + cat.slice(1).replace(/-/g, ' ')}</span>
-                `;
+                item.innerHTML =
+                    '<div class="legend-dot" style="background: ' + (COLORS[cat] || COLORS.other) + '"></div>' +
+                    '<span>' + cat.charAt(0).toUpperCase() + cat.slice(1).replace(/-/g, ' ') + '</span>';
                 legendItems.appendChild(item);
             });
         }
@@ -480,32 +1533,46 @@
             const container = document.getElementById('graph');
             const { nodes, links } = getFilteredData();
 
+            // Pre-assign positions in a large circle so nodes start spread out
+            const nodeCount = nodes.length;
+            const radius = Math.max(600, nodeCount * 15);
+            nodes.forEach((node, i) => {
+                const angle = (2 * Math.PI * i) / nodeCount;
+                node.x = radius * Math.cos(angle);
+                node.y = radius * Math.sin(angle);
+            });
+
             graph = ForceGraph()(container)
-                .graphData({ nodes, links })
+                .graphData({ nodes, links });
+            window._graph = graph;
+            graph
                 .backgroundColor('#0f172a')
                 .nodeColor(node => node.color || COLORS.other)
-                .nodeVal(node => node.isCategory ? 20 : 6)
+                .nodeVal(node => node.isCategory ? 18 : 8)
                 .nodeLabel(node => node.title)
                 .linkColor(() => 'rgba(148, 163, 184, 0.2)')
                 .linkWidth(1.5)
                 .onNodeClick(handleNodeClick)
                 .onNodeHover(handleNodeHover)
-                .cooldownTicks(150)
-                .warmupTicks(80)
-                .onEngineStop(() => graph.zoomToFit(400, 50));
+                .cooldownTicks(300)
+                .warmupTicks(200)
+                .d3AlphaDecay(0.01)
+                .d3VelocityDecay(0.3)
+                .onEngineStop(() => graph.zoomToFit(400, 80));
 
-            // Strong spacing - labels always visible
-            graph.d3Force('charge', d3.forceManyBody().strength(-350).distanceMax(700));
-            graph.d3Force('link').distance(100).strength(0.25);
-            graph.d3Force('center', d3.forceCenter());
-            // Large collision radius for labels
-            graph.d3Force('collide', d3.forceCollide().radius(node => getNodeSize(node) + 45).strength(1).iterations(5));
-            // Spread nodes outward
-            graph.d3Force('radial', d3.forceRadial(300, 0, 0).strength(node => node.isCategory ? 0.05 : 0.1));
+            // Extreme repulsion to spread nodes apart
+            graph.d3Force('charge', d3.forceManyBody().strength(-3000).distanceMax(3000));
+            graph.d3Force('link').distance(250).strength(0.1);
+            // No center force — it pulls everything together
+            graph.d3Force('center', null);
+            // Hard collision so labels never overlap
+            graph.d3Force('collide', d3.forceCollide().radius(node => getNodeSize(node) + 70).strength(1).iterations(10));
+            // Weak radial to prevent flying to infinity
+            graph.d3Force('radial', d3.forceRadial(radius * 0.7, 0, 0).strength(0.02));
 
             // Custom node rendering with emojis
             graph.nodeCanvasObject((node, ctx, globalScale) => {
-                const emoji = CATEGORY_EMOJIS[node.category] || '📄';
+                const emoji = CATEGORY_EMOJIS[node.category] || '\u{1F4C4}';
                 const nodeSize = getNodeSize(node);
                 const emojiSize = node.isCategory ? 16 / globalScale : 12 / globalScale;
 
@@ -531,7 +1598,7 @@
                 }
 
                 // Draw emoji inside the circle
-                ctx.font = `${emojiSize}px Sans-Serif`;
+                ctx.font = emojiSize + 'px Sans-Serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(emoji, node.x, node.y);
@@ -539,7 +1606,7 @@
                 // ALWAYS draw labels - short for docs, full for categories
                 const minLabelSize = 11;
                 const labelFontSize = Math.max(minLabelSize, node.isCategory ? 14 / globalScale : 11 / globalScale);
-                ctx.font = `${node.isCategory ? 'bold ' : ''}${labelFontSize}px Sans-Serif`;
+                ctx.font = (node.isCategory ? 'bold ' : '') + labelFontSize + 'px Sans-Serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
 
@@ -554,7 +1621,7 @@
                 } else {
                     // Normal label - truncate short to prevent overlaps
                     ctx.fillStyle = node.isCategory ? '#f1f5f9' : '#cbd5e1';
-                    let label = node.title;
+                    var label = node.title;
                     if (!node.isCategory && label.length > 14) {
                         label = label.substring(0, 11) + '...';
                     }
@@ -567,7 +1634,12 @@
             if (!node || node.isCategory) return;
 
             selectedNode = node;
-            showDetailPanel(node);
+
+            // If it's a file with a path, show content panel
+            if (node.path) {
+                showContentPanel(node);
+            }
+
             graph.nodeColor(graph.nodeColor()); // Trigger re-render
         }
 
@@ -575,29 +1647,6 @@
             document.body.style.cursor = node && !node.isCategory ? 'pointer' : 'default';
             hoveredNode = node;
             // Trigger re-render to show/hide label
-            if (graph) graph.nodeColor(graph.nodeColor());
-        }
-
-        function showDetailPanel(node) {
-            const panel = document.getElementById('detailPanel');
-            const title = document.getElementById('detailTitle');
-            const path = document.getElementById('detailPath');
-            const category = document.getElementById('detailCategory');
-            const description = document.getElementById('detailDescription');
-
-            title.textContent = node.title;
-            path.textContent = 'docs/' + node.path;
-            category.textContent = node.category.replace(/-/g, ' ');
-            category.style.background = node.color + '33';
-            category.style.color = node.color;
-            description.textContent = node.description || 'No description available';
-
-            panel.classList.add('visible');
-        }
-
-        function hideDetailPanel() {
-            document.getElementById('detailPanel').classList.remove('visible');
-            selectedNode = null;
             if (graph) graph.nodeColor(graph.nodeColor());
         }
 
@@ -635,26 +1684,7 @@
             graph.zoomToFit(400, 50);
         });
 
-        document.getElementById('detailClose').addEventListener('click', hideDetailPanel);
-
-        document.getElementById('openDoc').addEventListener('click', () => {
-            if (selectedNode) {
-                // Open in new tab - construct path relative to project root
-                const docPath = '/docs/' + selectedNode.path;
-                window.open(docPath, '_blank');
-            }
-        });
-
-        document.getElementById('copyPath').addEventListener('click', () => {
-            if (selectedNode) {
-                const fullPath = 'docs/' + selectedNode.path;
-                navigator.clipboard.writeText(fullPath).then(() => {
-                    const btn = document.getElementById('copyPath');
-                    btn.textContent = 'Copied!';
-                    setTimeout(() => btn.textContent = 'Copy Path', 1500);
-                });
-            }
-        });
+        document.getElementById('contentClose').addEventListener('click', hideContentPanel);
 
         // Track if initial setup is done
         let isInitialized = false;
@@ -674,16 +1704,11 @@
         }
 
         // Refresh canvas on tab switch - fixes Chromium rendering bug
-        // Uses pause/resume cycle instead of resize to avoid state corruption
-        function refreshGraph() {
+        function refreshGraphCanvas() {
             if (!graph) return;
-
-            // Pause and resume to force canvas redraw
             graph.pauseAnimation();
             requestAnimationFrame(() => {
-                if (graph) {
-                    graph.resumeAnimation();
-                }
+                if (graph) graph.resumeAnimation();
             });
         }
 
@@ -697,7 +1722,10 @@
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'tab-activated') {
                 console.log('Tab activated - refreshing canvas');
-                refreshGraph();
+                refreshGraphCanvas();
+            }
+            if (event.data && event.data.type === 'project-switch') {
+                window.location.reload();
             }
         });
 
