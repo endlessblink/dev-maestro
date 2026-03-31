@@ -185,7 +185,7 @@ app.get('/favicon.ico', (req, res, next) => {
 // 5. Serve default static files from current directory (fallback)
 app.use(express.static(__dirname));
 
-// Status API - for Claude to detect if Dev Maestro is running
+// Status API - for Claude to detect if Watchpost is running
 app.get('/api/status', (req, res) => {
     const pkg = require('./package.json');
     const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
@@ -195,7 +195,7 @@ app.get('/api/status', (req, res) => {
 
     res.json({
         running: true,
-        name: 'Dev Maestro',
+        name: 'Watchpost',
         version: pkg.version,
         port: PORT,
         project: path.dirname(masterPlanPath),
@@ -205,8 +205,55 @@ app.get('/api/status', (req, res) => {
     });
 });
 
+// Self-description API - helps Claude Code instances discover capabilities
+app.get('/api/discover', (req, res) => {
+    const pkg = require('./package.json');
+    res.json({
+        name: 'Watchpost',
+        description: 'AI orchestration dashboard and task management for multi-project development. Tracks tasks from MASTER_PLAN.md, provides health scanning, agent orchestration, changelog tracking, and cross-project context.',
+        version: pkg.version,
+        port: PORT,
+        endpoints: {
+            status: { method: 'GET', path: '/api/status', description: 'Server health, active project, uptime' },
+            discover: { method: 'GET', path: '/api/discover', description: 'This endpoint — full API manifest' },
+            projects: { method: 'GET', path: '/api/projects', description: 'All registered projects with paths and MASTER_PLAN locations' },
+            'master-plan': { method: 'GET', path: '/api/master-plan', description: 'Full parsed MASTER_PLAN.md — tasks, statuses, dependencies' },
+            'next-id': { method: 'GET', path: '/api/next-id', description: 'Next available task ID for the active project' },
+            'task-update': { method: 'POST', path: '/api/task/:id/status', description: 'Update task status (planned/in_progress/done/review)' },
+            'task-add': { method: 'POST', path: '/api/task/add', description: 'Add a new task to MASTER_PLAN.md' },
+            health: { method: 'GET', path: '/api/health', description: 'Full project health scan (async)' },
+            'health-quick': { method: 'GET', path: '/api/health/quick', description: 'Quick health check' },
+            'health-report': { method: 'GET', path: '/api/health/report/json', description: 'Machine-readable health report' },
+            skills: { method: 'GET', path: '/api/skills', description: 'Available Claude Code skills for the project' },
+            docs: { method: 'GET', path: '/api/docs', description: 'Documentation files in the project' },
+            'beads-ready': { method: 'GET', path: '/api/beads/ready', description: 'Tasks with all dependencies resolved (ready to work on)' },
+            'beads-graph': { method: 'GET', path: '/api/beads/graph', description: 'Full task dependency graph' },
+            'beads-claim': { method: 'POST', path: '/api/beads/claim/:id', description: 'Claim a task (sets IN PROGRESS)' },
+            'beads-close': { method: 'POST', path: '/api/beads/close/:id', description: 'Close a task (sets DONE)' },
+            changelog: { method: 'GET', path: '/api/changelog', description: 'Session changelog data' },
+            events: { method: 'GET', path: '/api/events', description: 'Server-sent events stream for live updates' }
+        },
+        cli: {
+            binary: '~/.local/bin/watchpost',
+            commands: ['tui', 'dashboard', 'status', 'stop', 'install', 'archive', 'discover', 'help']
+        },
+        data: {
+            changelog_db: '~/.watchpost/data/changelog.db',
+            projects_registry: '~/.watchpost/projects.json',
+            per_project_db: '.watchpost/db.sqlite'
+        },
+        tips_for_claude: [
+            'Check /api/status first to see which project is active',
+            'Use /api/master-plan to get all tasks without reading the markdown file',
+            'Use /api/beads/ready to find tasks you can start immediately',
+            'Use /api/health/quick for a fast project health assessment',
+            'The changelog.db SQLite has session history across all projects'
+        ]
+    });
+});
+
 // ============================================================================
-// RUNTIME CONFIG API - For AI agents to configure Dev Maestro without restart
+// RUNTIME CONFIG API - For AI agents to configure Watchpost without restart
 // ============================================================================
 
 // Helper: Find MASTER_PLAN.md in a directory
@@ -604,9 +651,9 @@ function initTaskEngine() {
             return false;
         }
         const projectRoot = getProjectRoot(masterPlanPath);
-        const maestroDir = path.join(projectRoot, '.maestro');
-        if (!fs.existsSync(maestroDir)) fs.mkdirSync(maestroDir, { recursive: true });
-        const dbPath = path.join(maestroDir, 'db.sqlite');
+        const watchpostDir = path.join(projectRoot, '.watchpost');
+        if (!fs.existsSync(watchpostDir)) fs.mkdirSync(watchpostDir, { recursive: true });
+        const dbPath = path.join(watchpostDir, 'db.sqlite');
         taskEngine.initDb(dbPath);
         const count = taskEngine.syncFromMarkdown(masterPlanPath);
         taskEngineReady = true;
@@ -3336,7 +3383,7 @@ app.listen(PORT, () => {
     // Cyan + underline + OSC 8 hyperlink for maximum terminal compatibility
     // OSC 8: \x1b]8;;URL\x1b\\ ... \x1b]8;;\x1b\\
     // Cyan: \x1b[36m, Underline: \x1b[4m, Reset: \x1b[0m
-    console.log(`Dev Maestro running at \x1b]8;;${url}\x1b\\\x1b[36m\x1b[4m${url}\x1b[0m\x1b]8;;\x1b\\`);
+    console.log(`Watchpost running at \x1b]8;;${url}\x1b\\\x1b[36m\x1b[4m${url}\x1b[0m\x1b]8;;\x1b\\`);
     console.log(`Serving static files from: ${__dirname}`);
 
     // BUG-1113: Clean up stale worktrees on startup (older than 24h)
@@ -3424,9 +3471,9 @@ app.listen(PORT, () => {
         }
     }
 
-    // Auto-activate project matching MAESTRO_CWD (if set from wrapper script)
-    if (process.env.MAESTRO_CWD) {
-        const cwd = process.env.MAESTRO_CWD;
+    // Auto-activate project matching WATCHPOST_CWD (if set from wrapper script)
+    if (process.env.WATCHPOST_CWD) {
+        const cwd = process.env.WATCHPOST_CWD;
         const data = readProjects();
         // Find the project whose root is a prefix of (or equals) CWD
         const match = data.projects.find(p => cwd.startsWith(p.root));

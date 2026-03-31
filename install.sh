@@ -1,18 +1,18 @@
 #!/bin/bash
-# Dev Maestro Modular Install/Update Script
+# Watchpost Modular Install/Update Script
 #
 # Usage:
 #   # Full install (interactive — prompts for modules)
-#   dev-maestro install /path/to/project
+#   watchpost install /path/to/project
 #
 #   # Non-interactive with specific modules
-#   dev-maestro install /path/to/project --modules=dashboard,skills,tui
+#   watchpost install /path/to/project --modules=dashboard,skills,tui
 #
 #   # Reconfigure existing project
-#   dev-maestro install /path/to/project --reconfigure
+#   watchpost install /path/to/project --reconfigure
 #
 #   # Legacy usage (still supported)
-#   curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/endlessblink/watchpost/main/install.sh | bash
 #   curl -sSL ... | bash -s -- --project /path/to/project
 #   curl -sSL ... | bash -s -- --master-plan /path/to/MASTER_PLAN.md
 #   ./install.sh --reconfigure
@@ -20,9 +20,9 @@
 set -e
 
 # Configuration
-REPO_URL="https://github.com/endlessblink/dev-maestro.git"
-INSTALL_DIR="${DEV_MAESTRO_DIR:-$HOME/.dev-maestro}"
-BRANCH="${DEV_MAESTRO_BRANCH:-main}"
+REPO_URL="https://github.com/endlessblink/watchpost.git"
+INSTALL_DIR="${WATCHPOST_DIR:-$HOME/.watchpost}"
+BRANCH="${WATCHPOST_BRANCH:-main}"
 
 # Expand ~ to $HOME if present
 INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
@@ -52,7 +52,7 @@ ALL_MODULES="dashboard skills tui beads health"
 # ARGUMENT PARSING
 # ============================================================================
 show_help() {
-    echo -e "${CYAN}Dev Maestro Modular Installer${NC}"
+    echo -e "${CYAN}Watchpost Modular Installer${NC}"
     echo ""
     echo "Usage: install.sh [OPTIONS] [PROJECT_PATH]"
     echo ""
@@ -84,12 +84,12 @@ show_help() {
     echo "  ./install.sh --reconfigure"
     echo ""
     echo "Modules:"
-    echo "  core       Creates .dev-maestro.json, registers in projects.json,"
+    echo "  core       Creates .watchpost.json, registers in projects.json,"
     echo "             creates/finds MASTER_PLAN.md (always installed)"
     echo "  dashboard  Configures .env so dashboard can serve this project"
     echo "  skills     Registers master-plan plugin in Claude Code,"
     echo "             adds CLAUDE_INSTRUCTIONS.md to project"
-    echo "  tui        Adds maestro CLI wrapper to project"
+    echo "  tui        Adds watchpost CLI wrapper to project"
     echo "  beads      Installs bd binary (if missing), initializes .beads/ in project"
     echo "  health     Configures health scanner for project's tech stack"
     exit 0
@@ -294,7 +294,7 @@ select_modules_interactive() {
     local descriptions=(
         "Configures .env so dashboard can serve this project"
         "Registers master-plan plugin in Claude Code, adds CLAUDE_INSTRUCTIONS.md"
-        "Adds maestro CLI wrapper to project"
+        "Adds watchpost CLI wrapper to project"
         "Installs bd binary (if missing), initializes .beads/ in project"
         "Configures health scanner for project's tech stack"
     )
@@ -367,8 +367,8 @@ install_core() {
 
     echo -e "${BLUE}[core] Setting up project integration...${NC}"
 
-    # 1. Create .dev-maestro.json marker file
-    cat > "$project_root/.dev-maestro.json" << EOF
+    # 1. Create .watchpost.json marker file
+    cat > "$project_root/.watchpost.json" << EOF
 {
   "installed": true,
   "installDir": "$INSTALL_DIR",
@@ -379,7 +379,7 @@ install_core() {
   "apiStatus": "http://localhost:6010/api/status"
 }
 EOF
-    echo -e "${GREEN}  Created .dev-maestro.json marker${NC}"
+    echo -e "${GREEN}  Created .watchpost.json marker${NC}"
 
     # 2. Create MASTER_PLAN.md if it doesn't exist
     if [ ! -f "$plan_path" ]; then
@@ -399,8 +399,83 @@ PLAN
         echo -e "${GREEN}  Created initial MASTER_PLAN.md${NC}"
     fi
 
-    # 3. Register in projects.json (done after all modules selected)
+    # 3. Add Watchpost section to global ~/.claude/CLAUDE.md for cross-project discoverability
+    inject_global_claude_md
+
+    # 4. Register in projects.json (done after all modules selected)
     echo -e "${GREEN}  [core] Complete${NC}"
+}
+
+# Inject Watchpost section into global ~/.claude/CLAUDE.md so every Claude Code
+# instance on this machine knows the API exists and how to query it.
+inject_global_claude_md() {
+    local global_claude_md="$HOME/.claude/CLAUDE.md"
+
+    # Ensure ~/.claude/ exists
+    mkdir -p "$HOME/.claude"
+
+    # Create file if it doesn't exist
+    if [ ! -f "$global_claude_md" ]; then
+        touch "$global_claude_md"
+    fi
+
+    # Skip if already present
+    if grep -q "## Watchpost" "$global_claude_md" 2>/dev/null; then
+        echo -e "${DIM}  Watchpost section already in global ~/.claude/CLAUDE.md${NC}"
+        return
+    fi
+
+    cat >> "$global_claude_md" << 'GLOBALCLAUDEMD'
+
+## Watchpost — Cross-Project Orchestration
+
+Watchpost is a local AI orchestration dashboard that tracks tasks, health, changelogs, and dependencies across ALL your projects. **Always check if it's running before manually parsing MASTER_PLAN.md files.**
+
+**Quick check:** `curl -s http://localhost:6010/api/status 2>/dev/null | python3 -m json.tool`
+
+If running, you get the active project, uptime, and base URL. If not running: `~/.local/bin/watchpost dashboard` to start it.
+
+### Key API Endpoints (port 6010)
+
+| Endpoint | What You Get |
+|----------|-------------|
+| `GET /api/discover` | Full API manifest with all endpoints, CLI commands, data locations |
+| `GET /api/status` | Active project, server health, uptime |
+| `GET /api/projects` | All registered projects with paths and MASTER_PLAN locations |
+| `GET /api/master-plan` | Parsed MASTER_PLAN.md — tasks, statuses, deps (no file reading needed) |
+| `GET /api/next-id` | Next available task ID |
+| `GET /api/beads/ready` | Tasks with all deps resolved — ready to work on |
+| `GET /api/beads/graph` | Full dependency graph |
+| `GET /api/health/quick` | Quick project health assessment |
+| `GET /api/health/report/json` | Detailed health report (machine-readable) |
+| `GET /api/skills` | Available Claude Code skills |
+| `POST /api/task/add` | Add a new task |
+| `POST /api/task/:id/status` | Update task status |
+| `POST /api/beads/claim/:id` | Claim a task (sets IN PROGRESS) |
+| `POST /api/beads/close/:id` | Close a task (sets DONE) |
+
+### When to Use Watchpost
+
+- **Starting work on a project** → `GET /api/master-plan` for all tasks instead of reading markdown
+- **Need next task** → `GET /api/beads/ready` for dependency-resolved tasks
+- **Cross-project context** → `GET /api/projects` to see all registered projects
+- **Health check** → `GET /api/health/quick` before major changes
+
+### Data Locations
+
+| Data | Location |
+|------|----------|
+| Server installation | `~/.watchpost/` |
+| Projects registry | `~/.watchpost/projects.json` |
+| Changelog DB (all sessions) | `~/.watchpost/data/changelog.db` |
+| Per-project task DB | `.watchpost/db.sqlite` (in project root) |
+
+### CLI
+
+`watchpost` is available at `~/.local/bin/watchpost`. Commands: `tui`, `dashboard`, `status`, `stop`, `install`, `archive`, `discover`, `help`.
+GLOBALCLAUDEMD
+
+    echo -e "${GREEN}  Added Watchpost section to global ~/.claude/CLAUDE.md${NC}"
 }
 
 # --- DASHBOARD MODULE ---
@@ -427,26 +502,26 @@ install_skills() {
     # 1. Append to CLAUDE.md if not already present
     local claude_md="$project_root/CLAUDE.md"
     if [ -f "$claude_md" ]; then
-        if ! grep -q "## Dev Maestro" "$claude_md"; then
+        if ! grep -q "## Watchpost" "$claude_md"; then
             cat >> "$claude_md" << 'CLAUDEMD'
 
-## Dev Maestro
+## Watchpost
 
 **AI Agent Orchestration Platform** - Kanban board for MASTER_PLAN.md tasks.
 
 | Item | Value |
 |------|-------|
 | URL | http://localhost:6010 |
-| Start | `./maestro.sh` or `cd ~/.dev-maestro && npm start` |
+| Start | `./watchpost.sh` or `cd ~/.watchpost && npm start` |
 | Status API | `curl -s localhost:6010/api/status` |
 
 **Views**: Kanban, Orchestrator, Skills, Docs, Stats, Timeline, Health
 
 To check if running: `curl -s localhost:6010/api/status | jq .running`
 CLAUDEMD
-            echo -e "${GREEN}  Added Dev Maestro section to CLAUDE.md${NC}"
+            echo -e "${GREEN}  Added Watchpost section to CLAUDE.md${NC}"
         else
-            echo -e "${DIM}  Dev Maestro section already in CLAUDE.md${NC}"
+            echo -e "${DIM}  Watchpost section already in CLAUDE.md${NC}"
         fi
     fi
 
@@ -469,15 +544,15 @@ install_tui() {
     local project_root="$1"
     local plan_path="$2"
 
-    echo -e "${BLUE}[tui] Adding maestro CLI wrapper...${NC}"
+    echo -e "${BLUE}[tui] Adding watchpost CLI wrapper...${NC}"
 
-    # Create maestro.sh launcher in project directory
-    cat > "$project_root/maestro.sh" << LAUNCHER
+    # Create watchpost.sh launcher in project directory
+    cat > "$project_root/watchpost.sh" << LAUNCHER
 #!/bin/bash
-# Dev Maestro Launcher with Auto-Update
+# Watchpost Launcher with Auto-Update
 # Generated for: $(basename "$project_root")
 
-INSTALL_DIR="\${DEV_MAESTRO_DIR:-\$HOME/.dev-maestro}"
+INSTALL_DIR="\${WATCHPOST_DIR:-\$HOME/.watchpost}"
 CONFIG_FILE="\$INSTALL_DIR/local/config.json"
 
 # Colors
@@ -488,8 +563,8 @@ NC='\033[0m'
 
 # Install if not present
 if [ ! -d "\$INSTALL_DIR" ]; then
-    echo -e "\${BLUE}Dev Maestro not installed. Installing...\${NC}"
-    curl -sSL https://raw.githubusercontent.com/endlessblink/dev-maestro/main/install.sh | bash -s -- --master-plan "$plan_path"
+    echo -e "\${BLUE}Watchpost not installed. Installing...\${NC}"
+    curl -sSL https://raw.githubusercontent.com/endlessblink/watchpost/main/install.sh | bash -s -- --master-plan "$plan_path"
 fi
 
 # Read autoUpdate setting from local config (default: true)
@@ -516,7 +591,7 @@ update_if_available() {
     fi
 
     if [ "\$LOCAL" != "\$REMOTE" ]; then
-        echo -e "\${BLUE}Dev Maestro update available...\${NC}"
+        echo -e "\${BLUE}Watchpost update available...\${NC}"
         git stash --quiet 2>/dev/null || true
         if git pull origin main --quiet 2>/dev/null; then
             if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q "package.json"; then
@@ -526,7 +601,7 @@ update_if_available() {
             echo -e "\${GREEN}Updated to latest version\${NC}"
         fi
     else
-        echo -e "\${GREEN}Dev Maestro is up to date\${NC}"
+        echo -e "\${GREEN}Watchpost is up to date\${NC}"
     fi
 }
 
@@ -541,8 +616,8 @@ export MASTER_PLAN_PATH="$plan_path"
 cd "\$INSTALL_DIR" && npm start
 LAUNCHER
 
-    chmod +x "$project_root/maestro.sh"
-    echo -e "${GREEN}  Created maestro.sh launcher${NC}"
+    chmod +x "$project_root/watchpost.sh"
+    echo -e "${GREEN}  Created watchpost.sh launcher${NC}"
 
     echo -e "${GREEN}  [tui] Complete${NC}"
 }
@@ -625,8 +700,8 @@ install_health() {
         stack+=("generic")
     fi
 
-    # Write health config to .dev-maestro.json (update existing)
-    local marker="$project_root/.dev-maestro.json"
+    # Write health config to .watchpost.json (update existing)
+    local marker="$project_root/.watchpost.json"
     if [ -f "$marker" ]; then
         local stack_json=$(printf '%s\n' "${stack[@]}" | jq -R . | jq -s . 2>/dev/null || echo '["generic"]')
         local tmp_file=$(mktemp)
@@ -712,12 +787,12 @@ migrate_local_overrides() {
 if [ "$RECONFIGURE" = true ]; then
     echo -e "${BLUE}"
     echo "============================================================"
-    echo "           DEV MAESTRO RECONFIGURATION"
+    echo "           WATCHPOST RECONFIGURATION"
     echo "============================================================"
     echo -e "${NC}"
 
     if [ ! -d "$INSTALL_DIR" ]; then
-        echo -e "${RED}Error: Dev Maestro not installed at $INSTALL_DIR${NC}"
+        echo -e "${RED}Error: Watchpost not installed at $INSTALL_DIR${NC}"
         echo "Run without --reconfigure to install first."
         exit 1
     fi
@@ -816,17 +891,17 @@ if [ "$RECONFIGURE" = true ]; then
     fi
 
     # Offer to restart if running
-    if pgrep -f "node.*server.js.*dev-maestro" > /dev/null 2>&1; then
+    if pgrep -f "node.*server.js.*watchpost" > /dev/null 2>&1; then
         if [ "$INTERACTIVE" = true ]; then
-            read -p "Dev Maestro is running. Restart to apply changes? [Y/n]: " RESTART
+            read -p "Watchpost is running. Restart to apply changes? [Y/n]: " RESTART
             if [[ ! "$RESTART" =~ ^[Nn] ]]; then
-                pkill -f "node.*server.js.*dev-maestro" 2>/dev/null || true
+                pkill -f "node.*server.js.*watchpost" 2>/dev/null || true
                 sleep 1
                 cd "$INSTALL_DIR" && npm start &
-                echo -e "${GREEN}Restarted Dev Maestro${NC}"
+                echo -e "${GREEN}Restarted Watchpost${NC}"
             fi
         else
-            echo -e "${YELLOW}Dev Maestro is running. Restart manually to apply changes.${NC}"
+            echo -e "${YELLOW}Watchpost is running. Restart manually to apply changes.${NC}"
         fi
     fi
 
@@ -838,7 +913,7 @@ fi
 # ============================================================================
 echo -e "${BLUE}"
 echo "============================================================"
-echo "           DEV MAESTRO INSTALLER / UPDATER"
+echo "           WATCHPOST INSTALLER / UPDATER"
 echo "============================================================"
 echo -e "${NC}"
 
@@ -870,7 +945,7 @@ if [ -d "$INSTALL_DIR/.git" ]; then
     echo -e "${GREEN}Updated to latest version${NC}"
 else
     IS_FRESH_INSTALL=true
-    echo -e "${BLUE}Installing Dev Maestro to $INSTALL_DIR...${NC}"
+    echo -e "${BLUE}Installing Watchpost to $INSTALL_DIR...${NC}"
 
     # Clone the repository
     git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
@@ -1002,7 +1077,7 @@ if [ -z "$FINAL_PLAN_PATH" ] && [ "$IS_FRESH_INSTALL" = true ] && [ "$INTERACTIV
             fi
         else
             echo -e "${YELLOW}Path not found: $USER_INPUT${NC}"
-            echo "You can configure later with: ~/.dev-maestro/install.sh --reconfigure"
+            echo "You can configure later with: ~/.watchpost/install.sh --reconfigure"
         fi
     fi
 fi
@@ -1069,8 +1144,8 @@ echo -e "  Modules:  ${MODULES_ARR[*]}"
 fi
 echo -e ""
 echo -e "  To start:"
-if [ -n "$FINAL_PROJECT_ROOT" ] && [ -f "$FINAL_PROJECT_ROOT/maestro.sh" ]; then
-echo -e "    cd $FINAL_PROJECT_ROOT && ./maestro.sh"
+if [ -n "$FINAL_PROJECT_ROOT" ] && [ -f "$FINAL_PROJECT_ROOT/watchpost.sh" ]; then
+echo -e "    cd $FINAL_PROJECT_ROOT && ./watchpost.sh"
 else
 echo -e "    cd $INSTALL_DIR && npm start"
 fi
@@ -1082,6 +1157,6 @@ echo -e "============================================================${NC}"
 # Optional: Start the server
 if [ "$START_AFTER_INSTALL" = true ]; then
     echo ""
-    echo -e "${BLUE}Starting Dev Maestro...${NC}"
+    echo -e "${BLUE}Starting Watchpost...${NC}"
     node server.js
 fi
