@@ -973,6 +973,16 @@ app.post('/api/task/add', (req, res) => {
         return res.status(400).json({ error: 'Missing required field: title' });
     }
 
+    // Enforce max title length for dashboard readability
+    const MAX_TITLE_LENGTH = 80;
+    if (title.length > MAX_TITLE_LENGTH) {
+        return res.status(400).json({
+            error: `Title too long (${title.length} chars). Max ${MAX_TITLE_LENGTH} chars. Put details in the description field instead.`,
+            title_length: title.length,
+            max_length: MAX_TITLE_LENGTH
+        });
+    }
+
     // Validate type
     const validTypes = ['TASK', 'BUG', 'FEATURE', 'ROAD', 'IDEA'];
     const taskType = type.toUpperCase();
@@ -1949,6 +1959,143 @@ function cleanupWorktree(taskId) {
     }
 }
 
+// Helper: Respawn a failed agent with exponential backoff (TASK-322)
+function respawnAgent(taskId, agentData) {
+    console.log(`[Agent] Respawning agent for task ${taskId} (attempt ${agentData.retryCount}/${agentData.maxRetries})`);
+
+    // Build retry prompt with context from previous attempt
+    const lastLines = agentData.outputBuffer
+        .slice(-50)
+        .map(l => l.text || l.message || '')
+        .filter(Boolean)
+        .join('\n');
+
+    const retryPrompt = `You are resuming work on task ${taskId}. A previous attempt failed.
+The worktree may contain partial progress from the previous attempt.
+Check git status and git log to see what was already done before continuing.
+Original task: ${agentData.task.title || agentData.task.description || 'No title'}
+
+Previous attempt output (last 50 lines):
+${lastLines}
+
+Continue from where the previous attempt left off. Do not restart from scratch.`;
+
+    // Spawn new claude process in the SAME worktree (preserves partial progress)
+    const newProcess = spawn(CLAUDE_BINARY, [
+        '--print',
+        '--verbose',
+        '--output-format', 'stream-json',
+        '--dangerously-skip-permissions',
+        '--max-turns', '50',
+        '-p', retryPrompt
+    ], {
+        cwd: agentData.worktreePath,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env }
+    });
+
+    // Update agent data with new process
+    agentData.process = newProcess;
+    agentData.status = 'running';
+    agentData.startTime = Date.now();
+    agentData.jsonBuffer = '';
+
+    broadcastAgentOutput(taskId, {
+        type: 'system',
+        message: `Retry ${agentData.retryCount}/${agentData.maxRetries} started`
+    });
+
+    // Re-attach stdout handler using shared parsing function
+    newProcess.stdout.on('data', (data) => {
+        agentData.jsonBuffer = parseAndBroadcastAgentOutput(
+            taskId,
+            data.toString(),
+            agentData,
+            agentData.jsonBuffer || ''
+        );
+    });
+
+    // Re-attach stderr handler
+    newProcess.stderr.on('data', (data) => {
+        const output = data.toString();
+        agentData.outputBuffer.push({ type: 'stderr', text: output, time: Date.now() });
+        broadcastAgentOutput(taskId, { type: 'stderr', text: output });
+    });
+
+    // Re-attach close handler (recursive — will retry again if needed)
+    newProcess.on('close', (code) => {
+        handleAgentClose(taskId, agentData, code);
+    });
+
+    newProcess.on('error', (err) => {
+        console.error(`[Agent] Error respawning agent for ${taskId}:`, err.message);
+        agentData.status = 'error';
+        agentData.lastError = err.message;
+        broadcastAgentOutput(taskId, { type: 'error', message: err.message });
+    });
+}
+
+// Helper: Handle agent process close with retry logic (TASK-322)
+function handleAgentClose(taskId, agentData, code) {
+    console.log(`[Agent] Task ${taskId} agent exited with code ${code}`);
+    agentData.exitCode = code;
+    agentData.endTime = Date.now();
+
+    // Persist output to disk
+    const logDir = path.join(__dirname, 'agent-logs');
+    try {
+        if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(logDir, `${taskId}-${Date.now()}.jsonl`),
+            agentData.outputBuffer.map(l => JSON.stringify(l)).join('\n'),
+            'utf8'
+        );
+    } catch (logErr) {
+        console.error(`[Agent] Failed to persist log for ${taskId}:`, logErr.message);
+    }
+
+    if (code === 0) {
+        agentData.status = 'completed';
+        broadcastAgentOutput(taskId, {
+            type: 'exit',
+            code: code,
+            message: 'Task completed successfully'
+        });
+    } else if (agentData.retryCount < agentData.maxRetries) {
+        const delay = Math.pow(2, agentData.retryCount) * 1000; // 1s, 2s, 4s
+        agentData.retryCount++;
+        agentData.lastError = `Exit code ${code}`;
+        agentData.status = 'retrying';
+        broadcastAgentOutput(taskId, {
+            type: 'system',
+            message: `Agent failed (exit ${code}). Retry ${agentData.retryCount}/${agentData.maxRetries} in ${delay / 1000}s...`
+        });
+        setTimeout(() => respawnAgent(taskId, agentData), delay);
+    } else {
+        agentData.status = 'failed';
+        agentData.lastError = `Exit code ${code} after ${agentData.maxRetries} retries`;
+        // Auto-revert beads status to todo so task can be re-claimed
+        const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+        const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+        try {
+            execSync(`${BD_PATH} update ${taskId} --status todo`, { cwd: projectRoot, timeout: 5000 });
+        } catch (e) { /* best effort */ }
+        broadcastAgentOutput(taskId, {
+            type: 'system',
+            message: `Agent failed after ${agentData.maxRetries} retries. Task reverted to todo.`
+        });
+    }
+
+    // Clean up after a delay (keep for logs viewing) — only if not retrying
+    if (agentData.status !== 'retrying') {
+        setTimeout(() => {
+            if (runningAgents.get(taskId)?.status !== 'running') {
+                runningAgents.delete(taskId);
+            }
+        }, 300000); // 5 minutes
+    }
+}
+
 // Helper: Clean up ALL stale worktrees (older than maxAgeHours)
 // BUG-1113: Prevents context bloat in Claude Code
 function cleanupStaleWorktrees(maxAgeHours = 24, customProjectRoot = null) {
@@ -2218,7 +2365,10 @@ Start working now. Be thorough and complete the task.`;
                 branchName: branchName,
                 startTime: Date.now(),
                 outputBuffer: [],
-                status: 'running'
+                status: 'running',
+                retryCount: 0,
+                maxRetries: 3,
+                lastError: null
             };
 
             runningAgents.set(taskId, agentData);
@@ -2328,25 +2478,9 @@ Start working now. Be thorough and complete the task.`;
                 broadcastAgentOutput(taskId, { type: 'stderr', text: output });
             });
 
-            // Handle exit
+            // Handle exit — delegates to handleAgentClose for retry logic (TASK-322)
             agentProcess.on('close', (code) => {
-                console.log(`[Agent] Task ${taskId} agent exited with code ${code}`);
-                agentData.status = code === 0 ? 'completed' : 'failed';
-                agentData.exitCode = code;
-                agentData.endTime = Date.now();
-
-                broadcastAgentOutput(taskId, {
-                    type: 'exit',
-                    code: code,
-                    message: code === 0 ? 'Task completed successfully' : 'Task failed'
-                });
-
-                // Clean up after a delay (keep for logs viewing)
-                setTimeout(() => {
-                    if (runningAgents.get(taskId)?.status !== 'running') {
-                        runningAgents.delete(taskId);
-                    }
-                }, 300000); // 5 minutes
+                handleAgentClose(taskId, agentData, code);
             });
 
             // Handle error
@@ -2626,6 +2760,19 @@ app.post('/api/beads/agents/:id/stop', (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// GET /api/beads/agents/:id/retries - Get retry info for an agent (TASK-322)
+app.get('/api/beads/agents/:id/retries', (req, res) => {
+    const agent = runningAgents.get(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    res.json({
+        taskId: agent.taskId,
+        retryCount: agent.retryCount || 0,
+        maxRetries: agent.maxRetries || 3,
+        lastError: agent.lastError || null,
+        status: agent.status
+    });
 });
 
 // POST /api/beads/agents/:id/command - Send a command to an agent (spawns follow-up)
@@ -3391,6 +3538,28 @@ app.listen(PORT, () => {
     const cleanupResults = cleanupStaleWorktrees(24);
     if (cleanupResults.cleaned.length > 0) {
         console.log(`[Startup] Cleaned ${cleanupResults.cleaned.length} stale worktrees`);
+    }
+
+    // TASK-322: Recover orphaned tasks (in_progress in beads but no running agent)
+    try {
+        const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
+        const orphanProjectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
+        const result = execSync(`${BD_PATH} list --status in_progress --json`, { cwd: orphanProjectRoot, timeout: 5000 });
+        const orphans = JSON.parse(result.toString());
+        for (const task of orphans) {
+            if (!runningAgents.has(task.id)) {
+                console.log(`[Recovery] Reverting orphaned task ${task.id} from in_progress to todo`);
+                execSync(`${BD_PATH} update ${task.id} --status todo`, { cwd: orphanProjectRoot, timeout: 5000 });
+            }
+        }
+        if (orphans.length > 0) {
+            const reverted = orphans.filter(t => !runningAgents.has(t.id));
+            if (reverted.length > 0) {
+                console.log(`[Recovery] Reverted ${reverted.length} orphaned task(s) to todo`);
+            }
+        }
+    } catch (e) {
+        console.log('[Recovery] Could not check for orphaned tasks:', e.message);
     }
 
     // BUG-1113: Periodic cleanup every 1 hour (reduced from 4 hours)
