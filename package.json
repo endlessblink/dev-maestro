@@ -1,10 +1,10 @@
 {
-  "name": "dev-maestro",
+  "name": "watchpost",
   "version": "1.0.0",
   "description": "AI agent orchestration platform - Kanban, Health scanning, multi-agent workflows, Beads integration",
   "main": "server.js",
   "bin": {
-    "dev-maestro": "./server.js"
+    "watchpost": "./server.js"
   },
   "scripts": {
     "start": "node server.js",
@@ -14,7 +14,10 @@
     "tasks": "curl -s http://localhost:6010/api/tasks 2>/dev/null",
     "config": "curl -s http://localhost:6010/api/config 2>/dev/null",
     "reconfigure": "bash install.sh --reconfigure",
-    "tui": "node tui/src/index.js"
+    "tui": "node tui/src/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "bash tests/e2e/test-merge-discard.sh"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
@@ -23,6 +26,7 @@
     "express": "^4.18.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "vitest": "^4.1.2"
   }
 }
