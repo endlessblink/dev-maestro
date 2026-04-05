@@ -7,6 +7,7 @@ require('dotenv').config();
 const taskEngine = require('./modules/task-engine');
 const projectScanner = require('./modules/project-scanner');
 const changelogEngine = require('./modules/changelog-engine');
+const mountControlRoomRoutes = require('./controlroom/api');
 
 // ============================================================================
 // LOCAL OVERRIDES SYSTEM
@@ -184,6 +185,9 @@ app.get('/favicon.ico', (req, res, next) => {
 
 // 5. Serve default static files from current directory (fallback)
 app.use(express.static(__dirname));
+
+// 6. Mount Control Room routes (enriched projects, stats, summaries, covers)
+mountControlRoomRoutes(app);
 
 // Status API - for Claude to detect if Watchpost is running
 app.get('/api/status', (req, res) => {
@@ -572,6 +576,32 @@ app.post('/api/projects/scan-paths', express.json(), (req, res) => {
     }
 
     res.json({ scanPaths: localConfig.projectScanPaths, scanDepth: localConfig.projectScanDepth });
+});
+
+// POST /api/projects/reorder - Persist custom project order
+app.post('/api/projects/reorder', (req, res) => {
+    const { order } = req.body;
+
+    if (!Array.isArray(order)) {
+        return res.status(400).json({ error: 'Body must have an "order" array of project names' });
+    }
+
+    const data = readProjects();
+
+    // Reorder: projects in the given order first, then any remaining at the end
+    const orderMap = new Map(order.map((name, i) => [name, i]));
+    const reordered = [
+        ...order
+            .map(name => data.projects.find(p => p.name === name))
+            .filter(Boolean),
+        ...data.projects.filter(p => !orderMap.has(p.name))
+    ];
+
+    data.projects = reordered;
+    writeProjects(data);
+
+    console.log(`[Projects] Custom order saved (${reordered.length} projects)`);
+    res.json({ ok: true, count: reordered.length });
 });
 
 // POST /api/projects/:name/activate - Switch active project without restart
