@@ -20,6 +20,28 @@ const SKIP_DIRS = new Set([
 ]);
 
 /**
+ * Files whose presence marks a directory as a project root,
+ * even without a MASTER_PLAN.md.
+ * Ordered by specificity — first match wins.
+ */
+const PROJECT_MARKERS = [
+  'package.json',
+  'Cargo.toml',
+  'pyproject.toml',
+  'go.mod',
+  'build.gradle',
+  'pom.xml',
+  'Makefile',
+  'CMakeLists.txt',
+  'setup.py',
+  'composer.json',
+  'Gemfile',
+  'pubspec.yaml',
+  'deno.json',
+  'bun.lockb',
+];
+
+/**
  * Subdirectory names that indicate MASTER_PLAN.md lives one level below the
  * actual project root (e.g. the file is at <root>/docs/MASTER_PLAN.md).
  */
@@ -38,15 +60,18 @@ function shouldSkipDir(basename) {
 }
 
 /**
- * Walk a directory tree up to `maxDepth` and collect all MASTER_PLAN.md paths.
+ * Walk a directory tree up to `maxDepth` and collect MASTER_PLAN.md paths
+ * and directories containing project marker files.
  * Uses synchronous fs operations with try/catch to handle permission errors.
  *
- * @param {string} dir     - Directory to walk
- * @param {number} depth   - Current depth (starts at 0)
+ * @param {string} dir       - Directory to walk
+ * @param {number} depth     - Current depth (starts at 0)
  * @param {number} maxDepth
- * @param {string[]} results - Accumulator for found paths
+ * @param {string[]} masterPlanResults - Accumulator for found MASTER_PLAN.md paths
+ * @param {Map<string,string>} markerResults - Map of root -> first marker filename
+ * @param {Set<string>} visited
  */
-function walkDir(dir, depth, maxDepth, results, visited) {
+function walkDir(dir, depth, maxDepth, masterPlanResults, markerResults, visited) {
   if (depth > maxDepth) return;
 
   // Cycle detection: resolve real path and check visited set
@@ -67,26 +92,43 @@ function walkDir(dir, depth, maxDepth, results, visited) {
     return;
   }
 
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry);
+  const entrySet = new Set(entries);
 
-    // Check for the target file first (cheap string compare)
-    if (entry === 'MASTER_PLAN.md') {
-      let stat;
-      try {
-        stat = fs.statSync(fullPath);
-      } catch (_) {
-        continue;
+  // Check for MASTER_PLAN.md
+  if (entrySet.has('MASTER_PLAN.md')) {
+    const fullPath = path.join(dir, 'MASTER_PLAN.md');
+    try {
+      if (fs.statSync(fullPath).isFile()) {
+        masterPlanResults.push(fullPath);
       }
-      if (stat.isFile()) {
-        results.push(fullPath);
+    } catch (_) { /* skip */ }
+  }
+
+  // Check for project marker files (only if this dir has a .git — otherwise
+  // it's likely a subdirectory/package inside a larger project)
+  if (entrySet.has('.git') && !markerResults.has(dir)) {
+    for (const marker of PROJECT_MARKERS) {
+      if (entrySet.has(marker)) {
+        try {
+          if (fs.statSync(path.join(dir, marker)).isFile()) {
+            markerResults.set(dir, marker);
+            break;
+          }
+        } catch (_) { /* skip */ }
       }
-      continue;
     }
+    // .git alone (no other marker) still counts as a project
+    if (!markerResults.has(dir)) {
+      markerResults.set(dir, '.git');
+    }
+  }
 
-    // Skip known noisy dirs before calling statSync
+  // Recurse into subdirectories
+  for (const entry of entries) {
+    if (entry === 'MASTER_PLAN.md') continue;
     if (shouldSkipDir(entry)) continue;
 
+    const fullPath = path.join(dir, entry);
     let stat;
     try {
       stat = fs.statSync(fullPath);
@@ -95,22 +137,30 @@ function walkDir(dir, depth, maxDepth, results, visited) {
     }
 
     if (stat.isDirectory()) {
-      walkDir(fullPath, depth + 1, maxDepth, results, visited);
+      walkDir(fullPath, depth + 1, maxDepth, masterPlanResults, markerResults, visited);
     }
   }
 }
 
 /**
- * Recursively scan directories to find MASTER_PLAN.md files.
+ * Recursively scan directories to find projects.
+ *
+ * Discovery strategy (in priority order):
+ * 1. MASTER_PLAN.md — the classic Watchpost project marker
+ * 2. .git + project marker file (package.json, Cargo.toml, etc.)
+ *
+ * Projects found via marker files get `masterPlan: null` until the user
+ * creates a MASTER_PLAN.md for them.
  *
  * @param {string[]} scanPaths - Root directories to scan
  * @param {number}   maxDepth  - Maximum directory depth (default 5)
- * @returns {Array<{name: string, root: string, masterPlan: string}>}
+ * @returns {Array<{name: string, root: string, masterPlan: string|null}>}
  */
 function scanForProjects(scanPaths, maxDepth = 5) {
   if (!Array.isArray(scanPaths) || scanPaths.length === 0) return [];
 
-  const foundPaths = [];
+  const masterPlanPaths = [];
+  const markerRoots = new Map(); // root -> marker filename
 
   for (const scanPath of scanPaths) {
     const resolved = path.resolve(scanPath);
@@ -118,32 +168,33 @@ function scanForProjects(scanPaths, maxDepth = 5) {
     try {
       stat = fs.statSync(resolved);
     } catch (_) {
-      // Path doesn't exist or is inaccessible — skip
       continue;
     }
     if (!stat.isDirectory()) continue;
 
-    walkDir(resolved, 0, maxDepth, foundPaths, new Set());
+    walkDir(resolved, 0, maxDepth, masterPlanPaths, markerRoots, new Set());
   }
 
-  // Derive root + name for each found plan
-  const rawProjects = foundPaths.map((masterPlanPath) => ({
-    masterPlan: masterPlanPath,
-    root: deriveProjectRoot(masterPlanPath),
-  }));
-
-  // Deduplicate by root (multiple docs/ subfolders could theoretically match)
+  // Build project entries from MASTER_PLAN.md discoveries (highest priority)
   const seenRoots = new Map();
-  for (const p of rawProjects) {
-    if (!seenRoots.has(p.root)) {
-      seenRoots.set(p.root, p);
+  for (const masterPlanPath of masterPlanPaths) {
+    const root = deriveProjectRoot(masterPlanPath);
+    if (!seenRoots.has(root)) {
+      seenRoots.set(root, { root, masterPlan: masterPlanPath });
+    }
+  }
+
+  // Add marker-only projects (those without a MASTER_PLAN.md)
+  for (const [root] of markerRoots) {
+    if (!seenRoots.has(root)) {
+      seenRoots.set(root, { root, masterPlan: null });
     }
   }
 
   const dedupedProjects = Array.from(seenRoots.values());
 
   // Resolve names, handling duplicates
-  const usedNames = new Map(); // name -> count
+  const usedNames = new Map();
   const result = [];
 
   for (const p of dedupedProjects) {
@@ -254,9 +305,18 @@ function syncDiscoveredProjects(scanPaths, projectsJsonPath, options = {}) {
   const added = [];
   const today = new Date().toISOString().slice(0, 10);
 
+  let updated = false;
+
   for (const project of discovered) {
     if (knownRoots.has(project.root)) {
-      // Already registered — leave it untouched
+      // Already registered — but backfill masterPlan if it was missing
+      if (project.masterPlan) {
+        const entry = existing.find((p) => p.root === project.root);
+        if (entry && !entry.masterPlan) {
+          entry.masterPlan = project.masterPlan;
+          updated = true;
+        }
+      }
       continue;
     }
 
@@ -272,7 +332,7 @@ function syncDiscoveredProjects(scanPaths, projectsJsonPath, options = {}) {
     const newEntry = {
       name: resolvedName,
       root: project.root,
-      masterPlan: project.masterPlan,
+      masterPlan: project.masterPlan || null,
       modules: [],
       source: 'auto-discovered',
       addedAt: today,
@@ -303,7 +363,7 @@ function syncDiscoveredProjects(scanPaths, projectsJsonPath, options = {}) {
   const existingCount = total - added.length;
 
   // 6. Write updated projects.json only if something changed
-  if (added.length > 0 || removed.length > 0) {
+  if (added.length > 0 || removed.length > 0 || updated) {
     try {
       const dir = path.dirname(projectsJsonPath);
       if (!fs.existsSync(dir)) {

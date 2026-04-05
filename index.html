@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dev Maestro - AI Agent Orchestration</title>
+    <title>Watchpost - AI Agent Orchestration</title>
     <style>
         /* Design tokens - Pure black theme (matching Storybook) */
         :root {
@@ -530,9 +530,21 @@
 
 <body>
     <header class="header">
-        <div class="logo">Dev Maestro</div>
+        <div class="logo">Watchpost</div>
 
         <nav class="tabs">
+            <button class="tab projects" data-panel="projects">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="2" y="3" width="20" height="18" rx="2" />
+                        <rect x="5" y="7" width="6" height="5" rx="1" />
+                        <rect x="13" y="7" width="6" height="5" rx="1" />
+                        <rect x="5" y="14" width="6" height="4" rx="1" />
+                        <rect x="13" y="14" width="6" height="4" rx="1" />
+                    </svg>
+                </span>
+                <span>Projects</span>
+            </button>
             <button class="tab kanban active" data-panel="kanban">
                 <span class="icon">
                     <svg viewBox="0 0 24 24">
@@ -630,13 +642,16 @@
                 <circle cx="12" cy="12" r="3" fill="currentColor" />
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
-            Dev Maestro
+            Watchpost
         </span>
     </header>
 
     <div id="project-toast" class="project-toast"></div>
 
     <main class="content">
+        <div id="projects" class="panel">
+            <iframe data-src="controlroom/index.html" title="Projects"></iframe>
+        </div>
         <div id="kanban" class="panel active">
             <iframe src="kanban/index.html" title="Development Kanban"></iframe>
         </div>
@@ -667,7 +682,7 @@
         const panels = document.querySelectorAll('.panel');
 
         // Restore saved tab
-        const savedTab = localStorage.getItem('dev-maestro-tab');
+        const savedTab = localStorage.getItem('watchpost-tab');
         if (savedTab) {
             switchTab(savedTab);
         }
@@ -676,7 +691,7 @@
             tab.addEventListener('click', () => {
                 const panelId = tab.dataset.panel;
                 switchTab(panelId);
-                localStorage.setItem('dev-maestro-tab', panelId);
+                localStorage.setItem('watchpost-tab', panelId);
             });
         });
 
@@ -707,7 +722,7 @@
 
         // Theme Toggle Functionality
         const themeToggle = document.getElementById('theme-toggle');
-        const THEME_KEY = 'dev-maestro-theme';
+        const THEME_KEY = 'watchpost-theme';
 
         // Initialize theme from localStorage or default to dark
         function initTheme() {
