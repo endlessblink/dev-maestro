@@ -231,6 +231,7 @@ app.get('/api/discover', (req, res) => {
             skills: { method: 'GET', path: '/api/skills', description: 'Available Claude Code skills for the project' },
             docs: { method: 'GET', path: '/api/docs', description: 'Documentation files in the project' },
             'beads-ready': { method: 'GET', path: '/api/beads/ready', description: 'Tasks with all dependencies resolved (ready to work on)' },
+            outlook: { method: 'GET', path: '/api/outlook', description: 'Cross-project digest for session context (supports ?format=markdown). Aggregates task stats, git activity, and top in-progress tasks across all registered projects. 5-min cache.' },
             'beads-graph': { method: 'GET', path: '/api/beads/graph', description: 'Full task dependency graph' },
             'beads-claim': { method: 'POST', path: '/api/beads/claim/:id', description: 'Claim a task (sets IN PROGRESS)' },
             'beads-close': { method: 'POST', path: '/api/beads/close/:id', description: 'Close a task (sets DONE)' },
@@ -249,6 +250,7 @@ app.get('/api/discover', (req, res) => {
         tips_for_claude: [
             'Check /api/status first to see which project is active',
             'Use /api/master-plan to get all tasks without reading the markdown file',
+            'Use /api/outlook for a cross-project digest (all registered projects, task counts, git activity)',
             'Use /api/beads/ready to find tasks you can start immediately',
             'Use /api/health/quick for a fast project health assessment',
             'The changelog.db SQLite has session history across all projects'
