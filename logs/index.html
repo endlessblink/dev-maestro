@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watchpost - Changelog</title>
+    <style>
+        :root {
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-elevated: #21262d;
+            --surface-hover: rgba(255, 255, 255, 0.05);
+
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-subtle: #6e7681;
+
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+
+            --brand-primary: #4ECDC4;
+            --brand-hover: #5fd9d1;
+
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+
+            --font-xs: 11px;
+            --font-sm: 12px;
+            --font-md: 13px;
+            --font-base: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            font-size: var(--font-base);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Topbar ───────────────────────────────────────────────────────── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0 1.25rem;
+            height: 48px;
+            background: var(--surface-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            flex-shrink: 0;
+        }
+
+        .topbar-title {
+            font-size: var(--font-md);
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .topbar-title svg {
+            width: 16px;
+            height: 16px;
+            stroke: #f59e0b;
+            stroke-width: 1.75;
+            fill: none;
+        }
+
+        .topbar-spacer { flex: 1; }
+
+        .select-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .select-wrapper select {
+            appearance: none;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            font-size: var(--font-sm);
+            padding: 0.3rem 1.75rem 0.3rem 0.65rem;
+            cursor: pointer;
+            outline: none;
+            transition: border-color var(--transition-fast);
+            min-width: 120px;
+        }
+
+        .select-wrapper select:hover {
+            border-color: var(--brand-primary);
+        }
+
+        .select-wrapper::after {
+            content: '';
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid var(--text-muted);
+            pointer-events: none;
+        }
+
+        /* ── Stats bar ────────────────────────────────────────────────────── */
+        .statsbar {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 0 1.25rem;
+            height: 40px;
+            background: var(--surface-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            flex-shrink: 0;
+            overflow-x: auto;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0 1rem 0 0;
+            margin-right: 1rem;
+            border-right: 1px solid var(--border-subtle);
+            white-space: nowrap;
+            font-size: var(--font-sm);
+            color: var(--text-muted);
+        }
+
+        .stat-item:last-child {
+            border-right: none;
+            margin-right: 0;
+        }
+
+        .stat-count {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: var(--font-md);
+        }
+
+        .stat-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* ── Timeline ─────────────────────────────────────────────────────── */
+        .timeline-container {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 0.75rem 1.25rem 2rem;
+        }
+
+        .timeline-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .timeline-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .timeline-container::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+
+        /* ── Day divider ──────────────────────────────────────────────────── */
+        .day-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin: 1.25rem 0 0.5rem;
+            font-size: var(--font-xs);
+            font-weight: 600;
+            color: var(--text-subtle);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .day-header:first-child {
+            margin-top: 0.25rem;
+        }
+
+        .day-line {
+            flex: 1;
+            height: 1px;
+            background: var(--border-subtle);
+        }
+
+        /* ── Log entry ────────────────────────────────────────────────────── */
+        .entry {
+            display: grid;
+            grid-template-columns: 44px 72px 1fr auto;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.3rem 0.5rem;
+            border-radius: var(--radius-md);
+            cursor: default;
+            transition: background var(--transition-fast);
+            min-height: 30px;
+        }
+
+        .entry:hover {
+            background: var(--surface-hover);
+        }
+
+        .entry-time {
+            font-size: var(--font-xs);
+            color: var(--text-subtle);
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .tool-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: var(--radius-sm);
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            min-width: 48px;
+            border: 1px solid transparent;
+        }
+
+        .entry-content {
+            font-size: var(--font-sm);
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+        }
+
+        .entry-project {
+            font-size: 10px;
+            color: var(--text-subtle);
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-subtle);
+            padding: 1px 6px;
+            border-radius: var(--radius-sm);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* ── Empty / Loading ──────────────────────────────────────────────── */
+        .state-message {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--text-subtle);
+            font-size: var(--font-md);
+        }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.2s steps(3, end) infinite;
+        }
+
+        @keyframes dots {
+            0%   { content: ''; }
+            33%  { content: '.'; }
+            66%  { content: '..'; }
+            100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Topbar -->
+    <div class="topbar">
+        <div class="topbar-title">
+            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+            Changelog
+        </div>
+        <div class="topbar-spacer"></div>
+        <div class="select-wrapper">
+            <select id="projectSelect">
+                <option value="">All projects</option>
+            </select>
+        </div>
+        <div class="select-wrapper">
+            <select id="daysSelect">
+                <option value="1">1 day</option>
+                <option value="3">3 days</option>
+                <option value="7" selected>7 days</option>
+                <option value="14">14 days</option>
+                <option value="30">30 days</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="statsbar" id="statsbar">
+        <div class="state-message" style="height:100%; font-size: 12px;">Loading<span class="loading-dots"></span></div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline-container" id="timeline">
+        <div class="state-message">Loading<span class="loading-dots"></span></div>
+    </div>
+
+    <script>
+        const BASE = '';
+
+        const TOOL_COLORS = {
+            Write:  { bg: 'rgba(34,197,94,0.15)',  border: '#22c55e', text: '#22c55e' },
+            Edit:   { bg: 'rgba(245,158,11,0.15)', border: '#f59e0b', text: '#f59e0b' },
+            Bash:   { bg: 'rgba(168,85,247,0.15)', border: '#a855f7', text: '#a855f7' },
+            Agent:  { bg: 'rgba(78,205,196,0.15)', border: '#4ECDC4', text: '#4ECDC4' },
+            Read:   { bg: 'rgba(110,118,129,0.12)',border: '#6e7681', text: '#6e7681' },
+            Grep:   { bg: 'rgba(6,182,212,0.12)',  border: '#06b6d4', text: '#06b6d4' },
+            Glob:   { bg: 'rgba(6,182,212,0.12)',  border: '#06b6d4', text: '#06b6d4' },
+        };
+
+        const DEFAULT_TOOL_COLOR = { bg: 'rgba(139,148,158,0.12)', border: '#8b949e', text: '#8b949e' };
+
+        function toolColor(tool) {
+            return TOOL_COLORS[tool] || DEFAULT_TOOL_COLOR;
+        }
+
+        // Day label formatting
+        function formatDayHeader(dateStr) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const date = new Date(y, m - 1, d);
+            const today = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(today.getDate() - 1);
+
+            if (date.toDateString() === today.toDateString()) return 'Today';
+            if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+
+            return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        // Extract display text for an entry
+        function entryLabel(entry) {
+            if (entry.file) {
+                // Shorten absolute paths — keep last 3 segments
+                const parts = entry.file.replace(/\\/g, '/').split('/');
+                return parts.slice(-3).join('/');
+            }
+            if (entry.cmd) {
+                return entry.cmd.length > 80 ? entry.cmd.slice(0, 77) + '…' : entry.cmd;
+            }
+            // Try to extract something from summary
+            if (entry.summary) {
+                try {
+                    const obj = typeof entry.summary === 'string' ? JSON.parse(entry.summary) : entry.summary;
+                    if (obj.file_path) {
+                        const parts = obj.file_path.replace(/\\/g, '/').split('/');
+                        return parts.slice(-3).join('/');
+                    }
+                    if (obj.command) return obj.command.slice(0, 80);
+                    if (obj.prompt) return obj.prompt.slice(0, 80);
+                    if (obj.questions && obj.questions[0] && obj.questions[0].question) {
+                        return obj.questions[0].question.slice(0, 80);
+                    }
+                } catch { /* ignore */ }
+            }
+            return entry.tool || '—';
+        }
+
+        // Full tooltip text
+        function entryTitle(entry) {
+            const parts = [];
+            if (entry.file) parts.push(entry.file);
+            if (entry.cmd) parts.push(entry.cmd);
+            if (entry.agent && entry.agent !== 'conductor') parts.push('agent: ' + entry.agent);
+            if (entry.sid) parts.push('session: ' + entry.sid);
+            return parts.join('\n') || entry.tool;
+        }
+
+        function formatTime(ts) {
+            if (!ts) return '';
+            try {
+                const d = new Date(ts);
+                return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            } catch { return ''; }
+        }
+
+        function tsToDay(ts) {
+            if (!ts) return '';
+            return ts.slice(0, 10);
+        }
+
+        // ── Render ──────────────────────────────────────────────────────────
+
+        let currentProject = '';
+        let currentDays = 7;
+        let showProjectBadge = true;
+
+        async function loadProjects() {
+            try {
+                const res = await fetch(`${BASE}/api/changelog/projects`);
+                const projects = await res.json();
+                const sel = document.getElementById('projectSelect');
+                projects.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.textContent = p;
+                    sel.appendChild(opt);
+                });
+            } catch (e) {
+                console.error('Failed to load projects', e);
+            }
+        }
+
+        async function loadStats(project, days) {
+            const params = new URLSearchParams({ days });
+            if (project) params.set('project', project);
+            try {
+                const res = await fetch(`${BASE}/api/changelog/stats?${params}`);
+                return await res.json();
+            } catch {
+                return { totalEvents: 0, byTool: {}, byDay: {}, sessions: 0 };
+            }
+        }
+
+        async function loadEntries(project, days) {
+            const params = new URLSearchParams({ days, limit: 1000 });
+            if (project) params.set('project', project);
+            try {
+                const res = await fetch(`${BASE}/api/changelog?${params}`);
+                const data = await res.json();
+                return data.entries || [];
+            } catch {
+                return [];
+            }
+        }
+
+        function renderStatsBar(stats) {
+            const bar = document.getElementById('statsbar');
+            bar.innerHTML = '';
+
+            const add = (label, count, color) => {
+                const item = document.createElement('div');
+                item.className = 'stat-item';
+                const dot = color ? `<span class="stat-dot" style="background:${color}"></span>` : '';
+                item.innerHTML = `${dot}<span class="stat-count">${count}</span> ${label}`;
+                bar.appendChild(item);
+            };
+
+            add('events', stats.totalEvents, null);
+            add('sessions', stats.sessions, '#4ECDC4');
+
+            // Top tools by count
+            const sorted = Object.entries(stats.byTool || {})
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 6);
+
+            for (const [tool, count] of sorted) {
+                const c = toolColor(tool);
+                add(tool, count, c.text);
+            }
+        }
+
+        function renderTimeline(entries, showProject) {
+            const container = document.getElementById('timeline');
+            container.innerHTML = '';
+
+            if (!entries.length) {
+                container.innerHTML = '<div class="state-message">No entries found for this period.</div>';
+                return;
+            }
+
+            let currentDay = null;
+
+            for (const entry of entries) {
+                const day = tsToDay(entry.ts);
+
+                if (day !== currentDay) {
+                    currentDay = day;
+                    const header = document.createElement('div');
+                    header.className = 'day-header';
+                    header.innerHTML = `<span>${formatDayHeader(day)}</span><div class="day-line"></div>`;
+                    container.appendChild(header);
+                }
+
+                const row = document.createElement('div');
+                row.className = 'entry';
+
+                const c = toolColor(entry.tool);
+
+                const label = entryLabel(entry);
+                const title = entryTitle(entry);
+
+                row.innerHTML = `
+                    <span class="entry-time">${formatTime(entry.ts)}</span>
+                    <span class="tool-badge" style="background:${c.bg}; border-color:${c.border}; color:${c.text}">${entry.tool || '?'}</span>
+                    <span class="entry-content" title="${escapeHtml(title)}">${escapeHtml(label)}</span>
+                    ${showProject && entry.project ? `<span class="entry-project">${escapeHtml(entry.project)}</span>` : '<span></span>'}
+                `;
+
+                container.appendChild(row);
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function refresh() {
+            // Show loading state in stats bar
+            document.getElementById('statsbar').innerHTML =
+                '<div class="state-message" style="height:100%; font-size:12px;">Loading<span class="loading-dots"></span></div>';
+            document.getElementById('timeline').innerHTML =
+                '<div class="state-message">Loading<span class="loading-dots"></span></div>';
+
+            const [stats, entries] = await Promise.all([
+                loadStats(currentProject, currentDays),
+                loadEntries(currentProject, currentDays)
+            ]);
+
+            renderStatsBar(stats);
+            renderTimeline(entries, !currentProject);
+        }
+
+        // ── Init ────────────────────────────────────────────────────────────
+
+        document.getElementById('projectSelect').addEventListener('change', e => {
+            currentProject = e.target.value;
+            refresh();
+        });
+
+        document.getElementById('daysSelect').addEventListener('change', e => {
+            currentDays = parseInt(e.target.value, 10);
+            refresh();
+        });
+
+        // Listen for tab-activated message from parent frame
+        window.addEventListener('message', e => {
+            if (e.data && e.data.type === 'tab-activated') {
+                refresh();
+            }
+        });
+
+        loadProjects().then(() => refresh());
+    </script>
+</body>
+</html>

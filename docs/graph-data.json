@@ -1,0 +1,1490 @@
+{
+  "nodes": [
+    {
+      "id": "doc-0",
+      "path": "MASTER_PLAN.md",
+      "title": "FlowState Master Plan & Roadmap",
+      "description": "Two canvas operations didn't update automatically - users had to refresh to see changes:",
+      "category": "other",
+      "isArchived": false,
+      "color": "#94a3b8"
+    },
+    {
+      "id": "doc-1",
+      "path": "archive/CALENDAR_FIXES_SUMMARY.md",
+      "title": "Calendar and Canvas Fixes Implementation Summary",
+      "description": "- Added context menu state variables (lines 103-112):",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-2",
+      "path": "archive/FILTERING_FIX_VERIFICATION.md",
+      "title": "Kanban Board Filtering Fix - Verification Guide",
+      "description": "The kanban board filtering system has been comprehensively updated to address these issues:",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-3",
+      "path": "archive/IMPLEMENTATION_SUMMARY.md",
+      "title": "IMPLEMENTATION SUMMARY",
+      "description": "",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-4",
+      "path": "archive/KEYBOARD_DEBUG_GUIDE.md",
+      "title": "🔍 Keyboard Shortcut Debug Guide",
+      "description": "The Shift+1-5 keyboard shortcuts for view switching were not working, and no logging was visible to diagnose the issue.",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-5",
+      "path": "archive/PERPLEXITY_QUERY_KEYBOARD_DEBUGGING.md",
+      "title": "🔍 VUE 3 KEYBOARD SHORTCUT DEBUGGING - COMPREHENSIVE TECHNICAL QUERY",
+      "description": "- **Framework**: Vue 3.4.0 with Composition API and `<script setup>` syntax",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-6",
+      "path": "archive/PHASE2-TESTING-RESULTS.md",
+      "title": "Phase 2 Comprehensive Testing Suite - Results Summary",
+      "description": "1. **`composables-enhancement.spec.ts`** (13.4KB, 12 test scenarios)",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-7",
+      "path": "archive/PHASE3A-REFACTOR-VALIDATION-REPORT.md",
+      "title": "Phase 3A Component Refactoring - End-to-End Validation Report",
+      "description": "✅ **VALIDATION STATUS: SUCCESS WITH MINOR ISSUES**",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-8",
+      "path": "archive/SAFE_REFACTORING_BASELINE.md",
+      "title": "Safe Refactoring Baseline - November 2, 2025",
+      "description": "- **Git Tag**: `pre-safe-refactoring-2025-11-02`",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-9",
+      "path": "archive/SYNC_REQUIREMENTS.md",
+      "title": "FlowState Comprehensive Sync Requirements",
+      "description": "This document identifies ALL data that should sync across devices/browsers in FlowState. Based on comprehensive analysis of 8 Pinia stores, persistence layers, and UI exploration.",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-10",
+      "path": "archive/claude-docs/SKILL_ENHANCEMENT_GUIDE.md",
+      "title": "Skill Enhancement Guide for FlowState",
+      "description": "This guide covers advanced techniques for enhancing Claude Code skills to maximize activation, visibility, and effectiveness. It combines our successful skill optimization work with new strategies for...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-11",
+      "path": "archive/claude-docs/VERIFY-BEFORE-CLAIMING-GUIDE.md",
+      "title": "Verify Before Claiming - Complete Guide",
+      "description": "This skill prevents Claude from making false claims about functionality without proper testing and verification. It enforces evidence-based development and honest reporting.",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-12",
+      "path": "archive/claude-docs/canvas-sections-guide.md",
+      "title": "Canvas Sections Guide",
+      "description": "Canvas containers allow you to organize tasks visually and optionally automate property updates. This guide explains the difference between **Groups** and **Sections**, how they work, and how to creat...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-13",
+      "path": "archive/doc_verification_report.md",
+      "title": "Documentation Verification Report",
+      "description": "| Metric | Count |",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-14",
+      "path": "archive/mapping-old/3.11.25/2.11.25.md",
+      "title": "FlowState Design Tokens Implementation Map",
+      "description": "FlowState implements a **world-class design tokens system** with 755 lines of comprehensive CSS custom properties, organized in a sophisticated 3-tier architecture. The system provides complete design...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-15",
+      "path": "archive/mapping-old/3.11.25/ARCHITECTURAL_RECOMMENDATIONS.md",
+      "title": "FlowState - Architectural Gaps and Recommendations",
+      "description": "This comprehensive analysis identifies architectural gaps, unused components, missing error handling, and provides actionable recommendations for improving the FlowState Vue.js productivity applicatio...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-16",
+      "path": "archive/mapping-old/3.11.25/ARCHITECTURE_REFERENCE.md",
+      "title": "FlowState Architecture Reference",
+      "description": "This consolidated architecture reference combines project structure overview, state management ecosystem, store architecture, and development patterns into a comprehensive guide for understanding and ...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-17",
+      "path": "archive/mapping-old/3.11.25/CANVAS_SYSTEM_ARCHITECTURE.md",
+      "title": "FlowState - Canvas System Architecture",
+      "description": "The Canvas System is one of FlowState's most sophisticated features, providing a visual, node-based interface for task organization. Built on Vue Flow with custom extensions, it supports free-form tas...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-18",
+      "path": "archive/mapping-old/3.11.25/COMPONENT_REFERENCE.md",
+      "title": "FlowState Component Reference",
+      "description": "This consolidated reference document combines component architecture, relationships, drag-and-drop systems, views analysis, and UI flows into a comprehensive guide for the FlowState Vue.js productivit...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-19",
+      "path": "archive/mapping-old/3.11.25/COMPOSABLES_CATALOG.md",
+      "title": "FlowState - Composables Catalog",
+      "description": "FlowState utilizes Vue 3's Composition API with 27+ composables that encapsulate reusable logic across the application. These composables provide clean, testable, and reusable functionality that can b...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-20",
+      "path": "archive/mapping-old/3.11.25/CONSOLIDATION_SUMMARY.md",
+      "title": "Documentation Consolidation Summary",
+      "description": "- **Component Documentation**: 4 files (96,748 combined lines)",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-21",
+      "path": "archive/mapping-old/3.11.25/DATA_PERSISTENCE_STRATEGY.md",
+      "title": "FlowState - Data Persistence Strategy",
+      "description": "FlowState implements a sophisticated multi-layered data persistence strategy that ensures data reliability, performance, and user experience. The system combines IndexedDB for primary storage, localSt...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-22",
+      "path": "archive/mapping-old/3.11.25/DEPLOYMENT_AND_CONFIG.md",
+      "title": "FlowState - Deployment and Configuration Reference",
+      "description": "This comprehensive reference document consolidates all configuration, build, deployment, and API interaction aspects of the FlowState Vue.js productivity application. It covers development setup, prod...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-23",
+      "path": "archive/mapping-old/3.11.25/FOLDER_STRUCTURE_MAPPING.md",
+      "title": "FlowState - Complete Folder Structure Mapping",
+      "description": "```",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-24",
+      "path": "archive/mapping-old/3.11.25/INTERACTION_FLOWS.md",
+      "title": "FlowState Interaction Flows Reference",
+      "description": "This consolidated interaction flows reference combines visual flow diagrams, route analysis, drag-and-drop system architecture, and event system analysis into a comprehensive guide for understanding u...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-25",
+      "path": "archive/mapping-old/3.11.25/PERFORMANCE_AND_ISSUES.md",
+      "title": "FlowState - Performance and Issues Reference",
+      "description": "This comprehensive reference document consolidates all performance optimization strategies, known issues, debugging approaches, and problem-solving techniques for the FlowState Vue.js productivity app...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-26",
+      "path": "archive/mapping-old/3.11.25/README.md",
+      "title": "Drag-and-Drop System Mapping - FlowState",
+      "description": "This directory contains a comprehensive technical analysis of the drag-and-drop system failure in the FlowState Vue 3 productivity application. The analysis reveals that recent horizontal scroll isola...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-27",
+      "path": "archive/mapping-old/3.11.25/TESTING_STRATEGY.md",
+      "title": "FlowState - Testing Strategy and Quality Assurance",
+      "description": "This comprehensive testing strategy document outlines the complete testing approach for the FlowState Vue.js productivity application. It covers unit testing, integration testing, end-to-end testing, ...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-28",
+      "path": "archive/mapping-old/3.11.25/THIRD_PARTY_LIBRARIES.md",
+      "title": "FlowState - Third-Party Libraries & Plugins Documentation",
+      "description": "This document provides a comprehensive mapping of all third-party libraries, Vue plugins, and external dependencies used in the FlowState Vue.js productivity application, including their purposes, usa...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-29",
+      "path": "archive/mapping-old/3.11.25/UNDO_REDO_SYSTEM.md",
+      "title": "FlowState - Unified Undo/Redo System Architecture",
+      "description": "FlowState implements a sophisticated **unified undo/redo system** that replaces multiple conflicting implementations with a single, consistent solution. Built on VueUse's `useManualRefHistory` with de...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-30",
+      "path": "archive/mapping-old/3.11.25.md",
+      "title": "FlowState Documentation Version 3.11.25",
+      "description": "This version (3.11.25) contains the most up-to-date documentation for the FlowState application, reflecting recent architectural improvements and feature enhancements.",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-31",
+      "path": "archive/mapping-old/4.11.25/2.11.25.md",
+      "title": "FlowState Design Tokens Implementation Map",
+      "description": "FlowState implements a **world-class design tokens system** with 755 lines of comprehensive CSS custom properties, organized in a sophisticated 3-tier architecture. The system provides complete design...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-32",
+      "path": "archive/mapping-old/4.11.25/ARCHITECTURAL_RECOMMENDATIONS.md",
+      "title": "FlowState - Architectural Gaps and Recommendations",
+      "description": "This comprehensive analysis identifies architectural gaps, unused components, missing error handling, and provides actionable recommendations for improving the FlowState Vue.js productivity applicatio...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-33",
+      "path": "archive/mapping-old/4.11.25/ARCHITECTURE_REFERENCE.md",
+      "title": "FlowState Architecture Reference",
+      "description": "This consolidated architecture reference combines project structure overview, state management ecosystem, store architecture, and development patterns into a comprehensive guide for understanding and ...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-34",
+      "path": "archive/mapping-old/4.11.25/CANVAS_SYSTEM_ARCHITECTURE.md",
+      "title": "FlowState - Canvas System Architecture",
+      "description": "The Canvas System is one of FlowState's most sophisticated features, providing a visual, node-based interface for task organization. Built on Vue Flow with custom extensions, it supports free-form tas...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-35",
+      "path": "archive/mapping-old/4.11.25/COMPONENT_REFERENCE.md",
+      "title": "FlowState Component Reference",
+      "description": "This consolidated reference document combines component architecture, relationships, drag-and-drop systems, views analysis, and UI flows into a comprehensive guide for the FlowState Vue.js productivit...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-36",
+      "path": "archive/mapping-old/4.11.25/COMPOSABLES_CATALOG.md",
+      "title": "FlowState - Composables Catalog",
+      "description": "FlowState utilizes Vue 3's Composition API with 27+ composables that encapsulate reusable logic across the application. These composables provide clean, testable, and reusable functionality that can b...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-37",
+      "path": "archive/mapping-old/4.11.25/CONSOLIDATION_SUMMARY.md",
+      "title": "Documentation Consolidation Summary",
+      "description": "- **Component Documentation**: 4 files (96,748 combined lines)",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-38",
+      "path": "archive/mapping-old/4.11.25/DATA_PERSISTENCE_STRATEGY.md",
+      "title": "FlowState - Data Persistence Strategy",
+      "description": "FlowState implements a sophisticated multi-layered data persistence strategy that ensures data reliability, performance, and user experience. The system combines IndexedDB for primary storage, localSt...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-39",
+      "path": "archive/mapping-old/4.11.25/DEPLOYMENT_AND_CONFIG.md",
+      "title": "FlowState - Deployment and Configuration Reference",
+      "description": "This comprehensive reference document consolidates all configuration, build, deployment, and API interaction aspects of the FlowState Vue.js productivity application. It covers development setup, prod...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-40",
+      "path": "archive/mapping-old/4.11.25/FOLDER_STRUCTURE_MAPPING.md",
+      "title": "FlowState - Complete Folder Structure Mapping",
+      "description": "```",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-41",
+      "path": "archive/mapping-old/4.11.25/INTERACTION_FLOWS.md",
+      "title": "FlowState Interaction Flows Reference",
+      "description": "This consolidated interaction flows reference combines visual flow diagrams, route analysis, drag-and-drop system architecture, and event system analysis into a comprehensive guide for understanding u...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-42",
+      "path": "archive/mapping-old/4.11.25/PERFORMANCE_AND_ISSUES.md",
+      "title": "FlowState - Performance and Issues Reference",
+      "description": "This comprehensive reference document consolidates all performance optimization strategies, known issues, debugging approaches, and problem-solving techniques for the FlowState Vue.js productivity app...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-43",
+      "path": "archive/mapping-old/4.11.25/README.md",
+      "title": "FlowState Architecture Mapping - Version 4.11.25",
+      "description": "This directory contains comprehensive technical documentation for the FlowState Vue 3 productivity application, version 4.11.25. This release includes significant architectural enhancements focused on...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-44",
+      "path": "archive/mapping-old/4.11.25/TESTING_STRATEGY.md",
+      "title": "FlowState - Testing Strategy and Quality Assurance",
+      "description": "This comprehensive testing strategy document outlines the complete testing approach for the FlowState Vue.js productivity application. It covers unit testing, integration testing, end-to-end testing, ...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-45",
+      "path": "archive/mapping-old/4.11.25/THIRD_PARTY_LIBRARIES.md",
+      "title": "FlowState - Third-Party Libraries & Plugins Documentation",
+      "description": "This document provides a comprehensive mapping of all third-party libraries, Vue plugins, and external dependencies used in the FlowState Vue.js productivity application, including their purposes, usa...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-46",
+      "path": "archive/mapping-old/4.11.25/UNDO_REDO_SYSTEM.md",
+      "title": "FlowState - Unified Undo/Redo System Architecture",
+      "description": "FlowState implements a sophisticated **unified undo/redo system** that replaces multiple conflicting implementations with a single, consistent solution. Built on VueUse's `useManualRefHistory` with de...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-47",
+      "path": "archive/phase-2-docs/PHASE_2C_INTEGRATION_PATTERNS.md",
+      "title": "Phase 2C: Integration Patterns Analysis",
+      "description": "Phase 2C focuses on comprehensive documentation and analysis of all integration patterns within the FlowState application. This phase examines how the application integrates with external services, AP...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-48",
+      "path": "archive/phase-2-docs/PHASE_2D_ARCHITECTURE_REVIEW.md",
+      "title": "Phase 2D: Architecture Review & Strategic Planning",
+      "description": "Phase 2D represents the culmination of the comprehensive architecture documentation process. This phase consolidates all findings from Phases 2A, 2B, and 2C, providing a complete architecture review w...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-49",
+      "path": "archive/phase-2-docs/PHASE_2_ARCHITECTURE.md",
+      "title": "Phase 2: Architecture Documentation",
+      "description": "Phase 2 focuses on comprehensive documentation of the FlowState application architecture. This phase ensures complete understanding of the current system structure, component relationships, and integr...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-50",
+      "path": "archive/phase-2-docs/Phase-2A-Analysis-Summary.md",
+      "title": "Phase 2A Component Analysis Summary",
+      "description": "- **Total Components**: 81 Vue files",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-51",
+      "path": "archive/phase-2-docs/Phase-2A-Component-Analysis.md",
+      "title": "Phase 2A Component Architecture Analysis",
+      "description": "This analysis provides a comprehensive examination of all Vue components in the FlowState application, cataloging their relationships, sizes, architectural patterns, and dependencies. The analysis rev...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-52",
+      "path": "archive/phase-2-docs/Phase-2B-Recommendations.md",
+      "title": "Phase 2B Refactoring Recommendations",
+      "description": "This document provides specific, actionable recommendations for Phase 2B refactoring based on the comprehensive analysis of FlowState's 81 Vue components. The recommendations prioritize reducing compo...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-53",
+      "path": "archive/prd/Architecture-Patterns-Analysis.md",
+      "title": "Architecture Patterns Analysis",
+      "description": "- **Composition API consistency** - 100% compliance across all 81 components",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-54",
+      "path": "archive/prd/COMPREHENSIVE_PRD.md",
+      "title": "FlowState Comprehensive Product Requirements Document",
+      "description": "This document provides a comprehensive Product Requirements Document (PRD) for the FlowState productivity application. The PRD covers all aspects of the application including architecture, implementat...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-55",
+      "path": "archive/prd/Component-Dependency-Graph.md",
+      "title": "Component Dependency Graph Analysis",
+      "description": "```",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-56",
+      "path": "archive/prd/DUE_DATE_SIMPLIFICATION_COMPLETE.md",
+      "title": "PRD: Complete Due Date Simplification - 100% Cleanup",
+      "description": "Eliminate ALL scheduling complexity and make `dueDate` the ONLY date field throughout the entire application. Remove every trace of instances, scheduledDate, scheduledTime, and scheduling UI.",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-57",
+      "path": "archive/prd/PHASE_3_ARCHITECTURE.md",
+      "title": "Phase 3: Design System & Architecture Modernization",
+      "description": "Phase 3 focuses on systematic architectural improvements to the FlowState application, emphasizing component decomposition, store modernization, and performance optimization while maintaining zero reg...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-58",
+      "path": "archive/prd/README.md",
+      "title": "FlowState Product Requirements Documentation",
+      "description": "This directory contains comprehensive Product Requirements Documentation (PRD) for the FlowState productivity application. The documentation covers architectural decisions, implementation strategies, ...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-59",
+      "path": "archive/prd/RECURRING_TASKS_NOTIFICATIONS_PRD.md",
+      "title": "Recurring Tasks and Notifications Feature PRD",
+      "description": "This PRD outlines the implementation of recurring tasks and intelligent notifications for FlowState, enhancing the productivity application with automated task scheduling and timely reminders.",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-60",
+      "path": "archive/prd/SAFE_REFACTORING_PLAN.md",
+      "title": "FlowState Safe Refactoring Plan",
+      "description": "This document outlines a comprehensive, safety-first refactoring strategy for the FlowState Vue.js productivity application. The plan prioritizes production stability, user experience preservation, an...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-61",
+      "path": "archive/prd/canvas-hebrew-fix-complete.md",
+      "title": "Canvas Hebrew Text Alignment Fix Complete",
+      "description": "```typescript",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-62",
+      "path": "archive/prd/hebrew-right-alignment-implementation.md",
+      "title": "Hebrew Right-Alignment Implementation Complete",
+      "description": "```typescript",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-63",
+      "path": "archive/prd/restoreation-plan/CRITICAL_SYSTEM_RESTORATION_PRD.md",
+      "title": "FlowState Critical System Restoration PRD",
+      "description": "- **Document ID**: PRD-RESTORE-001",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-64",
+      "path": "archive/prd/rtl-hebrew-support.md",
+      "title": "RTL and Hebrew Language Support Implementation PRD",
+      "description": "Enable FlowState to fully support Hebrew (and other RTL) languages, expanding market reach to Hebrew and Arabic speaking users while maintaining the application's sophisticated user experience and fun...",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-65",
+      "path": "archive/prd/rtl-implementation-summary.md",
+      "title": "RTL/Hebrew Support Implementation Summary",
+      "description": "- **Fixed Hebrew translations** in `src/i18n/locales/he.json`",
+      "category": "archive",
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "doc-66",
+      "path": "conflict-systems-resolution/01-user-guide/resolution-workflows.md",
+      "title": "Resolution Workflows",
+      "description": "Step-by-step guides for resolving sync conflicts in FlowState.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-67",
+      "path": "conflict-systems-resolution/01-user-guide/troubleshooting.md",
+      "title": "Troubleshooting",
+      "description": "Common issues and solutions for conflict resolution in FlowState.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-68",
+      "path": "conflict-systems-resolution/01-user-guide/understanding-conflicts.md",
+      "title": "Understanding Conflicts",
+      "description": "When you use FlowState across multiple devices (phone, tablet, computer), your tasks and data synchronize between them. A **sync conflict** occurs when the same task is modified on two different devic...",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-69",
+      "path": "conflict-systems-resolution/02-developer-guide/api-reference.md",
+      "title": "API Reference",
+      "description": "Complete API documentation for FlowState's conflict resolution system.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-70",
+      "path": "conflict-systems-resolution/02-developer-guide/architecture-overview.md",
+      "title": "Architecture Overview",
+      "description": "FlowState's conflict resolution system is built on a layered architecture designed for PouchDB/CouchDB synchronization with cross-device support.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-71",
+      "path": "conflict-systems-resolution/02-developer-guide/extending-the-system.md",
+      "title": "Extending the System",
+      "description": "How to extend and customize FlowState's conflict resolution system.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-72",
+      "path": "conflict-systems-resolution/02-developer-guide/integration-guide.md",
+      "title": "Integration Guide",
+      "description": "How to integrate the conflict resolution system into your FlowState components and workflows.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-73",
+      "path": "conflict-systems-resolution/03-implementation-details/conflict-detection.md",
+      "title": "Conflict Detection Algorithms",
+      "description": "Deep dive into how FlowState detects and classifies sync conflicts.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-74",
+      "path": "conflict-systems-resolution/03-implementation-details/data-flow.md",
+      "title": "Data Flow",
+      "description": "End-to-end data flow through the conflict resolution system.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-75",
+      "path": "conflict-systems-resolution/03-implementation-details/performance-optimizations.md",
+      "title": "Performance Optimizations",
+      "description": "Techniques for optimizing conflict resolution performance.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-76",
+      "path": "conflict-systems-resolution/03-implementation-details/resolution-algorithms.md",
+      "title": "Resolution Algorithms",
+      "description": "Deep dive into conflict resolution strategies and algorithms.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-77",
+      "path": "conflict-systems-resolution/04-testing-and-validation/test-scenarios.md",
+      "title": "Test Scenarios",
+      "description": "Comprehensive test case documentation for conflict resolution.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-78",
+      "path": "conflict-systems-resolution/04-testing-and-validation/test-strategy.md",
+      "title": "Test Strategy",
+      "description": "Comprehensive testing approach for the conflict resolution system.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-79",
+      "path": "conflict-systems-resolution/04-testing-and-validation/validation-procedures.md",
+      "title": "Validation Procedures",
+      "description": "Procedures for validating conflict resolution functionality.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-80",
+      "path": "conflict-systems-resolution/05-best-practices/configuration.md",
+      "title": "Configuration",
+      "description": "Best practices for configuring the conflict resolution system.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-81",
+      "path": "conflict-systems-resolution/05-best-practices/deployment.md",
+      "title": "Deployment",
+      "description": "Best practices for deploying the conflict resolution system.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-82",
+      "path": "conflict-systems-resolution/05-best-practices/maintenance.md",
+      "title": "Maintenance",
+      "description": "Ongoing maintenance procedures for the conflict resolution system.",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-83",
+      "path": "conflict-systems-resolution/BASELINE_20251129.md",
+      "title": "Conflict Systems Baseline - November 29, 2025",
+      "description": "| Category | Occurrences | Files | Severity | Priority |",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-84",
+      "path": "conflict-systems-resolution/README.md",
+      "title": "🔍 FlowState Conflict Resolution System",
+      "description": "FlowState includes a **sophisticated, enterprise-grade conflict detection and resolution system** that automatically handles synchronization conflicts across multiple devices. This system was designed...",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-85",
+      "path": "conflict-systems-resolution/TASK_BOARD.md",
+      "title": "Conflict Resolution Task Board",
+      "description": "| Task | Status | Owner | Notes |",
+      "category": "conflict-systems-resolution",
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "doc-86",
+      "path": "reports/29.11.25/CANVAS-FIX-PLAN.md",
+      "title": "Canvas View Fix Plan",
+      "description": "1. **Vue Flow manages its own DOM** - Direct DOM manipulation bypasses Vue's reactivity",
+      "category": "reports",
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "doc-87",
+      "path": "reports/29.11.25/calendar-analysis/calendar-view-comprehensive-scan.md",
+      "title": "Calendar View Comprehensive Scan Report",
+      "description": "| Metric | Value | Grade |",
+      "category": "reports",
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "doc-88",
+      "path": "reports/29.11.25/canvas-analysis/CRITICAL-ISSUES-FOUND.md",
+      "title": "Canvas View - Critical Issues Found",
+      "description": "Tasks exist in the Vue Flow state (23 nodes reported) but are not visible on the canvas. The canvas area appears completely empty despite the status panel showing nodes exist.",
+      "category": "reports",
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "doc-89",
+      "path": "reports/29.11.25/canvas-analysis/canvas-view-comprehensive-analysis.md",
+      "title": "Canvas View Comprehensive System Analysis",
+      "description": "| Metric | Status | Evidence |",
+      "category": "reports",
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "doc-90",
+      "path": "reports/29.11.25/canvas-analysis/test-summary.md",
+      "title": "Canvas View Test Summary",
+      "description": "```",
+      "category": "reports",
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "doc-91",
+      "path": "reports/29.11.25/canvas-view-status-report.md",
+      "title": "Canvas View Status Report",
+      "description": "| Category | Status | Details |",
+      "category": "reports",
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "doc-92",
+      "path": "reports/29.11.25/filtering-system-analysis.md",
+      "title": "Comprehensive Filtering System Analysis Report",
+      "description": "The FlowState filtering system is **functional but has significant issues** that affect user experience and consistency. The system is centralized in the task store but has inconsistencies across view...",
+      "category": "reports",
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "doc-93",
+      "path": "🐛 debug/sop/calendar-consolidation/README.md",
+      "title": "Calendar Consolidation Initiative SOP",
+      "description": "Systematic consolidation of 6 calendar files containing **1,200+ lines of duplicate code** into a unified, maintainable architecture. This eliminates technical debt, improves developer experience, and...",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-94",
+      "path": "🐛 debug/sop/calendar-consolidation/calendar-drag-system-conflict-resolution.md",
+      "title": "Calendar Drag System Conflict Resolution SOP",
+      "description": "This SOP documents the resolution of conflicting drag systems in `CalendarView.vue`, eliminating duplicate wrapper methods and establishing clean separation between task creation and task movement fun...",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-95",
+      "path": "🐛 debug/sop/calendar-consolidation/phase-1-shared-utilities-consolidation.md",
+      "title": "Phase 1: Shared Utilities Consolidation SOP",
+      "description": "Consolidated duplicate calendar utilities from 4+ files into a unified `useCalendarCore.ts` composable, eliminating ~500 lines of duplicate code while preserving 100% functionality.",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-96",
+      "path": "🐛 debug/sop/calendar-consolidation/phase-2-unified-drag-system.md",
+      "title": "Phase 2: Unified Drag System SOP",
+      "description": "Created unified drag-and-drop system to consolidate ~200+ lines of duplicate drag logic across 3 calendar views (day, week, month). The system provides consistent drag behavior with state management, ...",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-97",
+      "path": "🐛 debug/sop/calendar-drag/calendar-drag-and-drop-reactivity-fix-2025-11-28.md",
+      "title": "🐛 Debug SOP - Calendar Drag-and-Drop Reactivity Issue Resolution",
+      "description": "Calendar drag-and-drop functionality was partially broken - users could move existing calendar events but could NOT drag tasks from Board, Canvas, or Inbox views to calendar time slots.",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-98",
+      "path": "🐛 debug/sop/calendar-drag/calendar-drag-and-drop-troubleshooting.md",
+      "title": "Calendar Drag-and-Drop Troubleshooting SOP",
+      "description": "1. Open browser DevTools (F12)",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-99",
+      "path": "🐛 debug/sop/calendar-drag-inside-calendar/calendar-drag-fix-2025-12-01.md",
+      "title": "SOP: Calendar Drag Inside Calendar Fix",
+      "description": "Calendar daily view had broken functionality:",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-100",
+      "path": "🐛 debug/sop/calendar-full-surface-drag-2025-12-03/FIX.md",
+      "title": "Calendar Full-Surface Task Drag Fix",
+      "description": "Users could only drag calendar tasks from the top edge (first 30px of the task), not from the entire task surface. For multi-slot tasks (60+ minutes), clicking/dragging on the extended portion didn't ...",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-101",
+      "path": "🐛 debug/sop/calendar-resize-artifacts-2025-12-02/FIX.md",
+      "title": "Calendar Resize Artifacts Fix",
+      "description": "Visual artifacts (`↳` continuation symbols) appeared when calendar tasks spanned multiple time slots (60+ minutes). The slot-based architecture was rendering tasks in EVERY slot they overlapped, showi...",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-102",
+      "path": "🐛 debug/sop/calendar-side-by-side-and-ghost-fix-2025-12-02/FIX.md",
+      "title": "Calendar Side-by-Side Tasks and Drag Ghost Position Fix",
+      "description": "Two related calendar issues were reported:",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-103",
+      "path": "🐛 debug/sop/calendar-ui-element-leakage-fix-2025-12-01.md",
+      "title": "SOP: Calendar UI Element Leakage Fix",
+      "description": "Calendar view was displaying unwanted UI elements underneath tasks, causing visual clutter and overlap:",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-104",
+      "path": "🐛 debug/sop/canvas-development-safety-2025-12-04/README.md",
+      "title": "SOP: Canvas Development Safety Guidelines",
+      "description": "This SOP documents critical lessons learned from the December 2-4, 2025 canvas debugging crisis. Following these guidelines prevents the reintroduction of bugs that caused multi-day debugging sessions...",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-105",
+      "path": "🐛 debug/sop/canvas-implementation/README.md",
+      "title": "SOP: Canvas View Implementation",
+      "description": "The Canvas View is a free-form visual task organization interface built on **Vue Flow** (@vue-flow/core). It provides drag-and-drop task management, sections/groups for organizing tasks, connection/de...",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-106",
+      "path": "🐛 debug/sop/competing-systems-consolidation-2025-12-03/README.md",
+      "title": "SOP: Competing Systems Consolidation Testing",
+      "description": "Standard Operating Procedure for detecting and consolidating competing/duplicate system implementations in the codebase, with emphasis on testing for race conditions and system conflicts.",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-107",
+      "path": "🐛 debug/sop/css-dark-theme-invisible-text-2025-11-27/css-dark-theme-fix-2025-11-27.md",
+      "title": "SOP: CSS Dark Theme Fix",
+      "description": "The FlowState application UI was completely broken with:",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-108",
+      "path": "🐛 debug/sop/filter-highlighting-system/README.md",
+      "title": "Toggle-able Filter Visual Highlighting System",
+      "description": "This folder contains comprehensive documentation for the Toggle-able Filter Visual Highlighting System implementation.",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-109",
+      "path": "🐛 debug/sop/filter-highlighting-system/implementation-guide.md",
+      "title": "Toggle-able Filter Visual Highlighting System SOP",
+      "description": "Users needed visual feedback to understand which tasks were affected by active filters, and filters needed to be toggle-able rather than mutually exclusive selections.",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "doc-110",
+      "path": "🐛 debug/sop/sidebar-categories-fix-2025-11-28/sidebar-categories-fix-2025-11-28.md",
+      "title": "🐛 Debug SOP - FlowState Sidebar Categories Issue Resolution",
+      "description": "Categories (projects) don't appear on the main side panel despite database loading correctly.",
+      "category": "debug",
+      "isArchived": false,
+      "color": "#ef4444"
+    },
+    {
+      "id": "category-archive",
+      "title": "Archive",
+      "category": "archive",
+      "isCategory": true,
+      "isArchived": true,
+      "color": "#64748b"
+    },
+    {
+      "id": "category-conflict-systems-resolution",
+      "title": "Conflict-systems-resolution",
+      "category": "conflict-systems-resolution",
+      "isCategory": true,
+      "isArchived": false,
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "category-reports",
+      "title": "Reports",
+      "category": "reports",
+      "isCategory": true,
+      "isArchived": false,
+      "color": "#f59e0b"
+    },
+    {
+      "id": "category-debug",
+      "title": "Debug",
+      "category": "debug",
+      "isCategory": true,
+      "isArchived": false,
+      "color": "#ef4444"
+    }
+  ],
+  "links": [
+    {
+      "source": "category-archive",
+      "target": "doc-1"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-2"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-3"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-4"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-5"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-6"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-7"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-8"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-9"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-10"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-11"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-12"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-13"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-14"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-15"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-16"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-17"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-18"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-19"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-20"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-21"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-22"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-23"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-24"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-25"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-26"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-27"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-28"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-29"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-30"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-31"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-32"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-33"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-34"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-35"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-36"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-37"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-38"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-39"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-40"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-41"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-42"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-43"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-44"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-45"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-46"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-47"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-48"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-49"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-50"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-51"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-52"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-53"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-54"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-55"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-56"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-57"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-58"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-59"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-60"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-61"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-62"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-63"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-64"
+    },
+    {
+      "source": "category-archive",
+      "target": "doc-65"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-66"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-67"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-68"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-69"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-70"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-71"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-72"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-73"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-74"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-75"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-76"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-77"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-78"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-79"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-80"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-81"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-82"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-83"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-84"
+    },
+    {
+      "source": "category-conflict-systems-resolution",
+      "target": "doc-85"
+    },
+    {
+      "source": "category-reports",
+      "target": "doc-86"
+    },
+    {
+      "source": "category-reports",
+      "target": "doc-87"
+    },
+    {
+      "source": "category-reports",
+      "target": "doc-88"
+    },
+    {
+      "source": "category-reports",
+      "target": "doc-89"
+    },
+    {
+      "source": "category-reports",
+      "target": "doc-90"
+    },
+    {
+      "source": "category-reports",
+      "target": "doc-91"
+    },
+    {
+      "source": "category-reports",
+      "target": "doc-92"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-93"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-94"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-95"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-96"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-97"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-98"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-99"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-100"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-101"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-102"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-103"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-104"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-105"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-106"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-107"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-108"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-109"
+    },
+    {
+      "source": "category-debug",
+      "target": "doc-110"
+    }
+  ],
+  "generated": "2025-12-05T05:49:59.151Z",
+  "stats": {
+    "totalDocs": 111,
+    "archivedDocs": 65,
+    "activeDocs": 46,
+    "categories": [
+      "other",
+      "archive",
+      "conflict-systems-resolution",
+      "reports",
+      "debug"
+    ]
+  }
+}

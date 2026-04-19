@@ -1,0 +1,481 @@
+#!/bin/bash
+# Watchpost — Smart Launcher
+# Usage: watchpost [tui|dashboard|both|archive|status|stop]
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+PORT="${PORT:-6010}"
+
+# ─── Colors & Styles ─────────────────────────────────────────────────────────
+RST='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
+ITAL='\033[3m'
+ULINE='\033[4m'
+# Foreground
+BLK='\033[30m';  RED='\033[31m';  GRN='\033[32m';  YEL='\033[33m'
+BLU='\033[34m';  MAG='\033[35m';  CYN='\033[36m';  WHT='\033[37m'
+# Bright foreground
+BBLK='\033[90m'; BRED='\033[91m'; BGRN='\033[92m'; BYEL='\033[93m'
+BBLU='\033[94m'; BMAG='\033[95m'; BCYN='\033[96m'; BWHT='\033[97m'
+# Background
+BG_BLU='\033[44m'; BG_MAG='\033[45m'; BG_CYN='\033[46m'
+
+# ─── Box drawing ─────────────────────────────────────────────────────────────
+# Uses Unicode box-drawing characters for clean borders
+BOX_TL='╭'; BOX_TR='╮'; BOX_BL='╰'; BOX_BR='╯'
+BOX_H='─'; BOX_V='│'; BOX_LT='├'; BOX_RT='┤'
+
+TERM_WIDTH=$(tput cols 2>/dev/null || echo 60)
+BOX_W=$((TERM_WIDTH > 64 ? 62 : TERM_WIDTH - 2))
+
+# Draw a horizontal line
+hline() {
+  local char="${1:-$BOX_H}"
+  local w=$((BOX_W - 2))
+  printf '%*s' "$w" '' | tr ' ' "$char"
+}
+
+# Print a boxed line with padding
+bline() {
+  local text="$1"
+  local plain
+  plain=$(echo -e "$text" | sed 's/\x1b\[[0-9;]*m//g')
+  local len=${#plain}
+  local pad=$((BOX_W - 4 - len))
+  [ $pad -lt 0 ] && pad=0
+  printf "  ${BBLK}${BOX_V}${RST} %b%*s ${BBLK}${BOX_V}${RST}\n" "$text" "$pad" ""
+}
+
+# Print a boxed empty line
+bempty() {
+  local inner=$((BOX_W - 2))
+  printf "  ${BBLK}${BOX_V}${RST}%*s${BBLK}${BOX_V}${RST}\n" "$inner" ""
+}
+
+# Top border
+btop() {
+  printf "  ${BBLK}${BOX_TL}$(hline)${BOX_TR}${RST}\n"
+}
+
+# Bottom border
+bbot() {
+  printf "  ${BBLK}${BOX_BL}$(hline)${BOX_BR}${RST}\n"
+}
+
+# Separator
+bsep() {
+  printf "  ${BBLK}${BOX_LT}$(hline)${BOX_RT}${RST}\n"
+}
+
+# ─── Core Functions ──────────────────────────────────────────────────────────
+
+is_server_running() {
+  curl -s "http://localhost:${PORT}/api/status" >/dev/null 2>&1
+}
+
+get_server_info() {
+  curl -s "http://localhost:${PORT}/api/status" 2>/dev/null
+}
+
+get_task_stats() {
+  curl -s "http://localhost:${PORT}/api/tasks/stats" 2>/dev/null
+}
+
+start_server() {
+  cd "$DIR"
+  WATCHPOST_CWD="${WATCHPOST_CWD:-$(pwd)}" node server.js > /tmp/watchpost-server.log 2>&1 &
+  local pid=$!
+
+  # Animated spinner while waiting
+  local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local i=0
+  for attempt in {1..10}; do
+    printf "\r  ${BCYN}${spin:i++%10:1}${RST} ${DIM}Starting dashboard...${RST}  "
+    sleep 1
+    if is_server_running; then
+      printf "\r  ${BGRN}✓${RST} Dashboard running ${DIM}(PID $pid)${RST}       \n"
+      return 0
+    fi
+  done
+  printf "\r  ${BRED}✗${RST} Failed to start. Check /tmp/watchpost-server.log\n"
+  return 1
+}
+
+open_dashboard() {
+  local url="http://localhost:${PORT}"
+  if command -v xdg-open &>/dev/null; then
+    xdg-open "$url" 2>/dev/null &
+  elif command -v open &>/dev/null; then
+    open "$url" 2>/dev/null &
+  else
+    echo -e "  ${DIM}Open in browser:${RST} ${ULINE}${BCYN}${url}${RST}"
+    return
+  fi
+  echo -e "  ${BGRN}✓${RST} Opened ${ULINE}${BCYN}${url}${RST}"
+}
+
+start_tui() {
+  export WATCHPOST_CWD="${WATCHPOST_CWD:-$(pwd)}"
+  cd "$DIR"
+  exec node "$DIR/tui/src/index.js"
+}
+
+stop_server() {
+  if is_server_running; then
+    local pid=$(lsof -ti:${PORT} 2>/dev/null)
+    if [ -n "$pid" ]; then
+      kill "$pid" 2>/dev/null
+      echo -e "  ${BYEL}■${RST} Dashboard stopped"
+    fi
+  else
+    echo -e "  ${DIM}Dashboard is not running${RST}"
+  fi
+}
+
+# ─── ASCII Logo ──────────────────────────────────────────────────────────────
+
+print_logo() {
+  echo ""
+  echo -e "  ${BCYN}${BOLD}  ███╗   ███╗ █████╗ ███████╗███████╗████████╗██████╗  ██████╗${RST}"
+  echo -e "  ${BCYN}${BOLD}  ████╗ ████║██╔══██╗██╔════╝██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗${RST}"
+  echo -e "  ${BCYN}  ██╔████╔██║███████║█████╗  ███████╗   ██║   ██████╔╝██║   ██║${RST}"
+  echo -e "  ${BLU}  ██║╚██╔╝██║██╔══██║██╔══╝  ╚════██║   ██║   ██╔══██╗██║   ██║${RST}"
+  echo -e "  ${BLU}  ██║ ╚═╝ ██║██║  ██║███████╗███████║   ██║   ██║  ██║╚██████╔╝${RST}"
+  echo -e "  ${BBLK}  ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝${RST}"
+  echo -e "  ${DIM}${ITAL}                    AI Orchestration Dashboard${RST}"
+  echo ""
+}
+
+# ─── Status Display ──────────────────────────────────────────────────────────
+
+show_status() {
+  print_logo
+
+  if is_server_running; then
+    local info
+    info=$(get_server_info)
+    local version=$(echo "$info" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+    local project_path=$(echo "$info" | grep -o '"masterPlanPath":"[^"]*"' | cut -d'"' -f4)
+    local project_name=$(basename "$(dirname "$(dirname "$project_path")")" 2>/dev/null)
+    local uptime_secs=$(echo "$info" | grep -o '"uptime":[0-9.]*' | cut -d: -f2 | cut -d. -f1)
+    local uptime_fmt=""
+    if [ -n "$uptime_secs" ]; then
+      local h=$((uptime_secs / 3600))
+      local m=$(( (uptime_secs % 3600) / 60 ))
+      [ $h -gt 0 ] && uptime_fmt="${h}h ${m}m" || uptime_fmt="${m}m"
+    fi
+
+    btop
+    bline "${BGRN}●${RST} ${BOLD}Server${RST}    ${GRN}running${RST} on port ${BOLD}${PORT}${RST}  ${DIM}v${version}${RST}"
+    bline "${BCYN}●${RST} ${BOLD}Project${RST}   ${BCYN}${project_name}${RST}"
+    [ -n "$uptime_fmt" ] && bline "${BBLU}●${RST} ${BOLD}Uptime${RST}    ${uptime_fmt}"
+    bsep
+
+    # Task stats
+    local stats
+    stats=$(get_task_stats 2>/dev/null)
+    if [ -n "$stats" ] && echo "$stats" | grep -q '"total"'; then
+      local total=$(echo "$stats" | grep -o '"total":[0-9]*' | head -1 | cut -d: -f2)
+
+      # Extract counts from byStatus array — put each object on its own line
+      local flat_stats=$(echo "$stats" | tr '\n' ' ' | sed 's/},{/}\n{/g')
+      local s_done=$(echo "$flat_stats" | grep '"done"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_prog=$(echo "$flat_stats" | grep '"in_progress"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_plan=$(echo "$flat_stats" | grep '"planned"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_rev=$(echo "$flat_stats" | grep '"review"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+      local s_pause=$(echo "$flat_stats" | grep '"paused"' | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+
+      s_done=${s_done:-0}; s_prog=${s_prog:-0}; s_plan=${s_plan:-0}
+      s_rev=${s_rev:-0}; s_pause=${s_pause:-0}
+
+      bline "${BOLD}Tasks${RST} ${DIM}(${total} total)${RST}"
+      bempty
+
+      # Progress bar
+      if [ "$total" -gt 0 ] 2>/dev/null; then
+        local bar_width=$((BOX_W - 12))
+        local done_w=$(( (s_done * bar_width) / total ))
+        local prog_w=$(( (s_prog * bar_width) / total ))
+        local rev_w=$(( (s_rev * bar_width) / total ))
+        local remain=$((bar_width - done_w - prog_w - rev_w))
+        [ $remain -lt 0 ] && remain=0
+
+        local bar=""
+        [ $done_w -gt 0 ] && bar+=$(printf "\033[42m%*s\033[0m" "$done_w" "")
+        [ $prog_w -gt 0 ] && bar+=$(printf "\033[44m%*s\033[0m" "$prog_w" "")
+        [ $rev_w -gt 0 ] && bar+=$(printf "\033[43m%*s\033[0m" "$rev_w" "")
+        [ $remain -gt 0 ] && bar+=$(printf "\033[100m%*s\033[0m" "$remain" "")
+
+        bline "    ${bar}"
+      fi
+      bempty
+      bline "    ${BGRN}■${RST} Done ${DIM}${s_done}${RST}   ${BBLU}■${RST} Active ${DIM}${s_prog}${RST}   ${BYEL}■${RST} Review ${DIM}${s_rev}${RST}   ${BBLK}■${RST} Planned ${DIM}${s_plan}${RST}"
+    fi
+
+    bbot
+  else
+    btop
+    bline "${BRED}●${RST} ${BOLD}Server${RST}    ${DIM}not running${RST}"
+    bbot
+  fi
+  echo ""
+}
+
+# ─── Interactive Menu ────────────────────────────────────────────────────────
+
+# Read a single keypress, resolving arrow escape sequences
+read_key() {
+  local key
+  IFS= read -r -s -n1 key
+  if [[ "$key" == $'\x1b' ]]; then
+    local seq
+    IFS= read -r -s -n1 -t 0.1 seq
+    if [[ "$seq" == "[" ]]; then
+      IFS= read -r -s -n1 -t 0.1 seq
+      case "$seq" in
+        A) echo "UP"; return ;;
+        B) echo "DOWN"; return ;;
+      esac
+    fi
+    echo "ESC"; return
+  fi
+  case "$key" in
+    "") echo "ENTER" ;;
+    k|K) echo "UP" ;;
+    j|J) echo "DOWN" ;;
+    q|Q) echo "QUIT" ;;
+    *) echo "$key" ;;
+  esac
+}
+
+show_menu() {
+  local server_running=false
+  is_server_running && server_running=true
+
+  # Build menu items: (label, description, action_key)
+  local labels=() descs=() actions=()
+  if $server_running; then
+    labels+=("Open TUI")         ; descs+=("terminal kanban board") ; actions+=("tui")
+    labels+=("Open Dashboard")   ; descs+=("browser UI")            ; actions+=("dash")
+    labels+=("Launch Both")      ; descs+=("dashboard + TUI")       ; actions+=("both")
+    labels+=("Status")           ; descs+=("detailed server info")  ; actions+=("status")
+    labels+=("Stop Server")      ; descs+=("shutdown dashboard")    ; actions+=("stop")
+  else
+    labels+=("Open TUI")         ; descs+=("starts server + terminal board") ; actions+=("tui")
+    labels+=("Start Dashboard")  ; descs+=("start server + open browser")    ; actions+=("dash")
+    labels+=("Launch Both")      ; descs+=("dashboard + TUI")                ; actions+=("both")
+  fi
+  labels+=("Quit") ; descs+=("") ; actions+=("quit")
+
+  local count=${#labels[@]}
+  local cursor=0
+
+  # Hide cursor
+  tput civis 2>/dev/null
+  trap 'tput cnorm 2>/dev/null' EXIT
+
+  while true; do
+    # Clear screen and draw
+    tput clear 2>/dev/null || printf '\033[2J\033[H'
+
+    print_logo
+    btop
+
+    # Server status line
+    if $server_running; then
+      local info
+      info=$(get_server_info)
+      local project_path=$(echo "$info" | grep -o '"masterPlanPath":"[^"]*"' | cut -d'"' -f4)
+      local project_name=$(basename "$(dirname "$(dirname "$project_path")")" 2>/dev/null)
+      bline "${BGRN}●${RST} Server ${GRN}running${RST}  ${DIM}port ${PORT}${RST}  ${DIM}project: ${BCYN}${project_name}${RST}"
+    else
+      bline "${BBLK}●${RST} Server ${DIM}stopped${RST}"
+    fi
+
+    bsep
+    bempty
+
+    # Render menu items
+    for i in "${!labels[@]}"; do
+      local label="${labels[$i]}"
+      local desc="${descs[$i]}"
+      local action="${actions[$i]}"
+
+      # Pick color based on action type
+      local color="$BCYN"
+      [[ "$action" == "status" ]] && color="$BYEL"
+      [[ "$action" == "stop" ]]   && color="$BRED"
+      [[ "$action" == "quit" ]]   && color="$BBLK"
+
+      if [ "$i" -eq "$cursor" ]; then
+        # Selected: highlighted with arrow
+        bline "  ${BOLD}${color}>${RST} ${BOLD}${color}${label}${RST}  ${DIM}${desc}${RST}"
+      else
+        bline "    ${DIM}${label}  ${desc}${RST}"
+      fi
+
+      # Add separator before quit (last item) and before status section
+      if $server_running && [ "$i" -eq 2 ]; then
+        bempty
+      fi
+      if [[ "${actions[$((i+1))]:-}" == "quit" ]]; then
+        bempty
+      fi
+    done
+
+    bempty
+    bbot
+    echo ""
+    echo -e "  ${DIM}Navigate: arrows/j/k  Select: Enter  Quit: q/Esc${RST}"
+
+    # Read input
+    local key
+    key=$(read_key)
+
+    case "$key" in
+      UP)
+        ((cursor > 0)) && ((cursor--))
+        ;;
+      DOWN)
+        ((cursor < count - 1)) && ((cursor++))
+        ;;
+      ENTER)
+        tput cnorm 2>/dev/null
+        echo ""
+        local selected="${actions[$cursor]}"
+        case "$selected" in
+          tui)
+            $server_running || start_server || exit 1
+            start_tui
+            ;;
+          dash)
+            $server_running || start_server || exit 1
+            open_dashboard
+            ;;
+          both)
+            $server_running || start_server || exit 1
+            open_dashboard
+            echo ""
+            start_tui
+            ;;
+          status)
+            show_status
+            ;;
+          stop)
+            stop_server
+            ;;
+          quit)
+            exit 0
+            ;;
+        esac
+        return
+        ;;
+      QUIT|ESC)
+        tput cnorm 2>/dev/null
+        exit 0
+        ;;
+    esac
+  done
+}
+
+# ─── Help ────────────────────────────────────────────────────────────────────
+
+show_help() {
+  print_logo
+  btop
+  bline "${BOLD}Usage${RST}  watchpost ${DIM}[command]${RST}"
+  bsep
+  bempty
+  bline "  ${BCYN}(none)${RST}        Interactive menu"
+  bline "  ${BCYN}tui${RST}           Terminal kanban board"
+  bline "  ${BCYN}dashboard${RST}     Start server + open browser"
+  bline "  ${BCYN}both${RST}          Dashboard + TUI"
+  bline "  ${BCYN}status${RST}        Server info + task stats"
+  bline "  ${BCYN}stop${RST}          Stop dashboard server"
+  bline "  ${BCYN}install${RST}       Install/configure a project"
+  bline "  ${BCYN}archive${RST}       Archive done tasks"
+  bline "  ${BCYN}discover${RST}      Scan for new projects"
+  bline "  ${BCYN}help${RST}          This help screen"
+  bempty
+  bbot
+  echo ""
+}
+
+# ─── Subcommands ─────────────────────────────────────────────────────────────
+
+case "${1:-}" in
+  tui)
+    if ! is_server_running; then
+      start_server || exit 1
+    fi
+    start_tui
+    ;;
+  dashboard|dash|web)
+    if ! is_server_running; then
+      start_server || exit 1
+    fi
+    open_dashboard
+    ;;
+  both)
+    if ! is_server_running; then
+      start_server || exit 1
+    fi
+    open_dashboard
+    start_tui
+    ;;
+  status)
+    show_status
+    ;;
+  stop)
+    stop_server
+    ;;
+  archive)
+    shift
+    exec node "$DIR/tui/src/archive-cli.js" "$@"
+    ;;
+  install)
+    shift
+    exec bash "$DIR/install.sh" "$@"
+    ;;
+  discover)
+    echo -e "\n  ${BCYN}${BOLD}Scanning for projects...${RST}\n"
+    if is_server_running; then
+      result=$(curl -s "http://localhost:${PORT}/api/projects/scan")
+      added=$(echo "$result" | grep -o '"added":\[[^]]*\]' | grep -o '"name":"[^"]*"' | wc -l)
+      total=$(echo "$result" | grep -o '"total":[0-9]*' | cut -d: -f2)
+      echo -e "  ${BGRN}✓${RST} Scan complete: ${BOLD}${total}${RST} projects found, ${BOLD}${added}${RST} new"
+      if [ "$added" -gt 0 ]; then
+        echo -e "  ${DIM}New projects:${RST}"
+        echo "$result" | grep -o '"added":\[[^]]*\]' | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | while read -r name; do
+          echo -e "    ${BGRN}+${RST} ${name}"
+        done
+      fi
+    else
+      echo -e "  ${DIM}Server not running, scanning locally...${RST}"
+      node -e "
+        const s = require('$DIR/modules/project-scanner.js');
+        const cfg = require('$DIR/local/config.json') || {};
+        const paths = cfg.projectScanPaths || [process.env.HOME];
+        const r = s.syncDiscoveredProjects(paths, '$DIR/projects.json', { maxDepth: cfg.projectScanDepth || 5 });
+        console.log(JSON.stringify(r));
+      " 2>/dev/null | {
+        read -r result
+        added=$(echo "$result" | grep -o '"added":\[[^]]*\]' | grep -o '"name":"[^"]*"' | wc -l)
+        total=$(echo "$result" | grep -o '"total":[0-9]*' | cut -d: -f2)
+        echo -e "  ${BGRN}✓${RST} Scan complete: ${BOLD}${total:-0}${RST} projects found, ${BOLD}${added:-0}${RST} new"
+      }
+    fi
+    echo ""
+    ;;
+  help|--help|-h)
+    show_help
+    ;;
+  "")
+    show_menu
+    ;;
+  *)
+    echo -e "  ${BRED}Unknown command:${RST} $1"
+    echo -e "  Run ${BCYN}watchpost help${RST} for usage."
+    exit 1
+    ;;
+esac

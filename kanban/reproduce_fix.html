@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reproduction - Fixed CSS</title>
+  <style>
+    :root {
+      --surface-tertiary: #161b22;
+      --brand-primary: #4ECDC4;
+      --surface-elevated: #21262d;
+      --surface-secondary: #0d1117;
+      --border-subtle: #1a1a1a;
+      --text-primary: #e6edf3;
+      --text-muted: #8b949e;
+      --text-subtle: #6e7681;
+    }
+    body { background: #000; color: #fff; font-family: sans-serif; }
+    .task-card {
+      background: var(--surface-tertiary);
+      border-left: 4px solid var(--brand-primary);
+      padding: 16px 16px 28px 16px;
+      border-radius: 10px;
+      width: 300px;
+      margin: 20px;
+    }
+
+    /* MODIFIED CSS FOR FIX */
+    .task-header {
+      display: flex;
+      /* justify-content: space-between; <-- REMOVED */
+      justify-content: flex-start; /* <-- ADDED */
+      align-items: center;
+      gap: 6px; /* <-- ADDED */
+      flex-wrap: wrap; /* <-- ADDED for safety against cutoff */
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .task-id {
+      font-weight: 600;
+      color: var(--brand-primary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: auto; /* Push remaining items to the right if we wanted space-between behavior but with gap safety? No, let's keep them packed left as requested to avoid the "floating" issue.
+      Wait, the user complained about "floating" (gap) when one item is missing.
+      If I use margin-right: auto on task-id, it will push badges to the far right again.
+      Let's keep them packed left (flex-start) OR stick to space-between but handle the missing item better?
+      Actually, standard Kanban cards often have ID on left, Badges on right.
+      The issue with TASK-093 in the screenshot was that the "TODO" badge was floated to the far right, leaving a huge gap because Priority was missing.
+      If I pack them all to the left (flex-start), "TODO" will sit right next to "TASK-093". That seems cleaner.
+      Let's try flex-start first.
+      */
+    }
+
+    /* Re-adding this to test "space-between" behavior vs "flex-start" behavior
+       If we want ID on left and Badges on right, we need a container for badges.
+       Currently the HTML structure is flat: Button, ID, BadgeWrapper(Status), BadgeWrapper(Priority).
+    */
+
+    .task-priority {
+      font-weight: 600;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .task-priority.low { background: #10b981; color: white; }
+    .task-priority.medium { background: #f59e0b; color: white; }
+    .task-priority.high { background: #dc2626; color: white; }
+
+    .task-status {
+      font-weight: 600;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      /* margin-left: 4px; REMOVED margin-left since we have gap now */
+    }
+    .task-status.todo { background: #6b7280; color: white; }
+    .task-status.in-progress { background: #3b82f6; color: white; }
+
+    .expand-toggle {
+      background: none; border: none; color: #888; cursor: pointer;
+      margin-right: 2px; /* reduced margin since we have gap */
+    }
+    .badge-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+  <h3>TASK-065 (Works - All badges)</h3>
+  <div class="task-card">
+    <div class="task-header">
+      <button class="expand-toggle">▶</button>
+      <div class="task-id">TASK-065</div>
+      <div class="badge-wrapper">
+        <div class="task-status todo">TODO</div>
+      </div>
+      <div class="badge-wrapper">
+        <div class="task-priority low">P2-LOW</div>
+      </div>
+    </div>
+    <div class="task-title">Prepare for GitHub Public Release</div>
+  </div>
+
+  <h3>TASK-093 (The Issue - Missing Priority)</h3>
+  <div class="task-card">
+    <div class="task-header">
+      <button class="expand-toggle">▶</button>
+      <div class="task-id">TASK-093</div>
+      <div class="badge-wrapper">
+        <div class="task-status todo">TODO</div>
+      </div>
+      <!-- Missing Priority Wrapper -->
+    </div>
+    <div class="task-title">Database Engine Migration</div>
+  </div>
+
+  <h3>TASK-XXX (Long Status - Potential Cutoff)</h3>
+  <div class="task-card">
+    <div class="task-header">
+      <button class="expand-toggle">▶</button>
+      <div class="task-id">TASK-XXX</div>
+      <div class="badge-wrapper">
+        <div class="task-status in-progress">IN PROGRESS AND VERY LONG STATUS</div>
+      </div>
+      <div class="badge-wrapper">
+        <div class="task-priority high">P1-HIGH</div>
+      </div>
+    </div>
+    <div class="task-title">Check wrapping behavior</div>
+  </div>
+
+</body>
+</html>

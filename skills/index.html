@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skills Graph</title>
+    <script src="https://unpkg.com/d3@7"></script>
+    <script src="https://unpkg.com/force-graph"></script>
+    <style>
+        /* Design tokens - Pure black theme (matching Storybook) */
+        :root {
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-hover: rgba(255, 255, 255, 0.05);
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-subtle: #6e7681;
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+            --brand-primary: #4ECDC4;
+            --brand-hover: #5fd9d1;
+            --brand-subtle: rgba(78, 205, 196, 0.15);
+            --color-success: #10b981;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .header {
+            background: rgba(31, 31, 31, 0.95);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .search-box {
+            flex: 1;
+            max-width: 300px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            transition: all var(--transition-fast);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--brand-primary);
+            box-shadow: 0 0 0 2px var(--brand-subtle);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-subtle);
+        }
+
+        .stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-subtle);
+        }
+
+        .stat {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .stat-value {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .graph-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #graph {
+            width: 100%;
+            height: 100%;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            display: flex;
+            gap: 0.25rem;
+            z-index: 100;
+        }
+
+        .control-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(31, 31, 31, 0.9);
+            border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all var(--transition-fast);
+        }
+
+        .control-btn:hover {
+            background: var(--surface-tertiary);
+            border-color: var(--brand-primary);
+        }
+
+        .detail-panel {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 320px;
+            background: rgba(31, 31, 31, 0.95);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-medium);
+            border-radius: 12px;
+            padding: 1rem;
+            display: none;
+            z-index: 100;
+        }
+
+        .detail-panel.visible {
+            display: block;
+        }
+
+        .detail-close {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: none;
+            border: none;
+            color: var(--text-subtle);
+            cursor: pointer;
+            font-size: 1.25rem;
+            line-height: 1;
+            transition: color var(--transition-fast);
+        }
+
+        .detail-close:hover {
+            color: var(--text-muted);
+        }
+
+        .detail-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            padding-right: 1.5rem;
+        }
+
+        .detail-folder {
+            font-size: 0.75rem;
+            color: var(--text-subtle);
+            word-break: break-all;
+            margin-bottom: 0.75rem;
+            font-family: monospace;
+        }
+
+        .detail-category {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-bottom: 0.75rem;
+        }
+
+        .detail-description {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            margin-bottom: 0.75rem;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+
+        .detail-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .detail-btn {
+            flex: 1;
+            padding: 0.5rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .detail-btn-primary {
+            background: var(--brand-primary);
+            border: none;
+            color: var(--surface-primary);
+        }
+
+        .detail-btn-primary:hover {
+            background: var(--brand-hover);
+        }
+
+        .detail-btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border-medium);
+            color: var(--text-muted);
+        }
+
+        .detail-btn-secondary:hover {
+            background: var(--surface-hover);
+            border-color: var(--border-subtle);
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            background: rgba(31, 31, 31, 0.9);
+            border: 1px solid var(--border-medium);
+            border-radius: 10px;
+            padding: 0.75rem;
+            z-index: 100;
+            max-height: calc(100% - 2rem);
+            overflow-y: auto;
+        }
+
+        .legend-title {
+            font-size: 0.7rem;
+            color: var(--text-subtle);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .legend-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="title">
+                <span>🎯</span>
+                <span>Skills</span>
+            </div>
+
+            <div class="search-box">
+                <input type="text" class="search-input" id="search" placeholder="Search skills...">
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <span>Skills:</span>
+                    <span class="stat-value" id="skillCount">0</span>
+                </div>
+                <div class="stat">
+                    <span>Categories:</span>
+                    <span class="stat-value" id="categoryCount">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="graph-container">
+            <div id="graph"></div>
+
+            <div class="controls">
+                <button class="control-btn" id="zoomIn" title="Zoom in">+</button>
+                <button class="control-btn" id="zoomOut" title="Zoom out">−</button>
+                <button class="control-btn" id="zoomFit" title="Fit to view">⊡</button>
+            </div>
+
+            <div class="detail-panel" id="detailPanel">
+                <button class="detail-close" id="detailClose">×</button>
+                <div class="detail-title" id="detailTitle"></div>
+                <div class="detail-folder" id="detailFolder"></div>
+                <div class="detail-category" id="detailCategory"></div>
+                <div class="detail-description" id="detailDescription"></div>
+                <div class="detail-actions">
+                    <button class="detail-btn detail-btn-primary" id="openSkill">Open SKILL.md</button>
+                    <button class="detail-btn detail-btn-secondary" id="copyPath">Copy Path</button>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="legend-title">Categories</div>
+                <div class="legend-items" id="legendItems"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Category colors
+        const COLORS = {
+            'debugging': '#ef4444',
+            'development': '#10b981',
+            'architecture': '#3b82f6',
+            'operations': '#f59e0b',
+            'documentation': '#8b5cf6',
+            'testing': '#06b6d4',
+            'data': '#ec4899',
+            'other': '#94a3b8'
+        };
+
+        let graphData = null;
+        let graph = null;
+        let selectedNode = null;
+        let hoveredNode = null;
+
+        // Load data and initialize
+        async function init() {
+            try {
+                const response = await fetch('/api/skills?v=' + Date.now());
+                graphData = await response.json();
+
+                updateStats();
+                buildLegend();
+                initGraph();
+            } catch (error) {
+                console.error('Failed to load graph data:', error);
+                document.getElementById('graph').innerHTML =
+                    '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#64748b;">' +
+                    'Failed to load graph data. Run: npm run skills:graph</div>';
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('skillCount').textContent = graphData.stats.totalSkills;
+            document.getElementById('categoryCount').textContent = graphData.stats.categories.length;
+        }
+
+        // Category emojis for legend
+        const LEGEND_EMOJIS = {
+            'debugging': '🐛',
+            'development': '💻',
+            'architecture': '🏗️',
+            'operations': '⚙️',
+            'documentation': '📚',
+            'testing': '🧪',
+            'data': '💾',
+            'other': '🔧'
+        };
+
+        function buildLegend() {
+            const categories = graphData.stats.categories;
+            const legendItems = document.getElementById('legendItems');
+            legendItems.innerHTML = '';
+
+            categories.forEach(cat => {
+                const emoji = LEGEND_EMOJIS[cat] || '🔧';
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.innerHTML = `
+                    <div class="legend-dot" style="background: ${COLORS[cat] || COLORS.other}"></div>
+                    <span>${emoji} ${cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
+                `;
+                legendItems.appendChild(item);
+            });
+        }
+
+        // Category emojis
+        const CATEGORY_EMOJIS = {
+            'debugging': '🐛',
+            'development': '💻',
+            'architecture': '🏗️',
+            'operations': '⚙️',
+            'documentation': '📚',
+            'testing': '🧪',
+            'data': '💾',
+            'other': '🔧'
+        };
+
+        // Simulated usage data - higher values = more commonly used skills
+        const USAGE_DATA = {
+            'dev-debugging': 95,
+            'dev-vue': 90,
+            'qa-testing': 85,
+            'dev-fix-task-store': 80,
+            'chief-architect': 75,
+            'dev-storybook': 70,
+            'dev-refactoring': 65,
+            'dev-implement-ui-ux': 60,
+            'ops-port-manager': 55,
+            'dev-fix-timer': 50,
+            'arch-planning': 45,
+            'document-sync': 40,
+            'smart-doc-manager': 35,
+            'dev-fix-pinia': 30,
+            'dev-fix-keyboard': 25,
+            'comprehensive-system-analyzer': 20
+        };
+
+        function getNodeSize(node) {
+            if (node.isCategory) return 24;
+            // Get usage from simulated data, or from graph data, default to 10
+            const usage = USAGE_DATA[node.name] || node.usage || 10;
+            // Scale from 8 (unused) to 24 (heavily used) - big difference!
+            return 8 + (usage / 100) * 16;
+        }
+
+        function initGraph() {
+            const container = document.getElementById('graph');
+
+            graph = ForceGraph()(container)
+                .graphData(graphData)
+                .backgroundColor('#0f172a')
+                .nodeColor(node => node.color || COLORS.other)
+                .nodeVal(node => node.isCategory ? 25 : 8)
+                .nodeLabel(node => node.title)
+                .linkColor(() => 'rgba(148, 163, 184, 0.25)')
+                .linkWidth(2)
+                .onNodeClick(handleNodeClick)
+                .onNodeHover(handleNodeHover)
+                .cooldownTicks(200)
+                .warmupTicks(100)
+                .onEngineStop(() => graph.zoomToFit(400, 60));
+
+            // Strong spacing - labels always visible so need room
+            graph.d3Force('charge', d3.forceManyBody().strength(-400).distanceMax(800));
+            graph.d3Force('link').distance(120).strength(0.2);
+            // Center force to keep graph centered
+            graph.d3Force('center', d3.forceCenter());
+            // Large collision radius for labels
+            graph.d3Force('collide', d3.forceCollide().radius(node => getNodeSize(node) + 50).strength(1).iterations(6));
+            // Spread nodes outward
+            graph.d3Force('radial', d3.forceRadial(350, 0, 0).strength(node => node.isCategory ? 0.05 : 0.12));
+
+            // Custom node rendering with emojis inside circles
+            graph.nodeCanvasObject((node, ctx, globalScale) => {
+                const emoji = CATEGORY_EMOJIS[node.category] || '🔧';
+                const nodeSize = getNodeSize(node);
+                const emojiSize = node.isCategory ? 18 / globalScale : 14 / globalScale;
+
+                const isHovered = hoveredNode && hoveredNode.id === node.id;
+                const isSelected = selectedNode && selectedNode.id === node.id;
+
+                // Draw node circle with slight transparency
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, nodeSize, 0, 2 * Math.PI);
+                ctx.fillStyle = (node.color || COLORS.other) + (isHovered ? 'ff' : 'cc');
+                ctx.fill();
+
+                // Draw border
+                ctx.strokeStyle = node.color || COLORS.other;
+                ctx.lineWidth = (isHovered || isSelected ? 3 : 2) / globalScale;
+                ctx.stroke();
+
+                // Highlight selected node
+                if (isSelected) {
+                    ctx.strokeStyle = '#22c55e';
+                    ctx.lineWidth = 3 / globalScale;
+                    ctx.stroke();
+                }
+
+                // Draw emoji inside the circle
+                ctx.font = `${emojiSize}px Sans-Serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(emoji, node.x, node.y);
+
+                // ALWAYS draw labels - short for skills, full for categories
+                const minLabelSize = 11;
+                const labelFontSize = Math.max(minLabelSize, node.isCategory ? 14 / globalScale : 11 / globalScale);
+                ctx.font = `${node.isCategory ? 'bold ' : ''}${labelFontSize}px Sans-Serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+
+                // Background for hovered nodes for better readability
+                if (isHovered && !node.isCategory) {
+                    const fullLabel = node.title.length > 30 ? node.title.substring(0, 27) + '...' : node.title;
+                    const textWidth = ctx.measureText(fullLabel).width;
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+                    ctx.fillRect(node.x - textWidth/2 - 4, node.y + nodeSize + 1, textWidth + 8, labelFontSize + 6);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(fullLabel, node.x, node.y + nodeSize + 4);
+                } else {
+                    // Normal label - truncate short to prevent overlaps
+                    ctx.fillStyle = node.isCategory ? '#f1f5f9' : '#cbd5e1';
+                    let label = node.title;
+                    if (!node.isCategory && label.length > 14) {
+                        label = label.substring(0, 11) + '...';
+                    }
+                    ctx.fillText(label, node.x, node.y + nodeSize + 4);
+                }
+            });
+        }
+
+        function handleNodeClick(node) {
+            if (!node || node.isCategory) return;
+
+            selectedNode = node;
+            showDetailPanel(node);
+            graph.nodeColor(graph.nodeColor()); // Trigger re-render
+        }
+
+        function handleNodeHover(node) {
+            document.body.style.cursor = node && !node.isCategory ? 'pointer' : 'default';
+            hoveredNode = node;
+            // Trigger re-render to show/hide label
+            if (graph) graph.nodeColor(graph.nodeColor());
+        }
+
+        function showDetailPanel(node) {
+            const panel = document.getElementById('detailPanel');
+            const title = document.getElementById('detailTitle');
+            const folder = document.getElementById('detailFolder');
+            const category = document.getElementById('detailCategory');
+            const description = document.getElementById('detailDescription');
+
+            title.textContent = node.title;
+            folder.textContent = '.claude/skills/' + node.name;
+            category.textContent = node.category;
+            category.style.background = node.color + '33';
+            category.style.color = node.color;
+            description.textContent = node.description || 'No description available';
+
+            panel.classList.add('visible');
+        }
+
+        function hideDetailPanel() {
+            document.getElementById('detailPanel').classList.remove('visible');
+            selectedNode = null;
+            if (graph) graph.nodeColor(graph.nodeColor());
+        }
+
+        // Event listeners
+        document.getElementById('search').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            if (!graph) return;
+
+            graph.nodeColor(node => {
+                if (term && (node.title?.toLowerCase().includes(term) || node.name?.toLowerCase().includes(term))) {
+                    return '#22c55e'; // highlight green
+                }
+                return node.color || COLORS.other;
+            });
+        });
+
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            graph.zoom(graph.zoom() * 1.5, 300);
+        });
+
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            graph.zoom(graph.zoom() / 1.5, 300);
+        });
+
+        document.getElementById('zoomFit').addEventListener('click', () => {
+            graph.zoomToFit(400, 50);
+        });
+
+        document.getElementById('detailClose').addEventListener('click', hideDetailPanel);
+
+        document.getElementById('openSkill').addEventListener('click', () => {
+            if (selectedNode) {
+                const skillPath = '/.claude/skills/' + selectedNode.name + '/SKILL.md';
+                window.open(skillPath, '_blank');
+            }
+        });
+
+        document.getElementById('copyPath').addEventListener('click', () => {
+            if (selectedNode) {
+                const fullPath = '.claude/skills/' + selectedNode.name;
+                navigator.clipboard.writeText(fullPath).then(() => {
+                    const btn = document.getElementById('copyPath');
+                    btn.textContent = 'Copied!';
+                    setTimeout(() => btn.textContent = 'Copy Path', 1500);
+                });
+            }
+        });
+
+        // Track if initial setup is done
+        let isInitialized = false;
+
+        // Initial setup - only runs once
+        function setupGraph() {
+            if (!graph || isInitialized) return;
+
+            const container = document.getElementById('graph');
+            const rect = container.getBoundingClientRect();
+
+            if (rect.width > 0 && rect.height > 0) {
+                graph.width(rect.width);
+                graph.height(rect.height);
+                isInitialized = true;
+            }
+        }
+
+        // Refresh canvas on tab switch - fixes Chromium rendering bug
+        // Uses pause/resume cycle instead of resize to avoid state corruption
+        function refreshGraph() {
+            if (!graph) return;
+
+            // Pause and resume to force canvas redraw
+            graph.pauseAnimation();
+            requestAnimationFrame(() => {
+                if (graph) {
+                    graph.resumeAnimation();
+                }
+            });
+        }
+
+        // Initialize graph
+        async function startGraph() {
+            await init();
+            requestAnimationFrame(setupGraph);
+        }
+
+        // Listen for tab activation from parent
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'tab-activated') {
+                console.log('Tab activated - refreshing canvas');
+                refreshGraph();
+            }
+        });
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startGraph);
+        } else {
+            startGraph();
+        }
+    </script>
+</body>
+</html>

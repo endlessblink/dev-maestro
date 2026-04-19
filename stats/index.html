@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-hover: rgba(255, 255, 255, 0.05);
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-subtle: #6e7681;
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+            --brand-primary: #4ECDC4;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+
+            /* Status colors */
+            --color-done: #10b981;
+            --color-progress: #f59e0b;
+            --color-todo: #6366f1;
+            --color-bug: #ef4444;
+            --color-task: #3b82f6;
+            --color-road: #8b5cf6;
+            --color-issue: #f97316;
+            --color-idea: #ec4899;
+
+            /* Health colors */
+            --health-good: #10b981;
+            --health-warning: #f59e0b;
+            --health-critical: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            overflow: auto;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100%;
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        /* Health Status Banner */
+        .health-banner {
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .health-status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .health-indicator {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .health-indicator.good { background: rgba(16, 185, 129, 0.2); }
+        .health-indicator.warning { background: rgba(245, 158, 11, 0.2); }
+        .health-indicator.critical { background: rgba(239, 68, 68, 0.2); }
+
+        .health-text h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .health-text p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .health-text.good h2 { color: var(--health-good); }
+        .health-text.warning h2 { color: var(--health-warning); }
+        .health-text.critical h2 { color: var(--health-critical); }
+
+        .health-metrics {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .health-metric {
+            text-align: center;
+        }
+
+        .health-metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .health-metric-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-subtitle {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        /* Active Work Panel */
+        .active-work-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .active-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--surface-secondary);
+            border-radius: 8px;
+            border-left: 3px solid var(--color-progress);
+        }
+
+        .active-item.monitoring {
+            border-left-color: var(--color-task);
+        }
+
+        .active-item-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .active-item-id {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--brand-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .active-item-title {
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .active-item-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Completed Tasks Panel */
+        .completed-group {
+            margin-bottom: 1rem;
+        }
+
+        .completed-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .completed-group-header {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .completed-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .completed-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .completed-item:hover {
+            background: var(--surface-hover);
+        }
+
+        .completed-item-check {
+            color: var(--color-done);
+            font-size: 0.9rem;
+        }
+
+        .completed-item-id {
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            min-width: 70px;
+        }
+
+        .completed-item-title {
+            flex: 1;
+            color: var(--text-secondary);
+            line-height: 1.3;
+        }
+
+        .completed-item-date {
+            font-size: 0.65rem;
+            color: var(--text-subtle);
+            white-space: nowrap;
+        }
+
+        /* Priority Matrix */
+        .priority-matrix {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .priority-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .priority-label {
+            width: 100px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .priority-label.p1 { color: var(--health-critical); }
+        .priority-label.p2 { color: var(--health-warning); }
+        .priority-label.p3 { color: var(--health-good); }
+
+        .priority-bar-container {
+            flex: 1;
+            display: flex;
+            gap: 2px;
+            height: 28px;
+            background: var(--surface-secondary);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .priority-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: white;
+            min-width: 30px;
+            transition: width 0.3s ease;
+        }
+
+        .priority-bar.done { background: var(--color-done); }
+        .priority-bar.open { background: var(--surface-primary); color: var(--text-muted); }
+
+        .priority-counts {
+            width: 80px;
+            text-align: right;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Chart container */
+        .chart-container {
+            position: relative;
+            height: 200px;
+        }
+
+        /* Type breakdown list */
+        .type-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .type-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem;
+            background: var(--surface-secondary);
+            border-radius: 6px;
+        }
+
+        .type-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .type-icon.task { background: rgba(59, 130, 246, 0.2); }
+        .type-icon.bug { background: rgba(239, 68, 68, 0.2); }
+        .type-icon.road { background: rgba(139, 92, 246, 0.2); }
+        .type-icon.issue { background: rgba(249, 115, 22, 0.2); }
+        .type-icon.idea { background: rgba(236, 72, 153, 0.2); }
+
+        .type-info {
+            flex: 1;
+        }
+
+        .type-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .type-progress {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .type-stat {
+            text-align: right;
+        }
+
+        .type-stat-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .type-stat-value.task { color: var(--color-task); }
+        .type-stat-value.bug { color: var(--color-bug); }
+        .type-stat-value.road { color: var(--color-road); }
+        .type-stat-value.issue { color: var(--color-issue); }
+        .type-stat-value.idea { color: var(--color-idea); }
+
+        .type-stat-label {
+            font-size: 0.65rem;
+            color: var(--text-subtle);
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 150px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .empty-state-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.5;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--surface-secondary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-subtle); }
+
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.task { background: var(--color-task); color: white; }
+        .badge.bug { background: var(--color-bug); color: white; }
+        .badge.road { background: var(--color-road); color: white; }
+        .badge.issue { background: var(--color-issue); color: white; }
+        .badge.idea { background: var(--color-idea); color: white; }
+
+        /* Open Bugs List */
+        .open-bugs-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 0.5rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .open-bug-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--surface-secondary);
+            border-radius: 8px;
+            border-left: 3px solid var(--color-bug);
+        }
+
+        .open-bug-item.high {
+            border-left-color: var(--health-critical);
+        }
+
+        .open-bug-item.medium {
+            border-left-color: var(--health-warning);
+        }
+
+        .open-bug-item.low {
+            border-left-color: var(--health-good);
+        }
+
+        .open-bug-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .open-bug-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .open-bug-id {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--color-bug);
+        }
+
+        .open-bug-priority {
+            font-size: 0.6rem;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .open-bug-priority.high { background: rgba(239, 68, 68, 0.2); color: var(--health-critical); }
+        .open-bug-priority.medium { background: rgba(245, 158, 11, 0.2); color: var(--health-warning); }
+        .open-bug-priority.low { background: rgba(16, 185, 129, 0.2); color: var(--health-good); }
+
+        .open-bug-title {
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .open-bug-notes {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+            line-height: 1.3;
+        }
+
+        /* Work on Next Panel */
+        .work-next-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .work-next-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--surface-secondary);
+            border-radius: 8px;
+            border-left: 3px solid var(--brand-primary);
+        }
+
+        .work-next-item.high {
+            border-left-color: var(--health-critical);
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .work-next-item.medium {
+            border-left-color: var(--health-warning);
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .work-next-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .work-next-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .work-next-id {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--brand-primary);
+        }
+
+        .work-next-type {
+            font-size: 0.6rem;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .work-next-type.bug { background: rgba(239, 68, 68, 0.2); color: var(--color-bug); }
+        .work-next-type.task { background: rgba(59, 130, 246, 0.2); color: var(--color-task); }
+        .work-next-type.road { background: rgba(139, 92, 246, 0.2); color: var(--color-road); }
+        .work-next-type.issue { background: rgba(249, 115, 22, 0.2); color: var(--color-issue); }
+
+        .work-next-priority {
+            font-size: 0.6rem;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .work-next-priority.high { background: rgba(239, 68, 68, 0.2); color: var(--health-critical); }
+        .work-next-priority.medium { background: rgba(245, 158, 11, 0.2); color: var(--health-warning); }
+
+        .work-next-title {
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .work-next-status {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Health Status Banner -->
+        <div class="health-banner">
+            <div class="health-status">
+                <div class="health-indicator" id="healthIndicator">
+                    <span id="healthIcon">⏳</span>
+                </div>
+                <div class="health-text" id="healthText">
+                    <h2>Loading...</h2>
+                    <p>Analyzing project status</p>
+                </div>
+            </div>
+            <div class="health-metrics">
+                <div class="health-metric">
+                    <div class="health-metric-value" id="completionRate">-</div>
+                    <div class="health-metric-label">Complete</div>
+                </div>
+                <div class="health-metric">
+                    <div class="health-metric-value" id="activeCount">-</div>
+                    <div class="health-metric-label">Active</div>
+                </div>
+                <div class="health-metric">
+                    <div class="health-metric-value" id="openBugs">-</div>
+                    <div class="health-metric-label">Open Bugs</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Active Work Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🚀</span>
+                        <span>Active Work</span>
+                    </div>
+                    <div class="card-subtitle" id="activeSubtitle">Currently in progress</div>
+                </div>
+                <div class="active-work-list" id="activeWorkList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Work on Next -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🎯</span>
+                        <span>Work on Next</span>
+                    </div>
+                    <div class="card-subtitle" id="workNextSubtitle">High priority items to tackle</div>
+                </div>
+                <div class="work-next-list" id="workNextList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recently Completed -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>✅</span>
+                        <span>Recently Completed</span>
+                    </div>
+                    <div class="card-subtitle" id="completedSubtitle">Latest achievements</div>
+                </div>
+                <div class="completed-list" id="completedList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Priority Matrix -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>⚡</span>
+                        <span>Priority Status</span>
+                    </div>
+                    <div class="card-subtitle">Done vs Open by priority</div>
+                </div>
+                <div class="priority-matrix" id="priorityMatrix">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Type Breakdown -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🏷️</span>
+                        <span>By Category</span>
+                    </div>
+                    <div class="card-subtitle">Progress by item type</div>
+                </div>
+                <div class="type-breakdown" id="typeBreakdown">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>Loading...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Open Bugs - Full Width -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🐛</span>
+                        <span>Open Bugs</span>
+                    </div>
+                    <div class="card-subtitle" id="openBugsSubtitle">Bugs that need fixing</div>
+                </div>
+                <div class="open-bugs-list" id="openBugsList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⏳</div>
+                        <div>Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API configuration - same as kanban board
+        const API_BASE = window.location.origin;
+
+        // Parse MASTER_PLAN.md for detailed metrics
+        async function fetchAndParse() {
+            try {
+                const response = await fetch(`${API_BASE}/api/master-plan?v=${Date.now()}`);
+                if (!response.ok) throw new Error('Failed to fetch MASTER_PLAN.md');
+                const json = await response.json();
+                const text = json.content;
+                return parseMarkdown(text);
+            } catch (error) {
+                console.error('Error fetching MASTER_PLAN:', error);
+                throw error;
+            }
+        }
+
+        function parseMarkdown(text) {
+            const data = {
+                health: { status: 'good', message: '', completion: 0 },
+                active: [],
+                workOnNext: [],
+                completed: [],
+                openBugs: [],
+                priorities: {
+                    p1: { done: 0, open: 0, items: [] },
+                    p2: { done: 0, open: 0, items: [] },
+                    p3: { done: 0, open: 0, items: [] }
+                },
+                types: {
+                    tasks: { total: 0, done: 0, label: 'Tasks', icon: '📋' },
+                    bugs: { total: 0, done: 0, label: 'Bugs', icon: '🐛' },
+                    roads: { total: 0, done: 0, label: 'Roadmap', icon: '🗺️' },
+                    issues: { total: 0, done: 0, label: 'Issues', icon: '⚠️' },
+                    ideas: { total: 0, done: 0, label: 'Ideas', icon: '💡' }
+                }
+            };
+
+            // Split into lines for parsing
+            const lines = text.split('\n');
+
+            // Parse table rows for items
+            const typeMap = {
+                'TASK': 'tasks',
+                'BUG': 'bugs',
+                'ROAD': 'roads',
+                'ISSUE': 'issues',
+                'IDEA': 'ideas'
+            };
+
+            // Track unique IDs
+            const seenIds = new Set();
+            const doneIds = new Set();
+
+            // Find all IDs and their status
+            lines.forEach((line, index) => {
+                // Match item IDs
+                const idMatches = line.match(/(?:~~)?(TASK|BUG|ROAD|ISSUE|IDEA)-(\d+)(?:~~)?/g);
+                if (!idMatches) return;
+
+                idMatches.forEach(match => {
+                    const isDone = match.startsWith('~~') && match.endsWith('~~');
+                    const cleanId = match.replace(/~~/g, '');
+                    const [type] = cleanId.split('-');
+                    const typeKey = typeMap[type];
+
+                    if (!typeKey || seenIds.has(cleanId)) return;
+                    seenIds.add(cleanId);
+
+                    if (isDone) {
+                        doneIds.add(cleanId);
+                        data.types[typeKey].done++;
+                    }
+                    data.types[typeKey].total++;
+                });
+            });
+
+            // Helper function to parse status (matching Kanban logic)
+            function parseTaskStatus(statusText) {
+                if (!statusText) return 'todo';
+                const text = statusText.toUpperCase();
+
+                // Done patterns
+                const donePatterns = ['DONE', 'COMPLETE', 'COMPLETED', 'FINISHED', 'CLOSED', 'RESOLVED', 'FIXED', 'SHIPPED', '✅', '✓'];
+                // Review/Monitoring patterns
+                const reviewPatterns = ['MONITORING', '👀'];
+                // In-progress patterns
+                const inProgressPatterns = ['IN_PROGRESS', 'IN PROGRESS', 'IN-PROGRESS', 'PAUSED'];
+
+                for (const p of donePatterns) if (text.includes(p)) return 'done';
+                for (const p of reviewPatterns) if (text.includes(p)) return 'review';
+                for (const p of inProgressPatterns) if (text.includes(p)) return 'in-progress';
+                return 'todo';
+            }
+
+            // Extract active items from the Active Work dependency table
+            // Table format: | ID | Status | Primary Files | Depends | Blocks |
+            // Only parse from the "## Active Work" section
+            const activeWorkSection = text.match(/## Active Work[\s\S]*?(?=\n---|\n## |$)/);
+            if (activeWorkSection) {
+                const depTablePattern = /\|\s*(TASK|BUG|ROAD|ISSUE)-(\d+)\s*\|\s*([^|\n]+)\|([^|\n]+)\|/g;
+                let match;
+                const seenActive = new Set();
+
+                while ((match = depTablePattern.exec(activeWorkSection[0])) !== null) {
+                    const id = `${match[1]}-${match[2]}`;
+                    const isDone = match[0].includes('~~') || match[0].includes('✅');
+                    if (isDone || seenActive.has(id)) continue;
+
+                    const statusCol = match[3].trim();
+                    const filesCol = match[4].trim();
+
+                    const parsedStatus = parseTaskStatus(statusCol);
+                    if (parsedStatus !== 'in-progress' && parsedStatus !== 'review') continue;
+
+                    seenActive.add(id);
+                    const status = parsedStatus === 'review' ? 'monitoring' : 'progress';
+
+                    // Find the title from the detailed section
+                    const titlePattern = new RegExp(`###\\s*(?:~~)?${id}(?:~~)?[:\\s]+([^\\n(]+)`, 'i');
+                    const titleMatch = text.match(titlePattern);
+                    let title = titleMatch ? titleMatch[1].trim() : id;
+
+                    // Clean up title
+                    title = title.replace(/\*\*/g, '').replace(/~~.*?~~/g, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+                    if (!title || title.length < 3) title = id;
+
+                    data.active.push({ id, title, status, files: filesCol });
+                }
+            }
+
+            // Extract completed items with dates
+            const completedPattern = /~~(TASK|BUG|ROAD|ISSUE|IDEA)-(\d+)~~[^~\n]*?(?:DONE|FIXED|✅)[^\n]*?(?:Dec\s*(\d+)|(\d{4}))?/gi;
+            while ((match = completedPattern.exec(text)) !== null) {
+                const id = `${match[1]}-${match[2]}`;
+                const type = match[1].toLowerCase();
+                let dateStr = match[3] ? `Dec ${match[3]}` : (match[4] || 'Recently');
+
+                // Find title
+                const titlePattern = new RegExp(`###\\s*~~${id}~~[:\\s]+([^\\n(]+)`, 'i');
+                const titleMatch = text.match(titlePattern);
+                let title = titleMatch ? titleMatch[1].trim() : '';
+
+                // If no title from section header, try table
+                if (!title) {
+                    const tablePattern = new RegExp(`\\|\\s*~~${id}~~\\s*\\|[^|]*\\|[^|]*([^|]+)`, 'i');
+                    const tableMatch = text.match(tablePattern);
+                    if (tableMatch) title = tableMatch[1].trim();
+                }
+
+                // Clean up
+                title = title.replace(/~~.*?~~/g, '').replace(/\*\*/g, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+                if (!title) title = id;
+
+                data.completed.push({ id, title, type, date: dateStr });
+            }
+
+            // Dedupe completed list
+            const uniqueCompleted = [];
+            const seenCompleted = new Set();
+            data.completed.forEach(item => {
+                if (!seenCompleted.has(item.id)) {
+                    seenCompleted.add(item.id);
+                    uniqueCompleted.push(item);
+                }
+            });
+            data.completed = uniqueCompleted.slice(0, 15);
+
+            // Parse priorities
+            const priorityPattern = /\|\s*(?:~~)?(TASK|BUG|ROAD|ISSUE|IDEA)-(\d+)(?:~~)?\s*\|[^|]*\|[^|]*(P[0-3])[^|]*\|/gi;
+            while ((match = priorityPattern.exec(text)) !== null) {
+                const id = `${match[1]}-${match[2]}`;
+                const priority = match[3].toLowerCase();
+                const isDone = doneIds.has(id);
+
+                if (priority === 'p0' || priority === 'p1') {
+                    if (isDone) data.priorities.p1.done++;
+                    else data.priorities.p1.open++;
+                } else if (priority === 'p2') {
+                    if (isDone) data.priorities.p2.done++;
+                    else data.priorities.p2.open++;
+                } else if (priority === 'p3') {
+                    if (isDone) data.priorities.p3.done++;
+                    else data.priorities.p3.open++;
+                }
+            }
+
+            // Parse open bugs from bug table
+            // Format: | BUG-XXX | Bug description | Priority | Status |
+            const bugTablePattern = /\|\s*BUG-(\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|/g;
+            while ((match = bugTablePattern.exec(text)) !== null) {
+                const id = `BUG-${match[1]}`;
+                // Skip if this bug is already marked as done (~~BUG-XXX~~)
+                const donePattern = new RegExp(`~~BUG-${match[1]}~~`);
+                if (donePattern.test(text)) continue;
+
+                const title = match[2].trim();
+                let priority = match[3].trim().toUpperCase();
+                const notes = match[4].trim();
+
+                // Normalize priority (P1-HIGH → HIGH, P2-MEDIUM → MEDIUM, etc.)
+                if (priority.includes('HIGH') || priority === 'P1' || priority === 'P0') {
+                    priority = 'high';
+                } else if (priority.includes('MEDIUM') || priority === 'P2') {
+                    priority = 'medium';
+                } else if (priority.includes('LOW') || priority === 'P3') {
+                    priority = 'low';
+                } else {
+                    priority = 'low'; // N/A, etc.
+                }
+
+                data.openBugs.push({ id, title, priority, notes });
+            }
+
+            // Parse "Work on Next" - high priority items not yet in progress
+            // Look for READY, PLANNED, or TODO items with high priority
+            const workNextPattern = /\|\s*(?:\*\*)?(TASK|BUG|ROAD|ISSUE)-(\d+)(?:\*\*)?\s*\|([^|]+)\|([^|]+)\|([^|]*)\|?([^|]*)?/gi;
+            const activeIds = new Set(data.active.map(a => a.id));
+            const seenWorkNext = new Set();
+
+            while ((match = workNextPattern.exec(text)) !== null) {
+                const id = `${match[1]}-${match[2]}`;
+                // Skip if done (~~), already active, or already seen
+                if (match[0].includes('~~') || activeIds.has(id) || seenWorkNext.has(id) || doneIds.has(id)) continue;
+
+                const col2 = match[3].trim();
+                const col3 = match[4].trim();
+                const col4 = match[5] ? match[5].trim() : '';
+
+                // Check if it's a TODO/READY/PLANNED item (not in progress)
+                const status = parseTaskStatus(col2);
+                if (status === 'in-progress' || status === 'review' || status === 'done') continue;
+
+                // Check for priority in any column
+                let priority = 'low';
+                let title = '';
+                [col2, col3, col4].forEach(col => {
+                    const upper = col.toUpperCase();
+                    if (upper.includes('P0') || upper.includes('P1') || upper.includes('CRITICAL') || upper.includes('HIGH')) {
+                        priority = 'high';
+                    } else if ((upper.includes('P2') || upper.includes('MEDIUM')) && priority !== 'high') {
+                        priority = 'medium';
+                    }
+                    // Title is usually the longer text column
+                    if (col.length > title.length && !col.includes('P0') && !col.includes('P1') && !col.includes('P2') && !col.includes('P3')) {
+                        title = col;
+                    }
+                });
+
+                // Only include high/medium priority items
+                if (priority === 'low') continue;
+
+                seenWorkNext.add(id);
+
+                // Find better title from section header if available
+                const titlePattern = new RegExp(`###\\s*(?:\\*\\*)?${id}(?:\\*\\*)?[:\\s]+([^\\n(]+)`, 'i');
+                const titleMatch = text.match(titlePattern);
+                if (titleMatch) {
+                    title = titleMatch[1].trim().replace(/\*\*/g, '').replace(/~~.*?~~/g, '');
+                }
+                if (!title || title.length < 3) title = col3 || col2;
+
+                const type = match[1].toLowerCase();
+                data.workOnNext.push({ id, title, priority, type, status: col2 });
+            }
+
+            // Sort work on next by priority (high first) and type (bugs first)
+            data.workOnNext.sort((a, b) => {
+                const prioOrder = { high: 0, medium: 1, low: 2 };
+                const typeOrder = { bug: 0, task: 1, road: 2, issue: 3 };
+                if (prioOrder[a.priority] !== prioOrder[b.priority]) {
+                    return prioOrder[a.priority] - prioOrder[b.priority];
+                }
+                return (typeOrder[a.type] || 3) - (typeOrder[b.type] || 3);
+            });
+
+            // Limit to top 5
+            data.workOnNext = data.workOnNext.slice(0, 5);
+
+            // Calculate health
+            const totalItems = Object.values(data.types).reduce((sum, t) => sum + t.total, 0);
+            const doneItems = Object.values(data.types).reduce((sum, t) => sum + t.done, 0);
+            const completion = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0;
+
+            const openP1 = data.priorities.p1.open;
+            const openBugs = data.types.bugs.total - data.types.bugs.done;
+
+            if (openP1 >= 3 || openBugs >= 5) {
+                data.health.status = 'critical';
+                data.health.message = openP1 >= 3 ? `${openP1} critical items need attention` : `${openBugs} bugs need fixing`;
+            } else if (openP1 >= 1 || openBugs >= 3) {
+                data.health.status = 'warning';
+                data.health.message = 'Some high-priority items pending';
+            } else {
+                data.health.status = 'good';
+                data.health.message = 'Project is progressing well';
+            }
+            data.health.completion = completion;
+            data.health.activeCount = data.active.length;
+            data.health.openBugs = openBugs;
+
+            return data;
+        }
+
+        function renderHealth(data) {
+            const indicator = document.getElementById('healthIndicator');
+            const healthText = document.getElementById('healthText');
+            const icon = document.getElementById('healthIcon');
+
+            indicator.className = 'health-indicator ' + data.health.status;
+            healthText.className = 'health-text ' + data.health.status;
+
+            if (data.health.status === 'good') {
+                icon.textContent = '✅';
+                healthText.innerHTML = `<h2>On Track</h2><p>${data.health.message}</p>`;
+            } else if (data.health.status === 'warning') {
+                icon.textContent = '⚠️';
+                healthText.innerHTML = `<h2>Needs Attention</h2><p>${data.health.message}</p>`;
+            } else {
+                icon.textContent = '🔴';
+                healthText.innerHTML = `<h2>Action Required</h2><p>${data.health.message}</p>`;
+            }
+
+            document.getElementById('completionRate').textContent = data.health.completion + '%';
+            document.getElementById('activeCount').textContent = data.health.activeCount;
+            document.getElementById('openBugs').textContent = data.health.openBugs;
+        }
+
+        function renderActiveWork(data) {
+            const container = document.getElementById('activeWorkList');
+            const subtitle = document.getElementById('activeSubtitle');
+
+            if (data.active.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🎉</div>
+                        <div>No items in progress</div>
+                    </div>
+                `;
+                subtitle.textContent = 'All clear!';
+                return;
+            }
+
+            subtitle.textContent = `${data.active.length} items in progress`;
+
+            container.innerHTML = data.active.map(item => `
+                <div class="active-item ${item.status}">
+                    <div class="active-item-content">
+                        <div class="active-item-id">${item.id}</div>
+                        <div class="active-item-title">${item.title}</div>
+                        <div class="active-item-meta">${item.files}</div>
+                    </div>
+                    <span class="badge ${item.status === 'monitoring' ? 'task' : 'bug'}">${item.status}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderWorkOnNext(data) {
+            const container = document.getElementById('workNextList');
+            const subtitle = document.getElementById('workNextSubtitle');
+
+            if (data.workOnNext.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✨</div>
+                        <div>No high priority items pending</div>
+                    </div>
+                `;
+                subtitle.textContent = 'All caught up!';
+                return;
+            }
+
+            subtitle.textContent = `${data.workOnNext.length} items ready to start`;
+
+            container.innerHTML = data.workOnNext.map(item => `
+                <div class="work-next-item ${item.priority}">
+                    <div class="work-next-content">
+                        <div class="work-next-header">
+                            <span class="work-next-id">${item.id}</span>
+                            <span class="work-next-type ${item.type}">${item.type.toUpperCase()}</span>
+                            <span class="work-next-priority ${item.priority}">${item.priority.toUpperCase()}</span>
+                        </div>
+                        <div class="work-next-title">${item.title}</div>
+                        <div class="work-next-status">Status: ${item.status}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderCompleted(data) {
+            const container = document.getElementById('completedList');
+            const subtitle = document.getElementById('completedSubtitle');
+
+            if (data.completed.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div>No completed items found</div>
+                    </div>
+                `;
+                return;
+            }
+
+            subtitle.textContent = `${data.completed.length} items completed`;
+
+            container.innerHTML = data.completed.map(item => `
+                <div class="completed-item">
+                    <span class="completed-item-check">✓</span>
+                    <span class="badge ${item.type}">${item.type}</span>
+                    <span class="completed-item-id">${item.id}</span>
+                    <span class="completed-item-title">${item.title}</span>
+                    <span class="completed-item-date">${item.date}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderPriorityMatrix(data) {
+            const container = document.getElementById('priorityMatrix');
+
+            const priorities = [
+                { key: 'p1', label: 'P1 Critical', ...data.priorities.p1 },
+                { key: 'p2', label: 'P2 Medium', ...data.priorities.p2 },
+                { key: 'p3', label: 'P3 Low', ...data.priorities.p3 }
+            ];
+
+            container.innerHTML = priorities.map(p => {
+                const total = p.done + p.open;
+                const donePercent = total > 0 ? (p.done / total) * 100 : 0;
+                const openPercent = total > 0 ? (p.open / total) * 100 : 0;
+
+                return `
+                    <div class="priority-row">
+                        <div class="priority-label ${p.key}">${p.label}</div>
+                        <div class="priority-bar-container">
+                            ${p.done > 0 ? `<div class="priority-bar done" style="width: ${donePercent}%">${p.done}</div>` : ''}
+                            ${p.open > 0 ? `<div class="priority-bar open" style="width: ${openPercent}%">${p.open}</div>` : ''}
+                            ${total === 0 ? `<div class="priority-bar open" style="width: 100%">-</div>` : ''}
+                        </div>
+                        <div class="priority-counts">${p.done}/${total}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderTypeBreakdown(data) {
+            const container = document.getElementById('typeBreakdown');
+
+            const types = [
+                { key: 'tasks', ...data.types.tasks },
+                { key: 'bugs', ...data.types.bugs },
+                { key: 'roads', ...data.types.roads },
+                { key: 'issues', ...data.types.issues },
+                { key: 'ideas', ...data.types.ideas }
+            ];
+
+            container.innerHTML = types.map(t => {
+                const percent = t.total > 0 ? Math.round((t.done / t.total) * 100) : 0;
+                const key = t.key === 'roads' ? 'road' : t.key.slice(0, -1);
+
+                return `
+                    <div class="type-row">
+                        <div class="type-icon ${key}">${t.icon}</div>
+                        <div class="type-info">
+                            <div class="type-name">${t.label}</div>
+                            <div class="type-progress">${t.done}/${t.total} complete (${percent}%)</div>
+                        </div>
+                        <div class="type-stat">
+                            <div class="type-stat-value ${key}">${t.total - t.done}</div>
+                            <div class="type-stat-label">open</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderOpenBugs(data) {
+            const container = document.getElementById('openBugsList');
+            const subtitle = document.getElementById('openBugsSubtitle');
+
+            if (data.openBugs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🎉</div>
+                        <div>No open bugs!</div>
+                    </div>
+                `;
+                subtitle.textContent = 'All bugs fixed';
+                return;
+            }
+
+            subtitle.textContent = `${data.openBugs.length} bugs need attention`;
+
+            // Sort by priority: high first, then medium, then low
+            const priorityOrder = { high: 0, medium: 1, low: 2 };
+            const sortedBugs = [...data.openBugs].sort((a, b) =>
+                priorityOrder[a.priority] - priorityOrder[b.priority]
+            );
+
+            container.innerHTML = sortedBugs.map(bug => `
+                <div class="open-bug-item ${bug.priority}">
+                    <div class="open-bug-content">
+                        <div class="open-bug-header">
+                            <span class="open-bug-id">${bug.id}</span>
+                            <span class="open-bug-priority ${bug.priority}">${bug.priority.toUpperCase()}</span>
+                        </div>
+                        <div class="open-bug-title">${bug.title}</div>
+                        ${bug.notes ? `<div class="open-bug-notes">${bug.notes}</div>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function init() {
+            try {
+                const data = await fetchAndParse();
+                renderHealth(data);
+                renderActiveWork(data);
+                renderWorkOnNext(data);
+                renderCompleted(data);
+                renderPriorityMatrix(data);
+                renderTypeBreakdown(data);
+                renderOpenBugs(data);
+            } catch (error) {
+                console.error('Failed to initialize:', error);
+                document.getElementById('healthText').innerHTML = `
+                    <h2 style="color: var(--health-critical)">Error</h2>
+                    <p>Failed to load project data</p>
+                `;
+            }
+        }
+
+        let isInitialized = false;
+
+        function setupDashboard() {
+            if (isInitialized) return;
+            init();
+            isInitialized = true;
+        }
+
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'tab-activated') {
+                init();
+            }
+        });
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupDashboard);
+        } else {
+            setupDashboard();
+        }
+    </script>
+</body>
+</html>

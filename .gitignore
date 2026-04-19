@@ -1,0 +1,22 @@
+# Environment
+.env
+
+# Dependencies (optional - uncomment if dev-manager is standalone)
+# node_modules/
+
+# Orchestrator data (contains user session data)
+data/orchestrations.json
+
+# User-state migrated from ~/.watchpost/ (2026-04-19)
+data/changelog.db*
+data/covers/
+data/summaries/
+data/user-notes.json
+data/outlook.json
+data/happy-audit.jsonl
+data/orchestrations.json
+local/views.legacy/
+projects.json
+settings.json
+local/config.json
+local/happy-config.json

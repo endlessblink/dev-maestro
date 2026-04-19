@@ -1,0 +1,8 @@
+[    2218ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/waha?t=1776343241329:0
+[    2219ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/botson?t=1776343241329:0
+[    2220ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/supabase?t=1776343241329:0
+[    2221ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/caddy?t=1776343241329:0
+[    6996ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/waha?t=1776343246107:0
+[    6997ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/botson?t=1776343246107:0
+[    6997ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/supabase?t=1776343246107:0
+[    6997ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:6010/api/vps/cover/caddy?t=1776343246107:0

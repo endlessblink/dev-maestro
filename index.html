@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watchpost - AI Agent Orchestration</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <style>
+        /* Design tokens - Pure black theme (matching Storybook) */
+        :root {
+            /* Pure black palette */
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-hover: rgba(255, 255, 255, 0.05);
+
+            /* Text hierarchy (from Storybook) */
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-subtle: #6e7681;
+
+            /* Borders (from Storybook) */
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+
+            /* Brand - Teal accent */
+            --brand-primary: #4ECDC4;
+            --brand-hover: #5fd9d1;
+
+            /* Functional colors */
+            --color-kanban: #f59e0b;
+            --color-skills: #10b981;
+            --color-docs: #8b5cf6;
+            --color-stats: #06b6d4;
+
+
+            --color-health: #22c55e;
+            /* Health green */
+            --color-controlroom: #4ECDC4;
+            /* Control Room teal */
+            --color-logs: #f59e0b;
+            /* Logs amber */
+            --color-vps: #e879f9;
+            /* VPS magenta */
+            --color-flow: #6366f1;
+            /* Flow indigo */
+
+            /* Transitions */
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(180deg, rgba(20, 20, 24, 0.98) 0%, rgba(13, 17, 23, 0.95) 100%);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 0 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            height: 56px;
+            flex-shrink: 0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
+            z-index: 50;
+        }
+
+        .logo {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--brand-primary);
+            white-space: nowrap;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--brand-primary);
+            border-radius: 2px;
+            box-shadow: 0 0 8px var(--brand-primary);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.375rem;
+            height: 100%;
+            padding: 0.5rem 0;
+        }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            position: relative;
+        }
+
+        .tab::after {
+            content: '';
+            position: absolute;
+            bottom: -0.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: var(--brand-primary);
+            border-radius: 1px;
+            transition: width var(--transition-normal);
+        }
+
+        .tab:hover {
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .tab.active {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .tab.active::after {
+            width: 60%;
+        }
+
+        .tab.active.kanban::after {
+            background: var(--color-kanban);
+            box-shadow: 0 0 8px var(--color-kanban);
+        }
+
+        .tab.active.skills::after {
+            background: var(--color-skills);
+            box-shadow: 0 0 8px var(--color-skills);
+        }
+
+        .tab.active.docs::after {
+            background: var(--color-docs);
+            box-shadow: 0 0 8px var(--color-docs);
+        }
+
+        .tab.active.stats::after {
+            background: var(--color-stats);
+            box-shadow: 0 0 8px var(--color-stats);
+        }
+
+
+
+
+        .tab.active.health::after {
+            background: var(--color-health);
+            box-shadow: 0 0 8px var(--color-health);
+        }
+
+        .tab .icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tab .icon svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+
+        .tab.kanban:hover .icon svg,
+        .tab.kanban.active .icon svg {
+            stroke: var(--color-kanban);
+        }
+
+        .tab.skills:hover .icon svg,
+        .tab.skills.active .icon svg {
+            stroke: var(--color-skills);
+        }
+
+        .tab.docs:hover .icon svg,
+        .tab.docs.active .icon svg {
+            stroke: var(--color-docs);
+        }
+
+        .tab.stats:hover .icon svg,
+        .tab.stats.active .icon svg {
+            stroke: var(--color-stats);
+        }
+
+        .tab.health:hover .icon svg,
+        .tab.health.active .icon svg {
+            stroke: var(--color-health);
+        }
+
+        .tab.active.controlroom::after {
+            background: var(--color-controlroom);
+            box-shadow: 0 0 8px var(--color-controlroom);
+        }
+
+        .tab.controlroom:hover .icon svg,
+        .tab.controlroom.active .icon svg {
+            stroke: var(--color-controlroom);
+        }
+
+        .tab.active.logs::after {
+            background: var(--color-logs);
+            box-shadow: 0 0 8px var(--color-logs);
+        }
+
+        .tab.logs:hover .icon svg,
+        .tab.logs.active .icon svg {
+            stroke: var(--color-logs);
+        }
+
+        .tab.active.vps::after {
+            background: var(--color-vps);
+            box-shadow: 0 0 8px var(--color-vps);
+        }
+
+        .tab.vps:hover .icon svg,
+        .tab.vps.active .icon svg {
+            stroke: var(--color-vps);
+        }
+
+        .tab.active.flow::after {
+            background: var(--color-flow);
+            box-shadow: 0 0 8px var(--color-flow);
+        }
+
+        .tab.flow:hover .icon svg,
+        .tab.flow.active .icon svg {
+            stroke: var(--color-flow);
+        }
+
+        .spacer {
+            flex: 1;
+        }
+
+        .back-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.5rem 0.875rem;
+            border-radius: 8px;
+            transition: all var(--transition-normal);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .back-link:hover {
+            color: var(--brand-primary);
+            background: rgba(78, 205, 196, 0.08);
+            border-color: rgba(78, 205, 196, 0.2);
+        }
+
+        .back-link svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+
+        /* Project switcher — top-right badge + popover */
+        .project-switcher-wrap {
+            position: relative;
+        }
+
+        .project-switcher-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            white-space: nowrap;
+        }
+
+        .project-switcher-trigger:hover {
+            border-color: rgba(78, 205, 196, 0.35);
+            background: rgba(78, 205, 196, 0.08);
+            color: var(--brand-primary);
+        }
+
+        .project-switcher-trigger:focus-visible {
+            outline: none;
+            border-color: var(--brand-primary);
+            box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.25);
+        }
+
+        .project-switcher-trigger[aria-expanded="true"] {
+            border-color: var(--brand-primary);
+            background: rgba(78, 205, 196, 0.1);
+            color: var(--text-primary);
+        }
+
+        .project-switcher-trigger[aria-expanded="true"] .project-switcher-caret {
+            transform: rotate(180deg);
+        }
+
+        .project-switcher-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--brand-primary);
+            box-shadow: 0 0 6px var(--brand-primary);
+            animation: pulse-dot 2s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
+
+        .project-switcher-label {
+            color: var(--text-subtle);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-size: 0.66rem;
+            font-weight: 600;
+        }
+
+        .project-switcher-trigger:hover .project-switcher-label,
+        .project-switcher-trigger[aria-expanded="true"] .project-switcher-label {
+            color: var(--text-muted);
+        }
+
+        .project-switcher-name {
+            color: var(--text-primary);
+            max-width: 18ch;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            letter-spacing: -0.01em;
+        }
+
+        .project-switcher-caret {
+            color: var(--text-muted);
+            transition: transform 180ms ease;
+            flex-shrink: 0;
+        }
+
+        .project-switcher-popover {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            right: 0;
+            width: 340px;
+            max-height: min(70vh, 520px);
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-medium);
+            border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+            padding: 0.5rem;
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            backdrop-filter: blur(14px) saturate(160%);
+            -webkit-backdrop-filter: blur(14px) saturate(160%);
+            animation: switcher-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1);
+        }
+
+        .project-switcher-popover[hidden] {
+            display: none;
+        }
+
+        @keyframes switcher-in {
+            from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+            to { opacity: 1; transform: none; }
+        }
+
+        .project-switcher-header {
+            padding: 0.25rem 0.25rem 0;
+        }
+
+        .project-switcher-search {
+            width: 100%;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 0.5rem 0.7rem;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color var(--transition-fast);
+        }
+
+        .project-switcher-search::placeholder {
+            color: var(--text-subtle);
+        }
+
+        .project-switcher-search:focus {
+            border-color: var(--brand-primary);
+        }
+
+        .project-switcher-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+            max-height: 340px;
+            padding: 0 0.125rem;
+        }
+
+        .project-switcher-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .project-switcher-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .project-switcher-list::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 4px;
+        }
+
+        .project-switcher-list::-webkit-scrollbar-thumb:hover {
+            background: var(--text-subtle);
+        }
+
+        .project-switcher-item {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            padding: 0.55rem 0.6rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 120ms cubic-bezier(0.4, 0, 0.2, 1);
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-align: left;
+            font-family: inherit;
+            color: inherit;
+            position: relative;
+        }
+
+        .project-switcher-item:hover {
+            background: rgba(78, 205, 196, 0.1);
+        }
+
+        .project-switcher-item.is-active {
+            background: rgba(78, 205, 196, 0.06);
+        }
+
+        .project-switcher-item.is-active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 20%;
+            bottom: 20%;
+            width: 3px;
+            border-radius: 0 2px 2px 0;
+            background: var(--brand-primary);
+            box-shadow: 0 0 8px var(--brand-primary);
+        }
+
+        .project-switcher-item.is-highlighted {
+            background: var(--surface-hover);
+            outline: 1px solid rgba(78, 205, 196, 0.35);
+        }
+
+        .project-switcher-item.is-archived {
+            opacity: 0.5;
+        }
+
+        .project-switcher-item.is-disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .project-switcher-item-cover {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            flex-shrink: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, rgba(78, 205, 196, 0.25), rgba(99, 102, 241, 0.25));
+            letter-spacing: -0.02em;
+        }
+
+        .project-switcher-item-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .project-switcher-item-body {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .project-switcher-item-name {
+            color: var(--text-primary);
+            font-size: 0.88rem;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .project-switcher-item-meta {
+            color: var(--text-subtle);
+            font-size: 0.72rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .project-switcher-item-meta .dot {
+            opacity: 0.5;
+            margin: 0 0.35rem;
+        }
+
+        .project-switcher-item-check {
+            color: var(--brand-primary);
+            flex-shrink: 0;
+        }
+
+        .project-switcher-empty,
+        .project-switcher-error {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 1.25rem 0.75rem;
+            font-size: 0.82rem;
+        }
+
+        .project-switcher-error {
+            color: #f87171;
+        }
+
+        .project-switcher-retry {
+            display: inline-block;
+            margin-top: 0.5rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-medium);
+            background: var(--surface-tertiary);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all var(--transition-fast);
+        }
+
+        .project-switcher-retry:hover {
+            border-color: var(--brand-primary);
+            color: var(--brand-primary);
+        }
+
+        .project-switcher-footer {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.55rem 0.7rem;
+            margin-top: 0.15rem;
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 0.6rem;
+            border-radius: 0 0 10px 10px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            border-left: none;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .project-switcher-footer:hover {
+            color: var(--brand-primary);
+            background: rgba(78, 205, 196, 0.06);
+        }
+
+        .project-switcher-footer svg {
+            flex-shrink: 0;
+            stroke: currentColor;
+        }
+
+        .project-switcher-footer-arrow {
+            margin-left: auto;
+            font-size: 0.95rem;
+            transition: transform var(--transition-fast);
+        }
+
+        .project-switcher-footer:hover .project-switcher-footer-arrow {
+            transform: translateX(2px);
+        }
+
+        .content {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .panel iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="logo">Watchpost</div>
+
+        <nav class="tabs">
+            <button class="tab controlroom active" data-panel="controlroom">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" />
+                        <rect x="14" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                </span>
+                <span>Projects</span>
+            </button>
+            <button class="tab kanban" data-panel="kanban">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <line x1="9" y1="3" x2="9" y2="21" />
+                        <line x1="15" y1="3" x2="15" y2="21" />
+                    </svg>
+                </span>
+                <span>Kanban</span>
+            </button>
+            <button class="tab flow" data-panel="flow">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="5" cy="6" r="2.2" />
+                        <circle cx="19" cy="6" r="2.2" />
+                        <circle cx="12" cy="18" r="2.2" />
+                        <path d="M7 7 L10 16" />
+                        <path d="M17 7 L14 16" />
+                    </svg>
+                </span>
+                <span>Flow</span>
+            </button>
+            <button class="tab skills" data-panel="skills">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="9" />
+                        <circle cx="12" cy="12" r="5" />
+                        <circle cx="12" cy="12" r="1" />
+                    </svg>
+                </span>
+                <span>Skills</span>
+            </button>
+            <button class="tab docs" data-panel="docs">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="8" y1="13" x2="16" y2="13" />
+                        <line x1="8" y1="17" x2="16" y2="17" />
+                    </svg>
+                </span>
+                <span>Docs</span>
+            </button>
+            <button class="tab stats" data-panel="stats">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                    </svg>
+                </span>
+                <span>Stats</span>
+            </button>
+            <button class="tab logs" data-panel="logs">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                    </svg>
+                </span>
+                <span>Logs</span>
+            </button>
+            <button class="tab health" data-panel="health">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                    </svg>
+                </span>
+                <span>Health</span>
+            </button>
+            <button class="tab vps" data-panel="vps">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="2" y="3" width="20" height="14" rx="2" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
+                        <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                </span>
+                <span>Server</span>
+            </button>
+        </nav>
+
+        <div class="spacer"></div>
+
+        <div class="project-switcher-wrap">
+            <button id="active-project-badge" class="project-switcher-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="project-switcher-popover" title="Switch active project">
+                <span class="project-switcher-dot" aria-hidden="true"></span>
+                <span class="project-switcher-label">Active</span>
+                <span id="active-project-badge-name" class="project-switcher-name">—</span>
+                <svg class="project-switcher-caret" viewBox="0 0 20 20" width="12" height="12" fill="none" aria-hidden="true">
+                    <path d="M5 7l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <div id="project-switcher-popover" class="project-switcher-popover" role="listbox" aria-label="Switch project" hidden>
+                <div class="project-switcher-header">
+                    <input id="project-switcher-search" class="project-switcher-search" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false" />
+                </div>
+                <div id="project-switcher-list" class="project-switcher-list" role="presentation">
+                    <div class="project-switcher-empty">Loading…</div>
+                </div>
+                <button id="project-switcher-manage" class="project-switcher-footer" type="button">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    <span>Manage all projects</span>
+                    <span class="project-switcher-footer-arrow" aria-hidden="true">→</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="content">
+        <div id="controlroom" class="panel active">
+            <iframe src="controlroom/index.html" title="Control Room"></iframe>
+        </div>
+        <div id="kanban" class="panel">
+            <iframe data-src="kanban/index.html" title="Development Kanban"></iframe>
+        </div>
+        <div id="flow" class="panel">
+            <!-- Lazy load: src set on first tab activation to ensure container has dimensions (SOP-BUG-021) -->
+            <iframe data-src="flow/index.html" title="Feature Flow"></iframe>
+        </div>
+        <div id="skills" class="panel">
+            <!-- Lazy load: src set on first tab activation to ensure container has dimensions -->
+            <iframe data-src="skills/index.html" title="Skills Dashboard"></iframe>
+        </div>
+        <div id="docs" class="panel">
+            <!-- Lazy load: src set on first tab activation to ensure container has dimensions -->
+            <iframe data-src="docs/index.html" title="Documentation Canvas"></iframe>
+        </div>
+        <div id="stats" class="panel">
+            <!-- Lazy load: src set on first tab activation -->
+            <iframe data-src="stats/index.html" title="Statistics Dashboard"></iframe>
+        </div>
+        <div id="health" class="panel">
+            <!-- Lazy load: src set on first tab activation -->
+            <iframe data-src="health/index.html" title="Health Dashboard"></iframe>
+        </div>
+        <div id="logs" class="panel">
+            <iframe data-src="logs/index.html" title="Changelog"></iframe>
+        </div>
+        <div id="vps" class="panel">
+            <iframe data-src="vps/index.html" title="VPS Server"></iframe>
+        </div>
+    </main>
+
+    <script>
+        const tabs = document.querySelectorAll('.tab');
+        const panels = document.querySelectorAll('.panel');
+
+        // Restore saved tab
+        const savedTab = localStorage.getItem('watchpost-tab');
+        if (savedTab) {
+            switchTab(savedTab);
+        }
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const panelId = tab.dataset.panel;
+                switchTab(panelId);
+                localStorage.setItem('watchpost-tab', panelId);
+            });
+        });
+
+        function switchTab(panelId) {
+            tabs.forEach(t => t.classList.remove('active'));
+            panels.forEach(p => p.classList.remove('active'));
+
+            const activeTab = document.querySelector(`.tab[data-panel="${panelId}"]`);
+            const activePanel = document.getElementById(panelId);
+
+            if (activeTab && activePanel) {
+                activeTab.classList.add('active');
+                activePanel.classList.add('active');
+
+                const iframe = activePanel.querySelector('iframe');
+                if (iframe) {
+                    // Lazy load iframe on first activation
+                    if (iframe.dataset.src && !iframe.src) {
+                        iframe.src = iframe.dataset.src;
+                    } else if (iframe.contentWindow) {
+                        // Send refresh message on subsequent activations
+                        // This fixes Chromium canvas disappearing bug
+                        iframe.contentWindow.postMessage({ type: 'tab-activated' }, '*');
+                    }
+                }
+            }
+        }
+
+        function updateActiveBadge(name) {
+            const badge = document.getElementById('active-project-badge-name');
+            if (badge) badge.textContent = name || '—';
+        }
+
+        // Project-switch flow: update badge, switch to kanban, tell kanban iframe to re-render.
+        // Shared by (a) iframe-originated { type:'activate-and-navigate', project } messages
+        // and (b) the new top-right project switcher (see initProjectSwitcher below).
+        function handleActivateAndNavigate({ project }) {
+            updateActiveBadge(project);
+            const kanbanIframe = document.querySelector('#kanban iframe');
+            const alreadyLoaded = kanbanIframe && !!kanbanIframe.src;
+            switchTab('kanban');
+            localStorage.setItem('watchpost-tab', 'kanban');
+            if (alreadyLoaded && kanbanIframe.contentWindow) {
+                kanbanIframe.contentWindow.postMessage({ type: 'switch-project' }, '*');
+            }
+        }
+
+        // Listen for activate-and-navigate from iframes
+        // Supports two forms:
+        //   { type, project }             → controlroom project-switch flow (updates badge, opens kanban)
+        //   { type, target, taskId? }     → generic tab-jump (e.g. flow → kanban with task context)
+        window.addEventListener('message', (e) => {
+            if (e.data?.type !== 'activate-and-navigate') return;
+
+            if (e.data.project) {
+                handleActivateAndNavigate({ project: e.data.project });
+            } else if (e.data.target) {
+                const targetPanel = document.getElementById(e.data.target);
+                if (!targetPanel) return;
+                const targetIframe = targetPanel.querySelector('iframe');
+                const alreadyLoaded = targetIframe && !!targetIframe.src;
+                switchTab(e.data.target);
+                localStorage.setItem('watchpost-tab', e.data.target);
+                if (alreadyLoaded && targetIframe && targetIframe.contentWindow && e.data.taskId) {
+                    targetIframe.contentWindow.postMessage({ type: 'focus-task', taskId: e.data.taskId }, '*');
+                }
+            }
+        });
+
+        // Track the active project's master-plan path so the switcher can mark the current row.
+        let activeMasterPlan = null;
+
+        // Show active project on load — prefer the registry name (matched by masterPlanPath) over
+        // the raw path basename, so the badge reflects the real project (e.g. "rough-cut") not
+        // the filesystem leaf (e.g. "docs").
+        Promise.all([
+            fetch('/api/status').then(r => r.json()).catch(() => null),
+            fetch('/api/projects/enriched').then(r => r.json()).catch(() => null),
+        ]).then(([status, enriched]) => {
+            if (status?.masterPlanPath) activeMasterPlan = status.masterPlanPath;
+            let displayName = '';
+            if (Array.isArray(enriched) && status?.masterPlanPath) {
+                const match = enriched.find(p => p.masterPlan && p.masterPlan === status.masterPlanPath);
+                if (match?.name) displayName = match.name;
+            }
+            if (!displayName && status?.project) {
+                const parts = status.project.split('/').filter(Boolean);
+                displayName = parts[parts.length - 1] || '';
+            }
+            if (displayName) updateActiveBadge(displayName);
+        });
+
+        // ── Project Switcher ──────────────────────────────────────────────
+        (function initProjectSwitcher() {
+            const trigger = document.getElementById('active-project-badge');
+            const popover = document.getElementById('project-switcher-popover');
+            const search = document.getElementById('project-switcher-search');
+            const list = document.getElementById('project-switcher-list');
+            const manageBtn = document.getElementById('project-switcher-manage');
+            if (!trigger || !popover || !search || !list || !manageBtn) return;
+
+            let projects = null;
+            let filter = '';
+            let highlight = 0;
+            let isOpen = false;
+            let fetching = false;
+
+            function escapeHtml(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function initialOf(name) {
+                const ch = (name || '?').trim().charAt(0).toUpperCase();
+                return ch || '?';
+            }
+
+            function composeMeta(p) {
+                const parts = [];
+                const s = p.taskStats || {};
+                if (s.inProgress) parts.push(`${s.inProgress} active`);
+                if (s.done) parts.push(`${s.done} done`);
+                if (p.commits7d) parts.push(`${p.commits7d} commits · 7d`);
+                if (!parts.length) parts.push(p.archived ? 'archived' : 'no activity');
+                return parts.join(' <span class="dot">·</span> ');
+            }
+
+            function sortProjects(items) {
+                return items.slice().sort((a, b) => {
+                    // Active first
+                    const aActive = a.masterPlan && a.masterPlan === activeMasterPlan ? 1 : 0;
+                    const bActive = b.masterPlan && b.masterPlan === activeMasterPlan ? 1 : 0;
+                    if (aActive !== bActive) return bActive - aActive;
+                    // Non-archived before archived
+                    const aArch = a.archived ? 1 : 0;
+                    const bArch = b.archived ? 1 : 0;
+                    if (aArch !== bArch) return aArch - bArch;
+                    // Then by lastActivity desc
+                    const aT = Date.parse(a.lastActivity || '') || 0;
+                    const bT = Date.parse(b.lastActivity || '') || 0;
+                    return bT - aT;
+                });
+            }
+
+            function applyFilter(items) {
+                if (!filter) return items;
+                const q = filter.toLowerCase();
+                return items.filter(p =>
+                    (p.name && p.name.toLowerCase().includes(q)) ||
+                    (p.root && p.root.toLowerCase().includes(q))
+                );
+            }
+
+            function render() {
+                if (fetching && !projects) {
+                    list.innerHTML = '<div class="project-switcher-empty">Loading…</div>';
+                    return;
+                }
+                if (!projects) {
+                    list.innerHTML = `
+                        <div class="project-switcher-error">
+                            Couldn't load projects.
+                            <br><button class="project-switcher-retry" type="button" data-action="retry">Retry</button>
+                        </div>`;
+                    return;
+                }
+                const filtered = applyFilter(sortProjects(projects));
+                if (!filtered.length) {
+                    list.innerHTML = `<div class="project-switcher-empty">No projects match "${escapeHtml(filter)}"</div>`;
+                    return;
+                }
+                if (highlight >= filtered.length) highlight = 0;
+
+                list.innerHTML = filtered.map((p, i) => {
+                    const isActive = p.masterPlan && p.masterPlan === activeMasterPlan;
+                    const isDisabled = !p.masterPlan;
+                    const classes = [
+                        'project-switcher-item',
+                        isActive ? 'is-active' : '',
+                        p.archived ? 'is-archived' : '',
+                        isDisabled ? 'is-disabled' : '',
+                        i === highlight ? 'is-highlighted' : ''
+                    ].filter(Boolean).join(' ');
+
+                    const coverInner = p.coverUrl
+                        ? `<img src="${escapeHtml(p.coverUrl)}" alt="" onerror="this.remove()" />`
+                        : escapeHtml(initialOf(p.name));
+
+                    const checkMark = isActive
+                        ? `<svg class="project-switcher-item-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`
+                        : '';
+
+                    const metaBits = [];
+                    if (isDisabled) metaBits.push('<span style="color:#f59e0b">no MASTER_PLAN.md</span>');
+                    else metaBits.push(composeMeta(p));
+
+                    return `
+                        <button type="button" class="${classes}" role="option" aria-selected="${isActive ? 'true' : 'false'}" data-idx="${i}" ${isDisabled ? 'aria-disabled="true"' : ''}>
+                            <span class="project-switcher-item-cover">${coverInner}</span>
+                            <span class="project-switcher-item-body">
+                                <span class="project-switcher-item-name">${escapeHtml(p.name)}</span>
+                                <span class="project-switcher-item-meta">${metaBits.join('')}</span>
+                            </span>
+                            ${checkMark}
+                        </button>
+                    `;
+                }).join('');
+
+                // Attach listeners
+                list.querySelectorAll('.project-switcher-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const idx = Number(el.dataset.idx);
+                        const p = filtered[idx];
+                        if (p) activateProject(p);
+                    });
+                    el.addEventListener('mousemove', () => {
+                        const idx = Number(el.dataset.idx);
+                        if (idx !== highlight) {
+                            highlight = idx;
+                            updateHighlightClasses();
+                        }
+                    });
+                });
+                const retryBtn = list.querySelector('[data-action="retry"]');
+                if (retryBtn) retryBtn.addEventListener('click', loadProjects);
+
+                // Scroll highlighted into view (for keyboard nav)
+                const hl = list.querySelector('.is-highlighted');
+                if (hl) hl.scrollIntoView({ block: 'nearest' });
+            }
+
+            function updateHighlightClasses() {
+                const items = list.querySelectorAll('.project-switcher-item');
+                items.forEach((el, i) => {
+                    el.classList.toggle('is-highlighted', i === highlight);
+                });
+                const hl = items[highlight];
+                if (hl) hl.scrollIntoView({ block: 'nearest' });
+            }
+
+            async function loadProjects() {
+                fetching = true;
+                render();
+                try {
+                    const res = await fetch('/api/projects/enriched');
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const data = await res.json();
+                    projects = Array.isArray(data) ? data : [];
+                } catch (err) {
+                    projects = null;
+                    console.warn('[project-switcher] Failed to load projects:', err);
+                } finally {
+                    fetching = false;
+                    render();
+                }
+            }
+
+            async function activateProject(p) {
+                if (!p.masterPlan) {
+                    showTransientError(`${p.name} has no MASTER_PLAN.md`);
+                    return;
+                }
+                if (p.masterPlan === activeMasterPlan) {
+                    // Already active — just close and jump to kanban.
+                    closePopover();
+                    handleActivateAndNavigate({ project: p.name });
+                    return;
+                }
+                try {
+                    const res = await fetch('/api/config/project', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ masterPlanPath: p.masterPlan })
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    activeMasterPlan = p.masterPlan;
+                    projects = null; // force refresh on reopen so stats refresh
+                    closePopover();
+                    handleActivateAndNavigate({ project: p.name });
+                } catch (err) {
+                    console.error('[project-switcher] Switch failed:', err);
+                    showTransientError(`Switch failed: ${err.message || err}`);
+                }
+            }
+
+            function showTransientError(msg) {
+                const existing = list.querySelector('.project-switcher-error.transient');
+                if (existing) existing.remove();
+                const div = document.createElement('div');
+                div.className = 'project-switcher-error transient';
+                div.textContent = msg;
+                list.prepend(div);
+                setTimeout(() => div.remove(), 3500);
+            }
+
+            function openPopover() {
+                if (isOpen) return;
+                isOpen = true;
+                popover.hidden = false;
+                trigger.setAttribute('aria-expanded', 'true');
+                filter = '';
+                highlight = 0;
+                search.value = '';
+                if (!projects) loadProjects(); else render();
+                // Focus search once popover is visible.
+                requestAnimationFrame(() => search.focus());
+            }
+
+            function closePopover() {
+                if (!isOpen) return;
+                isOpen = false;
+                popover.hidden = true;
+                trigger.setAttribute('aria-expanded', 'false');
+            }
+
+            function togglePopover() {
+                if (isOpen) closePopover(); else openPopover();
+            }
+
+            // Trigger click
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                togglePopover();
+            });
+
+            // Keep popover open when clicking inside it
+            popover.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            // Search typing → re-filter
+            search.addEventListener('input', () => {
+                filter = search.value;
+                highlight = 0;
+                render();
+            });
+
+            // Keyboard navigation on search input
+            search.addEventListener('keydown', (e) => {
+                const items = list.querySelectorAll('.project-switcher-item');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (items.length) {
+                        highlight = (highlight + 1) % items.length;
+                        updateHighlightClasses();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (items.length) {
+                        highlight = (highlight - 1 + items.length) % items.length;
+                        updateHighlightClasses();
+                    }
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const el = items[highlight];
+                    if (el) el.click();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closePopover();
+                    trigger.focus();
+                }
+            });
+
+            // Manage footer → controlroom tab
+            manageBtn.addEventListener('click', () => {
+                closePopover();
+                switchTab('controlroom');
+                localStorage.setItem('watchpost-tab', 'controlroom');
+            });
+
+            // Outside click / global Escape
+            document.addEventListener('click', (e) => {
+                if (!isOpen) return;
+                if (popover.contains(e.target) || trigger.contains(e.target)) return;
+                closePopover();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && isOpen) {
+                    closePopover();
+                    trigger.focus();
+                }
+            });
+
+            // Close when user switches tabs from the main nav
+            document.querySelectorAll('.tab').forEach(t => {
+                t.addEventListener('click', () => { if (isOpen) closePopover(); });
+            });
+
+            // Close on window blur (popover focus loss)
+            window.addEventListener('blur', () => { if (isOpen) closePopover(); });
+        })();
+    </script>
+</body>
+
+</html>
