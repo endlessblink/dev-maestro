@@ -428,34 +428,43 @@
     .sprint-layout {
       position: absolute; inset: 0;
       display: grid;
-      grid-template-columns: 260px 1fr;
+      grid-template-rows: auto 1fr;
       background: var(--surface-primary);
     }
     .sprint-layout[hidden] { display: none; }
 
     .sprint-sidebar {
       background: var(--surface-secondary);
-      border-right: 1px solid var(--border-subtle);
-      padding: 14px 0;
-      overflow-y: auto;
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 12px 16px;
+      overflow-x: auto;
+      overflow-y: hidden;
     }
     .sprint-sidebar-header {
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.14em;
       color: var(--text-subtle);
-      padding: 4px 18px 12px;
+      padding: 0 0 10px;
       text-transform: uppercase;
+    }
+    #sprint-list {
+      display: flex;
+      gap: 12px;
+      flex-wrap: nowrap;
+      min-width: max-content;
+      padding-bottom: 2px;
     }
     .sprint-item {
       display: block;
-      width: 100%;
+      width: 320px;
+      min-width: 320px;
       background: transparent;
-      border: none;
-      border-left: 3px solid transparent;
+      border: 1px solid var(--border-subtle);
       color: var(--text-muted);
       text-align: left;
-      padding: 10px 16px 10px 15px;
+      padding: 12px 14px;
+      border-radius: 10px;
       cursor: pointer;
       transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
       font: inherit;
@@ -470,8 +479,9 @@
     }
     .sprint-item.active {
       background: rgba(99, 102, 241, 0.08);
-      border-left-color: var(--color-flow);
+      border-color: var(--color-flow);
       color: var(--text-primary);
+      box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25) inset;
     }
     .sprint-item-letter {
       font-size: 9.5px;
@@ -513,16 +523,46 @@
     }
     .sprint-item-counts .pill.ready  { color: #22c55e; background: rgba(34,197,94,0.08); }
     .sprint-item-counts .pill.active { color: #f59e0b; background: rgba(245,158,11,0.08); }
+    .sprint-item-copy {
+      margin-top: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-size: 10.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+    .sprint-item-copy:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
 
     .sprint-main {
       padding: 28px 36px;
       overflow-y: auto;
+    }
+    .sprint-main-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
     }
     .sprint-main-header h1 {
       font-size: 20px;
       font-weight: 700;
       color: var(--text-primary);
       margin: 0 0 4px;
+    }
+    .sprint-main-header-copy {
+      flex-shrink: 0;
+      margin-top: 2px;
     }
     .sprint-main-header .sub {
       font-size: 12.5px;
@@ -534,6 +574,12 @@
 
     .bucket {
       margin-top: 28px;
+    }
+    .bucket-note {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin: -2px 0 12px;
     }
     .bucket-title {
       display: flex;
@@ -550,6 +596,7 @@
     .bucket-title.in-progress .accent { color: #f59e0b; }
     .bucket-title.ready .accent { color: #22c55e; }
     .bucket-title.next .accent { color: #6366f1; }
+    .bucket-title.focus .accent { color: var(--color-flow); }
     .bucket-title .count {
       background: rgba(255, 255, 255, 0.06);
       color: var(--text-secondary);
@@ -794,8 +841,8 @@
   <div id="root">
     <div class="toolbar">
       <span class="title">Feature <span class="title-accent">Flow</span></span>
-      <span class="toolbar-stats" id="stats">
-        <span title="Tasks with no unfinished blockers — safe to start in parallel"><span class="dot" style="background: #22c55e;"></span><span id="stat-ready">0</span> ready</span>
+        <span class="toolbar-stats" id="stats">
+        <span title="Tasks with no unfinished blockers"><span class="dot" style="background: #22c55e;"></span><span id="stat-ready">0</span> unblocked</span>
         <span title="Tasks waiting on at least one unfinished blocker"><span class="dot" style="background: #ef4444;"></span><span id="stat-blocked">0</span> blocked</span>
         <span><span class="dot" style="background: var(--status-in-progress);"></span><span id="stat-active">0</span> active</span>
         <span><span class="dot" style="background: var(--status-review);"></span><span id="stat-review">0</span> review</span>
@@ -887,7 +934,7 @@
       <!-- Sprint-focused view (hidden unless MASTER_PLAN has `### Current sprint framing`) -->
       <div class="sprint-layout" id="sprint-layout" hidden>
         <nav class="sprint-sidebar" aria-label="Sprints">
-          <div class="sprint-sidebar-header">Delivery Spine</div>
+          <div class="sprint-sidebar-header">Delivery Line</div>
           <div id="sprint-list" role="list"></div>
         </nav>
         <main class="sprint-main" id="sprint-main" aria-labelledby="sprint-heading"></main>
@@ -902,7 +949,7 @@
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
         Click a task for details.<br>
-        In sprint mode, the left sidebar is the delivery spine. Each sprint shows what's ready to start now, what's next, and what's still blocked.
+        In sprint mode, the left sidebar is the delivery spine. Each sprint now shows one current focus, one next step, and then the blocked queue behind it.
       </div>
     </aside>
   </div>
@@ -1766,8 +1813,16 @@
             <span class="pill">${done}/${total} done</span>
             ${countsBits.join('')}
           </div>
+          <button class="sprint-item-copy" type="button" data-action="copy-sprint-prompt" data-letter="${sp.letter}" aria-label="Copy kickoff prompt for Sprint ${sp.letter}">Copy prompt</button>
         `;
         btn.addEventListener('click', () => selectSprint(sp.letter));
+        const copyBtn = btn.querySelector('[data-action="copy-sprint-prompt"]');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await copySprintPrompt(sp.letter);
+          });
+        }
         btn.addEventListener('keydown', (e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
@@ -1826,7 +1881,7 @@
         main.innerHTML = `
           <div class="sprint-main-header">
             <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
-            <div class="sub">${b.done.length} done · <b class="blocked">${b.blocked.length} blocked</b> · 0 ready</div>
+            <div class="sub">${b.done.length} done · <b class="blocked">${b.blocked.length} blocked</b> · 0 unblocked</div>
           </div>
           <div class="sprint-empty" style="margin-top:24px;">
             <b>Sprint ${sprint.letter} is fully blocked.</b><br>
@@ -1839,85 +1894,131 @@
         return;
       }
 
+      const orderedInProgress = orderSprintBucket(sprint, b.inProgress);
+      const orderedReady = orderSprintBucket(sprint, b.ready);
+      const orderedBlocked = orderSprintBucket(sprint, b.blocked);
+      const primaryActive = orderedInProgress[0] || null;
+      const extraActive = orderedInProgress.slice(1);
+      const recommendedNext = orderedReady[0] || null;
+      const parkedReady = orderedReady.slice(1);
+
       // Normal render
       const headerHTML = `
         <div class="sprint-main-header">
-          <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
-          <div class="sub">
-            ${b.done.length} done ·
-            <b class="active">${b.inProgress.length} in progress</b> ·
-            <b class="ready">${b.ready.length} ready</b> ·
-            <b class="blocked">${b.blocked.length} blocked</b>
+          <div>
+            <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
+            <div class="sub">
+              ${b.done.length} done ·
+              <b class="active">${b.inProgress.length} in progress</b> ·
+              <b class="ready">${b.ready.length} unblocked</b> ·
+              <b class="blocked">${b.blocked.length} blocked</b>
+            </div>
           </div>
+          <button class="toolbar-btn sprint-main-header-copy" type="button" data-action="copy-current-sprint-prompt">Copy kickoff prompt</button>
         </div>
       `;
 
-      // Ready card pool — fill with ready tasks, top up to 4 from soonest-blocked if short
-      const MAX_READY_CARDS = 4;
-      const readyCards = b.ready.slice(0, MAX_READY_CARDS);
-      const fillerSlots = MAX_READY_CARDS - readyCards.length;
-      const blockedQueue = b.blocked.slice();
-      const fillerCards = fillerSlots > 0
-        ? blockedQueue.splice(0, fillerSlots).map(t => ({ ...t, _filler: true }))
-        : [];
-
-      const inProgressCardsHTML = b.inProgress.length
-        ? `<section class="bucket" aria-labelledby="bucket-inprogress">
-             <div class="bucket-title in-progress" id="bucket-inprogress">
-               <span class="accent">▶ In progress</span>
-               <span class="count">${b.inProgress.length}</span>
+      const focusHTML = primaryActive
+        ? `<section class="bucket" aria-labelledby="bucket-focus">
+             <div class="bucket-title focus" id="bucket-focus">
+               <span class="accent">▶ Current focus</span>
+               <span class="count">1${extraActive.length ? ` + ${extraActive.length} active` : ''}</span>
              </div>
-             <div class="cards-grid">${b.inProgress.map(t => cardHTML(t, { action: 'kanban', status: 'IN PROGRESS' })).join('')}</div>
+             <div class="bucket-note">
+                This is the authoritative task already in motion for this sprint.${extraActive.length ? ` ${extraActive.length} additional active task${extraActive.length === 1 ? ' is' : 's are'} listed below for coordination.` : ''}
+              </div>
+              <div class="cards-grid">${cardHTML(primaryActive, { action: 'kanban', status: 'CURRENT' })}</div>
+            </section>`
+        : recommendedNext
+          ? `<section class="bucket" aria-labelledby="bucket-focus">
+               <div class="bucket-title focus" id="bucket-focus">
+                 <span class="accent">▶ Start here</span>
+                 <span class="count">1</span>
+               </div>
+               <div class="bucket-note">
+                 This is the single recommended next step for the sprint. Other unblocked tasks stay parked until you intentionally switch.
+               </div>
+               <div class="cards-grid">${cardHTML(recommendedNext, { action: 'start', status: 'NEXT' })}</div>
+             </section>`
+          : '';
+
+      const alsoActiveHTML = extraActive.length
+        ? `<section class="bucket" aria-labelledby="bucket-active-elsewhere">
+             <div class="bucket-title in-progress" id="bucket-active-elsewhere">
+               <span class="accent">▶ Also active</span>
+               <span class="count">${extraActive.length}</span>
+             </div>
+             <div class="bucket-note">
+               These tasks are already in progress elsewhere. They are shown for coordination, not as new starts.
+             </div>
+             <div class="cards-grid">${extraActive.map(t => cardHTML(t, { action: 'kanban', status: 'ACTIVE' })).join('')}</div>
            </section>`
         : '';
 
-      const readyCardsHTML = (readyCards.length + fillerCards.length) > 0
-        ? `<section class="bucket" aria-labelledby="bucket-ready">
-             <div class="bucket-title ready" id="bucket-ready">
-               <span class="accent">✓ Ready now</span>
-               <span class="count">${readyCards.length}${fillerCards.length ? ` + ${fillerCards.length} soon` : ''}</span>
+      const nextHTML = primaryActive && recommendedNext
+        ? `<section class="bucket" aria-labelledby="bucket-next-single">
+             <div class="bucket-title next" id="bucket-next-single">
+               <span class="accent">⋯ Next after current</span>
+               <span class="count">1${parkedReady.length ? ` + ${parkedReady.length} parked` : ''}</span>
              </div>
-             <div class="cards-grid">
-               ${readyCards.map(t => cardHTML(t, { action: 'start', status: 'READY' })).join('')}
-               ${fillerCards.map(t => cardHTML(t, { action: 'soon', status: 'SOON', wait: t.unfinishedBlockerIds })).join('')}
+             <div class="bucket-note">
+               When the current task is finished, this is the next task to pull. Other unblocked tasks are kept as backlog context, not equal choices.
              </div>
+             <div class="cards-grid">${cardHTML(recommendedNext, { action: 'start', status: 'NEXT' })}</div>
            </section>`
-        : (b.inProgress.length === 0 ? `
-           <section class="bucket">
-             <div class="bucket-title ready">
-               <span class="accent">✓ Ready now</span>
-               <span class="count">0</span>
-             </div>
-             <div class="sprint-empty">All active tasks in this sprint are in progress or blocked.</div>
-           </section>` : '');
+        : (!primaryActive && !recommendedNext
+          ? `<section class="bucket">
+               <div class="bucket-title ready">
+                 <span class="accent">✓ Unblocked now</span>
+                 <span class="count">0</span>
+               </div>
+               <div class="sprint-empty">All active tasks in this sprint are either blocked or already complete.</div>
+             </section>`
+          : '');
 
-      const remainingBlocked = blockedQueue; // after filler removed from front
-      const upNextRows = remainingBlocked.slice(0, 3);
+      const upNextRows = orderedBlocked.slice(0, 3);
       const upNextHTML = upNextRows.length
         ? `<section class="bucket" aria-labelledby="bucket-next">
              <div class="bucket-title next" id="bucket-next">
-               <span class="accent">⋯ Up next</span>
+               <span class="accent">⋯ Blocked queue</span>
                <span class="count">${upNextRows.length}</span>
              </div>
+             <div class="bucket-note">
+               These are the next blocked steps in sprint order. Each one names the blocker that must finish first.
+             </div>
              <div class="next-list" role="list">
-               ${upNextRows.map((t, i) => nextRowHTML(t, i + 1)).join('')}
+                ${upNextRows.map((t, i) => nextRowHTML(t, i + 1)).join('')}
              </div>
            </section>`
         : '';
 
-      const extraBlocked = remainingBlocked.slice(3);
-      const doneHidden = b.done;
-      const remainingCount = extraBlocked.length + doneHidden.length;
+      const hiddenTasks = [
+        ...parkedReady,
+        ...orderedBlocked.slice(3),
+        ...b.done,
+      ];
+      const remainingCount = hiddenTasks.length;
       const remainingHTML = remainingCount > 0
         ? `<button class="remaining-toggle" id="toggle-remaining" aria-expanded="${showRemaining}">
-             ${showRemaining ? '▾' : '▸'} Show remaining ${remainingCount} task${remainingCount === 1 ? '' : 's'}
-           </button>
-           ${showRemaining ? remainingTableHTML([...extraBlocked, ...doneHidden]) : ''}`
+              ${showRemaining ? '▾' : '▸'} Show remaining ${remainingCount} task${remainingCount === 1 ? '' : 's'}
+            </button>
+            ${showRemaining ? remainingTableHTML(hiddenTasks) : ''}`
         : '';
 
-      main.innerHTML = headerHTML + inProgressCardsHTML + readyCardsHTML + upNextHTML + remainingHTML;
+      main.innerHTML = headerHTML + focusHTML + alsoActiveHTML + nextHTML + upNextHTML + remainingHTML;
       wireCardClicks(main, taskById);
       focusSprintHeading();
+    }
+
+    function orderSprintBucket(sprint, tasks) {
+      const order = new Map(sprint.ids.map((id, index) => [id, index]));
+      return [...tasks].sort((a, b) => {
+        const bySprintOrder = (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9);
+        if (bySprintOrder !== 0) return bySprintOrder;
+        const byScore = (b.score || 0) - (a.score || 0);
+        if (byScore !== 0) return byScore;
+        return a.id.localeCompare(b.id);
+      });
     }
 
     function cardHTML(t, opts = {}) {
@@ -1928,7 +2029,7 @@
         ? `<div class="task-card-wait">waits for ${opts.wait[0]}${opts.wait.length > 1 ? ` +${opts.wait.length - 1}` : ''}</div>`
         : '';
       const primary = opts.action === 'start'
-        ? `<button class="btn" data-action="start" data-id="${t.id}" aria-label="Start ${t.id} in Kanban">▶ Start now</button>`
+        ? `<button class="btn" data-action="start" data-id="${t.id}" aria-label="Copy kickoff prompt for ${t.id}">▶ Copy kickoff prompt</button>`
         : opts.action === 'kanban'
           ? `<button class="btn" data-action="kanban" data-id="${t.id}" aria-label="Open ${t.id} in Kanban">▶ Continue</button>`
           : opts.action === 'soon'
@@ -1981,13 +2082,22 @@
     }
 
     function wireCardClicks(root, taskById) {
+      const copySprintBtn = root.querySelector('[data-action="copy-current-sprint-prompt"]');
+      if (copySprintBtn && selectedSprintLetter) {
+        copySprintBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await copySprintPrompt(selectedSprintLetter);
+        });
+      }
       root.querySelectorAll('.task-card').forEach(card => {
         const id = card.dataset.id;
         card.addEventListener('click', (e) => {
           const actionEl = e.target.closest('[data-action]');
           if (actionEl) {
             const action = actionEl.dataset.action;
-            if (action === 'start' || action === 'kanban') {
+            if (action === 'start') {
+              copySprintPrompt(selectedSprintLetter);
+            } else if (action === 'kanban') {
               window.parent.postMessage({ type: 'activate-and-navigate', target: 'kanban', taskId: id }, '*');
             } else {
               openTaskDetail(id);
@@ -2073,7 +2183,6 @@
       if (letter === selectedSprintLetter) return;
       selectedSprintLetter = letter;
       showRemaining = false;
-      try { localStorage.setItem('watchpost-flow-sprint', letter); } catch (e) {}
       const taskById = new Map(allTasks.map(t => [t.id, t]));
       const sprint = currentSprints.find(s => s.letter === letter);
       renderSprintSidebar(currentSprints, taskById);
@@ -2084,10 +2193,13 @@
       currentSprints = sprints;
       const taskById = new Map(tasks.map(t => [t.id, t]));
 
-      // Resolve selected sprint: saved → first
-      let letter = selectedSprintLetter
-        || localStorage.getItem('watchpost-flow-sprint')
-        || (sprints[0] && sprints[0].letter);
+      // Always bias toward the earliest incomplete sprint in delivery order.
+      // If the currently selected sprint is done, auto-advance to the next one.
+      const earliestOpenLetter = getDefaultSprintLetter(sprints, taskById);
+      const currentSprint = sprints.find(s => s.letter === selectedSprintLetter);
+      const currentBuckets = currentSprint ? classifySprintTasks(currentSprint, taskById) : null;
+      const currentStillOpen = currentBuckets && (currentBuckets.inProgress.length || currentBuckets.ready.length || currentBuckets.blocked.length);
+      let letter = currentStillOpen ? selectedSprintLetter : earliestOpenLetter;
       if (!sprints.find(s => s.letter === letter)) letter = sprints[0]?.letter;
       selectedSprintLetter = letter;
 
@@ -2111,18 +2223,72 @@
       set('stat-overdue', 0);
     }
 
+    function getDefaultSprintLetter(sprints, taskById) {
+      for (const sprint of sprints) {
+        const b = classifySprintTasks(sprint, taskById);
+        if (b.inProgress.length || b.ready.length || b.blocked.length) return sprint.letter;
+      }
+      return sprints[0]?.letter;
+    }
+
+    function buildSprintPrompt(letter) {
+      const sprint = currentSprints.find(s => s.letter === letter);
+      if (!sprint) return '';
+      const taskById = new Map(allTasks.map(t => [t.id, t]));
+      const buckets = classifySprintTasks(sprint, taskById);
+      const sprintTasks = sprint.ids.map(id => taskById.get(id)).filter(Boolean);
+      const taskLines = sprintTasks.map(t => `- ${t.id}: ${t.title}`).join('\n');
+      const activeLine = buckets.inProgress.length ? buckets.inProgress.map(t => t.id).join(', ') : 'none';
+      const readyLine = buckets.ready.length ? buckets.ready.map(t => t.id).join(', ') : 'none';
+      const blockedLine = buckets.blocked.length
+        ? buckets.blocked.map(t => `${t.id} waits for ${(t.unfinishedBlockerIds || []).join(', ')}`).join('; ')
+        : 'none';
+      return [
+        `Kick off Rough Cut Sprint ${sprint.letter} — ${sprint.name}.`,
+        '',
+        'Work only on this sprint unless a declared dependency forces a small adjacent change.',
+        '',
+        'Tasks in scope:',
+        taskLines,
+        '',
+        `Currently active: ${activeLine}`,
+        `Currently unblocked: ${readyLine}`,
+        `Currently blocked: ${blockedLine}`,
+        '',
+        'Finish this sprint cleanly so the next sprint in the recording-readiness flow can unlock.',
+      ].join('\n');
+    }
+
+    async function copySprintPrompt(letter) {
+      const prompt = buildSprintPrompt(letter);
+      if (!prompt) {
+        showToast('Could not build sprint prompt', 'error');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(prompt);
+        showToast(`Copied kickoff prompt for Sprint ${letter}`, 'success');
+      } catch (err) {
+        showToast('Clipboard copy failed', 'error');
+      }
+    }
+
     function setViewMode(mode) {
+      const rootEl = document.getElementById('root');
       const graphPane = document.getElementById('graph');
       const emptyEl = document.getElementById('empty-state');
       const legendEl = document.querySelector('.legend');
       const zoomEl = document.querySelector('.zoom-controls');
       const layoutEl = document.getElementById('sprint-layout');
+      const sidePane = document.getElementById('side-pane');
       const isSprint = mode === 'sprint';
+      if (rootEl) rootEl.style.gridTemplateColumns = isSprint ? '1fr' : '1fr 340px';
       if (graphPane) graphPane.style.display = isSprint ? 'none' : '';
       if (emptyEl) emptyEl.style.display = isSprint ? 'none' : '';
       if (legendEl) legendEl.style.display = isSprint ? 'none' : '';
       if (zoomEl) zoomEl.style.display = isSprint ? 'none' : '';
       if (layoutEl) layoutEl.hidden = !isSprint;
+      if (sidePane) sidePane.style.display = isSprint ? 'none' : '';
       // Toolbar toggles that only apply to streams view
       ['toggle-rank-labels', 'toggle-auto-infer', 'toggle-inferred', 'fit-view'].forEach(id => {
         const el = document.getElementById(id);
@@ -2201,13 +2367,10 @@
       if (task.status === 'done') {
         readinessBanner = `<div class="banner done">Already done.</div>`;
       } else if (task.isReady) {
-        const parallelSiblings = allTasks.filter(o =>
-          o.id !== task.id && o.isReady && o.status !== 'done'
-        );
         readinessBanner = `
           <div class="banner ready">
             <span class="dot" style="background: #22c55e;"></span>
-            <span><b>Ready now.</b> Can be opened alongside ${parallelSiblings.length} other ready task${parallelSiblings.length === 1 ? '' : 's'}.</span>
+            <span><b>Unblocked.</b> No unfinished blockers are currently stopping this task.</span>
           </div>`;
       } else if (task.isBlocked) {
         readinessBanner = `
@@ -2216,16 +2379,6 @@
             <span><b>Blocked.</b> Waiting on ${task.unfinishedBlockerIds.length} task${task.unfinishedBlockerIds.length === 1 ? '' : 's'}.</span>
           </div>`;
       }
-
-      // Parallel siblings — other tasks in same column that are also Ready right now
-      const parallelPeers = allTasks.filter(o =>
-        o.id !== task.id &&
-        o.isReady &&
-        o.status !== 'done' &&
-        o.status === task.status
-      );
-      const parallelChips = parallelPeers.slice(0, 12).map(o => mkChip(o.id)).join('');
-      const parallelOverflow = parallelPeers.length > 12 ? ` +${parallelPeers.length - 12}` : '';
 
       // Unfinished blockers only
       const unfinishedBlockerChips = task.unfinishedBlockerIds.map(id => mkChip(id)).join('');
@@ -2247,7 +2400,6 @@
             <span>${task.score || 0}</span>
           </div>
           ${unfinishedBlockerChips ? `<div class="dep-block"><div class="label">⏸ Must finish first</div><div class="dep-list">${unfinishedBlockerChips}</div></div>` : ''}
-          ${task.isReady && parallelChips ? `<div class="dep-block"><div class="label">▶ Parallel-ready in ${statusLabel(task.status)}</div><div class="dep-list">${parallelChips}${parallelOverflow}</div></div>` : ''}
           ${unblocksChips ? `<div class="dep-block"><div class="label">↪ Completing this unblocks</div><div class="dep-list">${unblocksChips}</div></div>` : ''}
           ${dependsChips ? `<div class="dep-block"><div class="label">Declared depends-on</div><div class="dep-list">${dependsChips}</div></div>` : ''}
           ${blocksChips ? `<div class="dep-block"><div class="label">Declared blocks</div><div class="dep-list">${blocksChips}</div></div>` : ''}
