@@ -3,19 +3,23 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile, execSync } = require('child_process');
+const wpPaths = require('../lib/paths');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
-const WATCHPOST_DIR = path.resolve(__dirname, '..');
-const PROJECTS_FILE = path.join(WATCHPOST_DIR, 'projects.json');
-const DATA_DIR = path.join(WATCHPOST_DIR, 'data');
+const WATCHPOST_DIR = wpPaths.watchpostDir();
+const PROJECTS_FILE = wpPaths.projectsFile();
+const DATA_DIR = wpPaths.dataDir();
 const COVERS_DIR = path.join(DATA_DIR, 'covers');
 const SUMMARIES_DIR = path.join(DATA_DIR, 'summaries');
 const NOTES_FILE = path.join(DATA_DIR, 'user-notes.json');
-const SETTINGS_FILE = path.join(WATCHPOST_DIR, 'settings.json');
+const SETTINGS_FILE = wpPaths.settingsFile();
 const CHANGELOG_DIR = path.join(DATA_DIR, 'changelog');
-const CLAUDE_PROJECTS_DIR = path.join(process.env.HOME || '', '.claude', 'projects');
-const OPENCODE_STORAGE_DIR = path.join(process.env.HOME || '', '.local', 'share', 'opencode', 'storage');
+// Multi-source: scan all configured Claude / OpenCode locations (handy on Windows + WSL).
+const CLAUDE_PROJECTS_DIRS = wpPaths.claudeProjectsDirs();
+const CLAUDE_PROJECTS_DIR = CLAUDE_PROJECTS_DIRS[0] || wpPaths.claudeProjectsDir();
+const OPENCODE_STORAGE_DIRS = wpPaths.opencodeStorageDirs();
+const OPENCODE_STORAGE_DIR = OPENCODE_STORAGE_DIRS[0] || wpPaths.opencodeStorageDir();
 const DIRTY_ATTRIBUTION_CACHE_TTL_MS = 2000;
 const dirtyAttributionCache = new Map();
 
@@ -154,6 +158,11 @@ function safeJSONStringify(value) {
 function getProjectNameFromCwd(cwd) {
     if (!cwd) return 'unknown';
 
+    // Transcripts may contain paths from another OS (Linux session log read on
+    // Windows or vice versa) — remap to current OS before matching.
+    const remapped = wpPaths.mapPathToCurrentOS(cwd);
+    const cwdCmp = wpPaths.IS_WIN ? remapped.toLowerCase() : remapped;
+
     const projectData = readJSON(PROJECTS_FILE, []);
     const projects = Array.isArray(projectData)
         ? projectData
@@ -163,14 +172,17 @@ function getProjectNameFromCwd(cwd) {
     let bestMatch = null;
 
     for (const project of projects) {
-        const root = project.root || project.path;
-        if (!root || !cwd.startsWith(root)) continue;
+        const rawRoot = project.root || project.path;
+        if (!rawRoot) continue;
+        const root = wpPaths.mapPathToCurrentOS(rawRoot);
+        const rootCmp = wpPaths.IS_WIN ? root.toLowerCase() : root;
+        if (!cwdCmp.startsWith(rootCmp)) continue;
         if (!bestMatch || root.length > bestMatch.root.length) {
             bestMatch = { name: project.name, root };
         }
     }
 
-    return bestMatch?.name || path.basename(cwd) || 'unknown';
+    return bestMatch?.name || path.basename(remapped) || 'unknown';
 }
 
 function getRequestCwd(req) {
@@ -204,11 +216,21 @@ function listClaudeSessionFiles(days) {
     const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
     const files = [];
 
-    try {
-        const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true });
+    // Scan every configured Claude projects dir — handy when Linux + Windows
+    // (or WSL + native) both write transcripts and the user wants both visible.
+    const sources = CLAUDE_PROJECTS_DIRS.length > 0 ? CLAUDE_PROJECTS_DIRS : [CLAUDE_PROJECTS_DIR];
+
+    for (const root of sources) {
+        let projectDirs;
+        try {
+            projectDirs = fs.readdirSync(root, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+
         for (const projectDir of projectDirs) {
             if (!projectDir.isDirectory()) continue;
-            const fullDir = path.join(CLAUDE_PROJECTS_DIR, projectDir.name);
+            const fullDir = path.join(root, projectDir.name);
             let entries = [];
             try {
                 entries = fs.readdirSync(fullDir, { withFileTypes: true });
@@ -227,8 +249,6 @@ function listClaudeSessionFiles(days) {
                 }
             }
         }
-    } catch {
-        return [];
     }
 
     return files;
@@ -298,73 +318,77 @@ function readLiveClaudeEntries(days, projectFilter) {
 
 function readOpenCodeEntries(days, projectFilter) {
     const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
-    const sessionDirs = path.join(OPENCODE_STORAGE_DIR, 'session');
-    const messageDirs = path.join(OPENCODE_STORAGE_DIR, 'message');
-    const sessionCwds = new Map();
     const entries = [];
+    const sources = OPENCODE_STORAGE_DIRS.length > 0 ? OPENCODE_STORAGE_DIRS : [OPENCODE_STORAGE_DIR];
 
-    try {
-        for (const projectDir of fs.readdirSync(sessionDirs, { withFileTypes: true })) {
-            if (!projectDir.isDirectory()) continue;
-            const projectSessionDir = path.join(sessionDirs, projectDir.name);
-            for (const sessionFile of fs.readdirSync(projectSessionDir, { withFileTypes: true })) {
-                if (!sessionFile.isFile() || !sessionFile.name.endsWith('.json')) continue;
-                const session = readJSON(path.join(projectSessionDir, sessionFile.name), null);
-                if (session?.id && session?.directory) sessionCwds.set(session.id, session.directory);
-            }
-        }
-    } catch {
-        return entries;
-    }
+    for (const storageRoot of sources) {
+        const sessionDirs = path.join(storageRoot, 'session');
+        const messageDirs = path.join(storageRoot, 'message');
+        const sessionCwds = new Map();
 
-    try {
-        for (const dir of fs.readdirSync(messageDirs, { withFileTypes: true })) {
-            if (!dir.isDirectory()) continue;
-            const sessionId = dir.name;
-            const sessionCwd = sessionCwds.get(sessionId) || null;
-            const project = getProjectNameFromCwd(sessionCwd);
-            if (projectFilter && project !== projectFilter) continue;
-
-            for (const messageFile of fs.readdirSync(path.join(messageDirs, dir.name), { withFileTypes: true })) {
-                if (!messageFile.isFile() || !messageFile.name.endsWith('.json')) continue;
-                const fullPath = path.join(messageDirs, dir.name, messageFile.name);
-                let stat;
-                try {
-                    stat = fs.statSync(fullPath);
-                } catch {
-                    continue;
-                }
-                if (stat.mtimeMs < cutoffMs) continue;
-
-                const message = readJSON(fullPath, null);
-                const diffs = Array.isArray(message?.summary?.diffs) ? message.summary.diffs : [];
-                if (diffs.length === 0) continue;
-
-                const seenMs = message?.time?.completed || message?.time?.created || stat.mtimeMs;
-                if (seenMs < cutoffMs) continue;
-                const cwd = message?.path?.cwd || sessionCwd;
-
-                for (const diff of diffs) {
-                    if (!diff?.file) continue;
-                    entries.push({
-                        ts: new Date(seenMs).toISOString(),
-                        sid: message.sessionID || sessionId,
-                        tid: message.id || null,
-                        tool: 'opencode.summary',
-                        event: 'DiffSummary',
-                        project,
-                        cwd,
-                        file: diff.file,
-                        cmd: null,
-                        summary: message?.summary?.title || null,
-                        agent: message?.agent || message?.providerID || 'opencode',
-                        branch: null
-                    });
+        try {
+            for (const projectDir of fs.readdirSync(sessionDirs, { withFileTypes: true })) {
+                if (!projectDir.isDirectory()) continue;
+                const projectSessionDir = path.join(sessionDirs, projectDir.name);
+                for (const sessionFile of fs.readdirSync(projectSessionDir, { withFileTypes: true })) {
+                    if (!sessionFile.isFile() || !sessionFile.name.endsWith('.json')) continue;
+                    const session = readJSON(path.join(projectSessionDir, sessionFile.name), null);
+                    if (session?.id && session?.directory) sessionCwds.set(session.id, session.directory);
                 }
             }
+        } catch {
+            continue;
         }
-    } catch {
-        return entries;
+
+        try {
+            for (const dir of fs.readdirSync(messageDirs, { withFileTypes: true })) {
+                if (!dir.isDirectory()) continue;
+                const sessionId = dir.name;
+                const sessionCwd = sessionCwds.get(sessionId) || null;
+                const project = getProjectNameFromCwd(sessionCwd);
+                if (projectFilter && project !== projectFilter) continue;
+
+                for (const messageFile of fs.readdirSync(path.join(messageDirs, dir.name), { withFileTypes: true })) {
+                    if (!messageFile.isFile() || !messageFile.name.endsWith('.json')) continue;
+                    const fullPath = path.join(messageDirs, dir.name, messageFile.name);
+                    let stat;
+                    try {
+                        stat = fs.statSync(fullPath);
+                    } catch {
+                        continue;
+                    }
+                    if (stat.mtimeMs < cutoffMs) continue;
+
+                    const message = readJSON(fullPath, null);
+                    const diffs = Array.isArray(message?.summary?.diffs) ? message.summary.diffs : [];
+                    if (diffs.length === 0) continue;
+
+                    const seenMs = message?.time?.completed || message?.time?.created || stat.mtimeMs;
+                    if (seenMs < cutoffMs) continue;
+                    const cwd = message?.path?.cwd || sessionCwd;
+
+                    for (const diff of diffs) {
+                        if (!diff?.file) continue;
+                        entries.push({
+                            ts: new Date(seenMs).toISOString(),
+                            sid: message.sessionID || sessionId,
+                            tid: message.id || null,
+                            tool: 'opencode.summary',
+                            event: 'DiffSummary',
+                            project,
+                            cwd,
+                            file: diff.file,
+                            cmd: null,
+                            summary: message?.summary?.title || null,
+                            agent: message?.agent || message?.providerID || 'opencode',
+                            branch: null
+                        });
+                    }
+                }
+            }
+        } catch {
+            continue;
+        }
     }
 
     return entries;

@@ -5,6 +5,9 @@ const path = require('path');
 const { execSync, spawn } = require('child_process');
 require('dotenv').config();
 
+const wpPaths = require('./lib/paths');
+const IS_WIN = wpPaths.IS_WIN;
+
 // Find Claude binary path - check multiple locations
 function findClaudeBinary() {
     // 1. Check environment variable
@@ -13,15 +16,24 @@ function findClaudeBinary() {
         return process.env.CLAUDE_BINARY_PATH;
     }
 
-    // 2. Check ~/.local/bin/claude (symlink location)
-    const localBin = path.join(process.env.HOME || '/home', '.local/bin/claude');
-    if (fs.existsSync(localBin)) {
-        console.log(`[Claude] Using binary from ~/.local/bin: ${localBin}`);
-        return localBin;
+    // 2. Check ~/.local/bin/claude (symlink location). On Windows we additionally
+    //    look for claude.cmd / claude.exe in standard install locations.
+    const home = wpPaths.home();
+    const localBinCandidates = IS_WIN
+        ? [
+            path.join(home, 'AppData', 'Roaming', 'npm', 'claude.cmd'),
+            path.join(home, 'AppData', 'Local', 'Programs', 'claude', 'claude.exe')
+        ]
+        : [path.join(home, '.local', 'bin', 'claude')];
+    for (const candidate of localBinCandidates) {
+        if (fs.existsSync(candidate)) {
+            console.log(`[Claude] Using binary: ${candidate}`);
+            return candidate;
+        }
     }
 
     // 3. Search VS Code extensions for Claude Code extension
-    const vscodeExtensions = path.join(process.env.HOME || '/home', '.vscode/extensions');
+    const vscodeExtensions = path.join(home, '.vscode', 'extensions');
     if (fs.existsSync(vscodeExtensions)) {
         try {
             const extensions = fs.readdirSync(vscodeExtensions);
@@ -41,15 +53,16 @@ function findClaudeBinary() {
         }
     }
 
-    // 4. Try which command as last resort
+    // 4. Try which/where command as last resort (cross-platform)
     try {
-        const whichResult = execSync('which claude 2>/dev/null', { encoding: 'utf-8' }).trim();
+        const lookupCmd = IS_WIN ? 'where claude' : 'which claude 2>/dev/null';
+        const whichResult = execSync(lookupCmd, { encoding: 'utf-8' }).split(/\r?\n/)[0].trim();
         if (whichResult && fs.existsSync(whichResult)) {
-            console.log(`[Claude] Using binary from which: ${whichResult}`);
+            console.log(`[Claude] Using binary from PATH: ${whichResult}`);
             return whichResult;
         }
     } catch (err) {
-        // which command failed, continue
+        // which/where command failed, continue
     }
 
     console.error('[Claude] WARNING: Claude binary not found!');
@@ -82,16 +95,26 @@ const broadcastLog = (message) => {
 };
 
 function getRegisteredProjects() {
-    const projectsFile = path.join(__dirname, 'projects.json');
-    const outlookPath = path.join(__dirname, 'data', 'outlook.json');
+    const projectsFile = wpPaths.projectsFile();
+    const outlookPath = path.join(wpPaths.dataDir(), 'outlook.json');
 
     try {
         const parsed = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
-        const projects = Array.isArray(parsed)
+        const projectsRaw = Array.isArray(parsed)
             ? parsed
             : Array.isArray(parsed?.projects)
                 ? parsed.projects
                 : [];
+
+        // Remap stored roots/masterPlan paths through any cross-OS path mappings
+        // before path.resolve() touches them — otherwise resolving a Windows
+        // path on Linux (or vice versa) produces garbage.
+        const projects = projectsRaw.map(p => ({
+            ...p,
+            root: p?.root ? wpPaths.mapPathToCurrentOS(p.root) : p?.root,
+            path: p?.path ? wpPaths.mapPathToCurrentOS(p.path) : p?.path,
+            masterPlan: p?.masterPlan ? wpPaths.mapPathToCurrentOS(p.masterPlan) : p?.masterPlan
+        }));
 
         let changed = false;
         let mergedProjects = [...projects];
@@ -101,7 +124,8 @@ function getRegisteredProjects() {
             const passiveProjects = Array.isArray(outlook?.payload?.projects) ? outlook.payload.projects : [];
 
             for (const passiveProject of passiveProjects) {
-                const root = passiveProject?.root ? path.resolve(passiveProject.root) : null;
+                const mappedRoot = passiveProject?.root ? wpPaths.mapPathToCurrentOS(passiveProject.root) : null;
+                const root = mappedRoot ? path.resolve(mappedRoot) : null;
                 const name = passiveProject?.name || (root ? path.basename(root) : null);
                 if (!root || !name) continue;
 
@@ -200,9 +224,14 @@ function findProjectForCwd(cwd) {
     let bestMatch = null;
     const projects = getRegisteredProjects();
 
+    // On Windows, drive letters and paths are case-insensitive — compare in lowercase.
+    const cwdCmp = IS_WIN ? cwd.toLowerCase() : cwd;
+
     for (const project of projects) {
         const root = project.root || project.path;
-        if (!root || !cwd.startsWith(root)) continue;
+        if (!root) continue;
+        const rootCmp = IS_WIN ? root.toLowerCase() : root;
+        if (!cwdCmp.startsWith(rootCmp)) continue;
 
         if (!bestMatch || root.length > bestMatch.root.length) {
             bestMatch = { ...project, root };
@@ -262,7 +291,7 @@ function findProjectForCwd(cwd) {
                 source: 'auto-discovered',
                 addedAt: new Date().toISOString().slice(0, 10)
             }];
-            const projectsFile = path.join(__dirname, 'projects.json');
+            const projectsFile = wpPaths.projectsFile();
             const parsed = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
             const nextData = Array.isArray(parsed) ? nextProjects : { ...parsed, projects: nextProjects };
             fs.writeFileSync(projectsFile, JSON.stringify(nextData, null, 2));
@@ -293,7 +322,7 @@ function getConfiguredMasterPlanPath() {
 }
 
 function getPassiveActiveProject() {
-    const outlookPath = path.join(__dirname, 'data', 'outlook.json');
+    const outlookPath = path.join(wpPaths.dataDir(), 'outlook.json');
 
     try {
         const parsed = JSON.parse(fs.readFileSync(outlookPath, 'utf8'));
@@ -305,10 +334,13 @@ function getPassiveActiveProject() {
             ? parsed.payload.projects.find(project => project?.name === activeProjectName)
             : null;
 
-        const root = matchedProject?.root || matchedProject?.path || passiveProject?.root;
-        if (!root) return null;
+        const rawRoot = matchedProject?.root || matchedProject?.path || passiveProject?.root;
+        if (!rawRoot) return null;
+        const root = wpPaths.mapPathToCurrentOS(rawRoot);
 
-        const masterPlan = matchedProject?.masterPlan || null;
+        const masterPlan = matchedProject?.masterPlan
+            ? wpPaths.mapPathToCurrentOS(matchedProject.masterPlan)
+            : null;
 
         return {
             source: masterPlan ? 'passive' : 'passive-unregistered',

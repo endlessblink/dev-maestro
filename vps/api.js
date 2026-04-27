@@ -3,10 +3,13 @@ const http = require('http');
 const https = require('https');
 const path = require('path');
 const fs = require('fs');
+const wpPaths = require('../lib/paths');
 
 const VPS_HOST = process.env.VPS_HOST || '84.46.253.137';
 const VPS_USER = process.env.VPS_USER || 'root';
-const VPS_SSH_KEY = process.env.VPS_SSH_KEY || path.join(process.env.HOME || '/root', '.ssh/id_ed25519');
+const VPS_SSH_KEY = process.env.VPS_SSH_KEY || wpPaths.defaultSshKey();
+// Windows OpenSSH does not support ControlMaster — disable to avoid silent failures.
+const SUPPORTS_CONTROL_MASTER = !wpPaths.IS_WIN;
 
 // In-memory health history for sparkline (last 10 readings)
 const healthHistory = [];
@@ -23,18 +26,23 @@ function loadBots() {
 }
 
 // SSH args helper — uses ControlMaster for connection reuse (~50ms after first connect)
+// on platforms that support it. Windows OpenSSH ignores ControlMaster, so skip those flags.
 function sshArgs(command) {
-    return [
+    const baseArgs = [
         '-i', VPS_SSH_KEY,
         '-o', 'StrictHostKeyChecking=no',
-        '-o', 'ControlMaster=auto',
-        '-o', 'ControlPath=/tmp/watchpost-vps-%r@%h:%p',
-        '-o', 'ControlPersist=300',
         '-o', 'ConnectTimeout=8',
-        '-o', 'BatchMode=yes',
-        `${VPS_USER}@${VPS_HOST}`,
-        command
+        '-o', 'BatchMode=yes'
     ];
+    if (SUPPORTS_CONTROL_MASTER) {
+        baseArgs.push(
+            '-o', 'ControlMaster=auto',
+            '-o', 'ControlPath=/tmp/watchpost-vps-%r@%h:%p',
+            '-o', 'ControlPersist=300'
+        );
+    }
+    baseArgs.push(`${VPS_USER}@${VPS_HOST}`, command);
+    return baseArgs;
 }
 
 // Run SSH command, pipe script via stdin if scriptContent provided
@@ -223,7 +231,7 @@ module.exports = function(app) {
             return res.redirect(`/api/projects/${encodeURIComponent(bot.projectAlias)}/cover`);
         }
 
-        const coversDir = path.join(process.env.HOME || '/root', '.watchpost/data/covers');
+        const coversDir = path.join(wpPaths.dataDir(), 'covers');
         for (const ext of ['png', 'jpg', 'jpeg', 'webp']) {
             const coverPath = path.join(coversDir, `vps-${bot.id}.${ext}`);
             if (fs.existsSync(coverPath)) return res.sendFile(coverPath);
