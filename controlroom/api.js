@@ -2,11 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFile, execSync } = require('child_process');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
-const WATCHPOST_DIR = path.join(process.env.HOME, '.watchpost');
+const WATCHPOST_DIR = path.resolve(__dirname, '..');
 const PROJECTS_FILE = path.join(WATCHPOST_DIR, 'projects.json');
 const DATA_DIR = path.join(WATCHPOST_DIR, 'data');
 const COVERS_DIR = path.join(DATA_DIR, 'covers');
@@ -14,6 +14,10 @@ const SUMMARIES_DIR = path.join(DATA_DIR, 'summaries');
 const NOTES_FILE = path.join(DATA_DIR, 'user-notes.json');
 const SETTINGS_FILE = path.join(WATCHPOST_DIR, 'settings.json');
 const CHANGELOG_DIR = path.join(DATA_DIR, 'changelog');
+const CLAUDE_PROJECTS_DIR = path.join(process.env.HOME || '', '.claude', 'projects');
+const OPENCODE_STORAGE_DIR = path.join(process.env.HOME || '', '.local', 'share', 'opencode', 'storage');
+const DIRTY_ATTRIBUTION_CACHE_TTL_MS = 2000;
+const dirtyAttributionCache = new Map();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -28,6 +32,233 @@ function readJSON(filePath, fallback) {
 function writeJSON(filePath, data) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+function safeJSONStringify(value) {
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return '{}';
+    }
+}
+
+function getProjectNameFromCwd(cwd) {
+    if (!cwd) return 'unknown';
+
+    const projectData = readJSON(PROJECTS_FILE, []);
+    const projects = Array.isArray(projectData)
+        ? projectData
+        : Array.isArray(projectData?.projects)
+            ? projectData.projects
+            : [];
+    let bestMatch = null;
+
+    for (const project of projects) {
+        const root = project.root || project.path;
+        if (!root || !cwd.startsWith(root)) continue;
+        if (!bestMatch || root.length > bestMatch.root.length) {
+            bestMatch = { name: project.name, root };
+        }
+    }
+
+    return bestMatch?.name || path.basename(cwd) || 'unknown';
+}
+
+function getRequestCwd(req) {
+    let queryCwd = null;
+    if (typeof req?.originalUrl === 'string') {
+        const rawQuery = req.originalUrl.split('?')[1] || '';
+        const match = rawQuery.match(/(?:^|&)cwd=([^&]*)/);
+        if (match) {
+            try {
+                queryCwd = decodeURIComponent(match[1]);
+            } catch {
+                queryCwd = match[1];
+            }
+        }
+    }
+
+    if (!queryCwd && typeof req?.query?.cwd === 'string') queryCwd = req.query.cwd;
+    if (!queryCwd && typeof req?.body?.cwd === 'string') queryCwd = req.body.cwd;
+    if (!queryCwd && typeof req?.headers?.['x-watchpost-cwd'] === 'string') queryCwd = req.headers['x-watchpost-cwd'];
+
+    if (!queryCwd) return null;
+
+    try {
+        return path.resolve(queryCwd);
+    } catch {
+        return null;
+    }
+}
+
+function listClaudeSessionFiles(days) {
+    const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const files = [];
+
+    try {
+        const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true });
+        for (const projectDir of projectDirs) {
+            if (!projectDir.isDirectory()) continue;
+            const fullDir = path.join(CLAUDE_PROJECTS_DIR, projectDir.name);
+            let entries = [];
+            try {
+                entries = fs.readdirSync(fullDir, { withFileTypes: true });
+            } catch {
+                continue;
+            }
+
+            for (const entry of entries) {
+                if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+                const fullPath = path.join(fullDir, entry.name);
+                try {
+                    const stat = fs.statSync(fullPath);
+                    if (stat.mtimeMs >= cutoffMs) files.push(fullPath);
+                } catch {
+                    // Ignore unreadable files.
+                }
+            }
+        }
+    } catch {
+        return [];
+    }
+
+    return files;
+}
+
+function readLiveClaudeEntries(days, projectFilter) {
+    const cutoffIso = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
+    const entries = [];
+    const seen = new Set();
+
+    for (const filePath of listClaudeSessionFiles(days)) {
+        let content = '';
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+        } catch {
+            continue;
+        }
+
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            let row;
+            try {
+                row = JSON.parse(trimmed);
+            } catch {
+                continue;
+            }
+
+            if (row?.type !== 'assistant' || !Array.isArray(row?.message?.content)) continue;
+
+            const ts = row.timestamp || '';
+            if (!ts || ts < cutoffIso) continue;
+
+            const project = getProjectNameFromCwd(row.cwd);
+            if (projectFilter && project !== projectFilter) continue;
+
+            for (const item of row.message.content) {
+                if (item?.type !== 'tool_use' || !item?.name) continue;
+
+                const tid = item.id || `${row.sessionId || 'unknown'}:${item.name}:${ts}`;
+                const dedupeKey = `${row.sessionId || 'unknown'}:${tid}`;
+                if (seen.has(dedupeKey)) continue;
+                seen.add(dedupeKey);
+
+                const input = item.input || {};
+                entries.push({
+                    ts,
+                    sid: row.sessionId || null,
+                    tid,
+                    tool: item.name,
+                    event: 'ToolUse',
+                    project,
+                    cwd: row.cwd || null,
+                    file: input.file_path || null,
+                    cmd: input.command || null,
+                    summary: safeJSONStringify(input),
+                    agent: row.slug || 'claude',
+                    branch: row.gitBranch || null
+                });
+            }
+        }
+    }
+
+    return entries;
+}
+
+function readOpenCodeEntries(days, projectFilter) {
+    const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const sessionDirs = path.join(OPENCODE_STORAGE_DIR, 'session');
+    const messageDirs = path.join(OPENCODE_STORAGE_DIR, 'message');
+    const sessionCwds = new Map();
+    const entries = [];
+
+    try {
+        for (const projectDir of fs.readdirSync(sessionDirs, { withFileTypes: true })) {
+            if (!projectDir.isDirectory()) continue;
+            const projectSessionDir = path.join(sessionDirs, projectDir.name);
+            for (const sessionFile of fs.readdirSync(projectSessionDir, { withFileTypes: true })) {
+                if (!sessionFile.isFile() || !sessionFile.name.endsWith('.json')) continue;
+                const session = readJSON(path.join(projectSessionDir, sessionFile.name), null);
+                if (session?.id && session?.directory) sessionCwds.set(session.id, session.directory);
+            }
+        }
+    } catch {
+        return entries;
+    }
+
+    try {
+        for (const dir of fs.readdirSync(messageDirs, { withFileTypes: true })) {
+            if (!dir.isDirectory()) continue;
+            const sessionId = dir.name;
+            const sessionCwd = sessionCwds.get(sessionId) || null;
+            const project = getProjectNameFromCwd(sessionCwd);
+            if (projectFilter && project !== projectFilter) continue;
+
+            for (const messageFile of fs.readdirSync(path.join(messageDirs, dir.name), { withFileTypes: true })) {
+                if (!messageFile.isFile() || !messageFile.name.endsWith('.json')) continue;
+                const fullPath = path.join(messageDirs, dir.name, messageFile.name);
+                let stat;
+                try {
+                    stat = fs.statSync(fullPath);
+                } catch {
+                    continue;
+                }
+                if (stat.mtimeMs < cutoffMs) continue;
+
+                const message = readJSON(fullPath, null);
+                const diffs = Array.isArray(message?.summary?.diffs) ? message.summary.diffs : [];
+                if (diffs.length === 0) continue;
+
+                const seenMs = message?.time?.completed || message?.time?.created || stat.mtimeMs;
+                if (seenMs < cutoffMs) continue;
+                const cwd = message?.path?.cwd || sessionCwd;
+
+                for (const diff of diffs) {
+                    if (!diff?.file) continue;
+                    entries.push({
+                        ts: new Date(seenMs).toISOString(),
+                        sid: message.sessionID || sessionId,
+                        tid: message.id || null,
+                        tool: 'opencode.summary',
+                        event: 'DiffSummary',
+                        project,
+                        cwd,
+                        file: diff.file,
+                        cmd: null,
+                        summary: message?.summary?.title || null,
+                        agent: message?.agent || message?.providerID || 'opencode',
+                        branch: null
+                    });
+                }
+            }
+        }
+    } catch {
+        return entries;
+    }
+
+    return entries;
 }
 
 /**
@@ -144,6 +375,32 @@ function findProject(name) {
     return projects.find(p => p.name === name) || null;
 }
 
+function findProjectByCwd(cwd) {
+    if (!cwd) return null;
+
+    const projects = loadProjects();
+    let bestMatch = null;
+
+    for (const project of projects) {
+        const root = project.root || project.path;
+        if (!root || !cwd.startsWith(root)) continue;
+        if (!bestMatch || root.length > (bestMatch.root || '').length) {
+            bestMatch = { ...project, root };
+        }
+    }
+
+    return bestMatch;
+}
+
+function resolveProject(req) {
+    const requestedName = req.params?.name;
+    if (requestedName && requestedName !== 'current') {
+        return findProject(requestedName);
+    }
+
+    return findProjectByCwd(getRequestCwd(req));
+}
+
 /**
  * Load all projects array from projects.json.
  */
@@ -210,7 +467,7 @@ module.exports = function mountControlRoomRoutes(app) {
     // ── 2. GET /api/projects/:name/stats ───────────────────────────────────
 
     app.get('/api/projects/:name/stats', (req, res) => {
-        const project = findProject(req.params.name);
+        const project = resolveProject(req);
         if (!project) return res.status(404).json({ error: 'Project not found' });
 
         const tasks = parseTaskStats(project.masterPlan || '');
@@ -228,7 +485,7 @@ module.exports = function mountControlRoomRoutes(app) {
     // ── 3. GET /api/projects/:name/summary ─────────────────────────────────
 
     app.get('/api/projects/:name/summary', (req, res) => {
-        const project = findProject(req.params.name);
+        const project = resolveProject(req);
         if (!project) return res.status(404).json({ error: 'Project not found' });
 
         const cacheFile = path.join(SUMMARIES_DIR, `${project.name}.json`);
@@ -292,7 +549,7 @@ module.exports = function mountControlRoomRoutes(app) {
     // ── 4. GET /api/projects/:name/kickstart ───────────────────────────────
 
     app.get('/api/projects/:name/kickstart', (req, res) => {
-        const project = findProject(req.params.name);
+        const project = resolveProject(req);
         if (!project) return res.status(404).json({ error: 'Project not found' });
 
         const stack = detectTechStack(project.root || '');
@@ -366,7 +623,8 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     app.post('/api/projects/:name/archive', (req, res) => {
         const projects = loadProjects();
-        const idx = projects.findIndex(p => p.name === req.params.name);
+        const target = resolveProject(req);
+        const idx = projects.findIndex(p => p.name === target?.name);
         if (idx === -1) return res.status(404).json({ error: 'Project not found' });
 
         projects[idx].archived = true;
@@ -378,7 +636,8 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     app.post('/api/projects/:name/unarchive', (req, res) => {
         const projects = loadProjects();
-        const idx = projects.findIndex(p => p.name === req.params.name);
+        const target = resolveProject(req);
+        const idx = projects.findIndex(p => p.name === target?.name);
         if (idx === -1) return res.status(404).json({ error: 'Project not found' });
 
         projects[idx].archived = false;
@@ -390,7 +649,8 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     app.delete('/api/projects/:name', (req, res) => {
         const projects = loadProjects();
-        const idx = projects.findIndex(p => p.name === req.params.name);
+        const target = resolveProject(req);
+        const idx = projects.findIndex(p => p.name === target?.name);
         if (idx === -1) return res.status(404).json({ error: 'Project not found' });
 
         projects.splice(idx, 1);
@@ -402,7 +662,8 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     app.post('/api/projects/:name/notes', (req, res) => {
         const projects = loadProjects();
-        const idx = projects.findIndex(p => p.name === req.params.name);
+        const target = resolveProject(req);
+        const idx = projects.findIndex(p => p.name === target?.name);
         if (idx === -1) return res.status(404).json({ error: 'Project not found' });
 
         projects[idx].notes = req.body.notes || '';
@@ -413,7 +674,10 @@ Start by reviewing the recent changes and pick up the next task.`;
     // ── 8. GET /api/projects/:name/cover ───────────────────────────────────
 
     app.get('/api/projects/:name/cover', (req, res) => {
-        const cover = findCoverFile(req.params.name);
+        const project = resolveProject(req);
+        if (!project) return res.status(404).json({ error: 'Project not found' });
+
+        const cover = findCoverFile(project.name);
         if (!cover) return res.status(404).json({ error: 'No cover image found' });
 
         const mimeMap = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
@@ -423,7 +687,9 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     // GET /api/projects/:name/covers — list all cover versions (current + history)
     app.get('/api/projects/:name/covers', (req, res) => {
-        const projectName = req.params.name;
+        const project = resolveProject(req);
+        if (!project) return res.status(404).json({ error: 'Project not found' });
+        const projectName = project.name;
         const current = findCoverFile(projectName);
         const historyDir = path.join(COVERS_DIR, 'history');
         const versions = [];
@@ -462,8 +728,11 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     // GET /api/projects/:name/covers/:timestamp — serve a specific historical cover
     app.get('/api/projects/:name/covers/:timestamp', (req, res) => {
+        const project = resolveProject(req);
+        if (!project) return res.status(404).json({ error: 'Project not found' });
+
         const historyDir = path.join(COVERS_DIR, 'history');
-        const prefix = `${req.params.name}_${req.params.timestamp}.`;
+        const prefix = `${project.name}_${req.params.timestamp}.`;
         if (!fs.existsSync(historyDir)) return res.status(404).json({ error: 'No history' });
         const file = fs.readdirSync(historyDir).find(f => f.startsWith(prefix));
         if (!file) return res.status(404).json({ error: 'Version not found' });
@@ -476,7 +745,9 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     // POST /api/projects/:name/cover/restore — restore a historical cover as current
     app.post('/api/projects/:name/cover/restore', (req, res) => {
-        const projectName = req.params.name;
+        const project = resolveProject(req);
+        if (!project) return res.status(404).json({ error: 'Project not found' });
+        const projectName = project.name;
         const { url } = req.body || {};
         if (!url) return res.status(400).json({ error: 'Missing url parameter' });
 
@@ -517,6 +788,9 @@ Start by reviewing the recent changes and pick up the next task.`;
     // ── 9. POST /api/projects/:name/cover (raw body upload) ────────────────
 
     app.post('/api/projects/:name/cover', (req, res) => {
+        const project = resolveProject(req);
+        if (!project) return res.status(404).json({ error: 'Project not found' });
+
         const contentType = (req.headers['content-type'] || '').toLowerCase();
         let ext = 'png';
         if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
@@ -532,11 +806,11 @@ Start by reviewing the recent changes and pick up the next task.`;
             }
 
             fs.mkdirSync(COVERS_DIR, { recursive: true });
-            const destPath = path.join(COVERS_DIR, `${req.params.name}.${ext}`);
+            const destPath = path.join(COVERS_DIR, `${project.name}.${ext}`);
 
             // Remove other formats if they exist
             for (const oldExt of ['png', 'jpg', 'jpeg', 'webp']) {
-                const old = path.join(COVERS_DIR, `${req.params.name}.${oldExt}`);
+                const old = path.join(COVERS_DIR, `${project.name}.${oldExt}`);
                 if (old !== destPath && fs.existsSync(old)) {
                     try { fs.unlinkSync(old); } catch { /* ok */ }
                 }
@@ -546,7 +820,7 @@ Start by reviewing the recent changes and pick up the next task.`;
                 if (err) return res.status(500).json({ error: 'Failed to save cover', details: err.message });
                 res.json({
                     success: true,
-                    coverUrl: `/api/projects/${encodeURIComponent(req.params.name)}/cover`
+                    coverUrl: `/api/projects/${encodeURIComponent(project.name)}/cover`
                 });
             });
         });
@@ -571,12 +845,14 @@ Start by reviewing the recent changes and pick up the next task.`;
         coverApi.apiKey = apiKey;
         coverApi.provider = provider;
 
-        const projectName = req.params.name;
+        const project = resolveProject(req);
+        if (!project) return res.status(404).json({ error: 'Project not found' });
+        const projectName = project.name;
 
         // Category-based accent color from project path
         const projects = loadProjects();
-        const project = projects.find(p => p.name === projectName);
-        const root = project?.root || '';
+        const projectRecord = projects.find(p => p.name === projectName) || project;
+        const root = projectRecord?.root || '';
         const categoryColors = {
             'productivity': { accent: 'teal (#4ECDC4)', secondary: 'gold (#D4AF37)' },
             'bots+automation': { accent: 'electric blue (#3B82F6)', secondary: 'silver (#C0C0C0)' },
@@ -591,21 +867,21 @@ Start by reviewing the recent changes and pick up the next task.`;
         const colors = categoryColors[catFolder] || { accent: 'teal (#4ECDC4)', secondary: 'gold (#D4AF37)' };
 
         // Gather project context for a meaningful cover
-        const techStack = project?.root ? detectTechStack(project.root) : 'Unknown';
+        const techStack = projectRecord?.root ? detectTechStack(projectRecord.root) : 'Unknown';
 
         // Try to get project description from package.json
         let projectDescription = '';
         try {
-            const pkgPath = path.join(project.root, 'package.json');
+            const pkgPath = path.join(projectRecord.root, 'package.json');
             const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
             projectDescription = pkg.description || '';
         } catch { /* no package.json or no description */ }
 
         // Try to get context from MASTER_PLAN.md overview section
         let projectPurpose = '';
-        if (project?.masterPlan) {
+        if (projectRecord?.masterPlan) {
             try {
-                const mpContent = fs.readFileSync(project.masterPlan, 'utf8');
+                const mpContent = fs.readFileSync(projectRecord.masterPlan, 'utf8');
                 // Look for "## Overview" or "## Project Overview" section
                 const overviewMatch = mpContent.match(/##\s*(?:Project\s+)?Overview[^\n]*\n([\s\S]*?)(?=\n##|\n---|\Z)/i);
                 if (overviewMatch) {
@@ -619,9 +895,9 @@ Start by reviewing the recent changes and pick up the next task.`;
 
         // Get recent task titles for thematic hints (top 5 active tasks)
         let taskHints = '';
-        if (project?.masterPlan) {
+        if (projectRecord?.masterPlan) {
             try {
-                const mpContent = fs.readFileSync(project.masterPlan, 'utf8');
+                const mpContent = fs.readFileSync(projectRecord.masterPlan, 'utf8');
                 const activeTasks = [];
                 const taskRegex = /###\s*(?:~~)?(?:TASK|BUG|FEATURE)-\d+(?:~~)?:\s*(.+?)(?:\s*\(.*\))?$/gm;
                 let m;
@@ -949,6 +1225,153 @@ Start by reviewing the recent changes and pick up the next task.`;
         return entries;
     }
 
+    function getCombinedChangelogEntries(days, projectFilter) {
+        const projects = projectFilter ? [projectFilter] : listChangelogProjects();
+        let entries = [];
+
+        for (const proj of projects) {
+            entries = entries.concat(readChangelogEntries(proj, days));
+        }
+
+        return entries
+            .concat(readLiveClaudeEntries(days, projectFilter))
+            .concat(readOpenCodeEntries(days, projectFilter));
+    }
+
+    function parseGitPorcelain(raw) {
+        return raw.split('\n')
+            .filter(Boolean)
+            .map(line => {
+                const filePart = line.slice(3);
+                const renamedPath = filePart.includes(' -> ') ? filePart.split(' -> ').pop() : filePart;
+                return renamedPath.trim().replace(/^"|"$/g, '');
+            })
+            .filter(Boolean);
+    }
+
+    function toRelativeChangelogFile(entryFile, cwd) {
+        if (!entryFile || typeof entryFile !== 'string') return null;
+        const normalized = entryFile.replace(/\\/g, '/');
+        if (path.isAbsolute(entryFile)) {
+            const relative = path.relative(cwd, entryFile);
+            if (relative.startsWith('..') || path.isAbsolute(relative)) return normalized;
+            return relative.replace(/\\/g, '/');
+        }
+        return normalized.replace(/^\.\//, '');
+    }
+
+    function collectTaskTags(entry) {
+        const text = [entry.summary, entry.cmd, entry.file]
+            .filter(Boolean)
+            .join(' ');
+        const matches = text.match(/\b(?:TASK|BUG|ROAD|IDEA|ISSUE|FEAT)-\d+\b/g) || [];
+        return [...new Set(matches)];
+    }
+
+    function getDirtyAttribution(cwd, days) {
+        return new Promise((resolve, reject) => {
+            execFile('git', ['-C', cwd, 'status', '--porcelain'], { timeout: 3000 }, (error, stdout) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+
+                const files = parseGitPorcelain(stdout);
+                const project = getProjectNameFromCwd(cwd);
+                const entries = getCombinedChangelogEntries(days, project);
+                const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+
+                resolve(files.map(file => {
+                    const sessionsById = new Map();
+                    let lastClaudeEditMs = null;
+
+                    for (const entry of entries) {
+                        if (toRelativeChangelogFile(entry.file, cwd) !== file) continue;
+                        const seenMs = entry.ts ? Date.parse(entry.ts) : NaN;
+                        if (!Number.isFinite(seenMs) || seenMs < cutoffMs) continue;
+
+                        const sid = entry.sid || 'unknown';
+                        const current = sessionsById.get(sid) || {
+                            sid,
+                            agent: entry.agent || null,
+                            lastSeenMs: 0,
+                            edits: 0,
+                            tasks: new Set()
+                        };
+
+                        current.lastSeenMs = Math.max(current.lastSeenMs, seenMs);
+                        current.edits += 1;
+                        for (const tag of collectTaskTags(entry)) current.tasks.add(tag);
+                        sessionsById.set(sid, current);
+                        lastClaudeEditMs = Math.max(lastClaudeEditMs || 0, seenMs);
+                    }
+
+                    let fileMtimeMs = null;
+                    try {
+                        fileMtimeMs = fs.statSync(path.join(cwd, file)).mtimeMs;
+                    } catch {
+                        fileMtimeMs = null;
+                    }
+
+                    const sessions = [...sessionsById.values()].map(session => ({
+                        ...session,
+                        tasks: [...session.tasks]
+                    })).sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+
+                    return {
+                        file,
+                        sessions,
+                        lastClaudeEditMs,
+                        fileMtimeMs,
+                        verdict: sessions.length === 0 ? 'manual' : sessions.length === 1 ? 'agent' : 'shared'
+                    };
+                }));
+            });
+        });
+    }
+
+    function getActiveSessions(minutes, cwd) {
+        const days = minutes / (24 * 60);
+        const cutoffMs = Date.now() - (minutes * 60 * 1000);
+        const project = cwd ? getProjectNameFromCwd(cwd) : null;
+        const entries = getCombinedChangelogEntries(days, project);
+        const sessionsById = new Map();
+
+        for (const entry of entries) {
+            const seenMs = entry.ts ? Date.parse(entry.ts) : NaN;
+            if (!Number.isFinite(seenMs) || seenMs < cutoffMs) continue;
+            if (cwd && entry.cwd) {
+                try {
+                    if (path.resolve(entry.cwd) !== cwd) continue;
+                } catch {
+                    continue;
+                }
+            }
+
+            const sid = entry.sid || 'unknown';
+            const current = sessionsById.get(sid) || {
+                sid,
+                agent: entry.agent || null,
+                lastSeenMs: 0,
+                toolCalls: 0,
+                distinctFiles: new Set(),
+                taskTags: new Set()
+            };
+
+            current.lastSeenMs = Math.max(current.lastSeenMs, seenMs);
+            current.toolCalls += 1;
+            if (entry.file) current.distinctFiles.add(toRelativeChangelogFile(entry.file, entry.cwd || cwd || '') || entry.file);
+            for (const tag of collectTaskTags(entry)) current.taskTags.add(tag);
+            sessionsById.set(sid, current);
+        }
+
+        return [...sessionsById.values()].map(session => ({
+            ...session,
+            distinctFiles: session.distinctFiles.size,
+            taskTags: [...session.taskTags]
+        })).sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+    }
+
     // ── 17. GET /api/changelog/projects ───────────────────────────────────
 
     app.get('/api/changelog/projects', (req, res) => {
@@ -963,13 +1386,7 @@ Start by reviewing the recent changes and pick up the next task.`;
         const limit = Math.min(parseInt(req.query.limit, 10) || 500, 2000);
         const projectFilter = req.query.project || null;
 
-        const projects = projectFilter ? [projectFilter] : listChangelogProjects();
-        let entries = [];
-
-        for (const proj of projects) {
-            const projEntries = readChangelogEntries(proj, days);
-            entries = entries.concat(projEntries);
-        }
+        let entries = getCombinedChangelogEntries(days, projectFilter);
 
         // Apply tool filter
         if (toolFilter) {
@@ -989,18 +1406,48 @@ Start by reviewing the recent changes and pick up the next task.`;
         res.json({ entries, projects: listChangelogProjects() });
     });
 
+    app.get('/api/dirty-attribution', async (req, res) => {
+        const cwd = getRequestCwd(req);
+        if (!cwd) {
+            res.status(400).json({ error: 'Missing cwd query parameter' });
+            return;
+        }
+
+        const days = Math.min(parseFloat(req.query.days) || 1, 90);
+        const cacheKey = `${cwd}:${days}`;
+        const cached = dirtyAttributionCache.get(cacheKey);
+        if (cached && Date.now() - cached.createdAtMs < DIRTY_ATTRIBUTION_CACHE_TTL_MS) {
+            res.json(cached.files);
+            return;
+        }
+
+        try {
+            const files = await getDirtyAttribution(cwd, days);
+            dirtyAttributionCache.set(cacheKey, { createdAtMs: Date.now(), files });
+            res.json(files);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to compute dirty attribution', detail: error.message });
+        }
+    });
+
+    app.get('/api/active-sessions', (req, res) => {
+        const minutes = Math.min(parseFloat(req.query.minutes) || 30, 24 * 60);
+        const cwd = getRequestCwd(req);
+
+        try {
+            res.json(getActiveSessions(minutes, cwd));
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to compute active sessions', detail: error.message });
+        }
+    });
+
     // ── 19. GET /api/changelog/stats ──────────────────────────────────────
 
     app.get('/api/changelog/stats', (req, res) => {
         const days = Math.min(parseInt(req.query.days, 10) || 7, 90);
         const projectFilter = req.query.project || null;
 
-        const projects = projectFilter ? [projectFilter] : listChangelogProjects();
-        let entries = [];
-
-        for (const proj of projects) {
-            entries = entries.concat(readChangelogEntries(proj, days));
-        }
+        const entries = getCombinedChangelogEntries(days, projectFilter);
 
         const byTool = {};
         const byDay = {};
