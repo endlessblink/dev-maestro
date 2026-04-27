@@ -19,9 +19,14 @@ const OPENCODE_STORAGE_DIR = path.join(process.env.HOME || '', '.local', 'share'
 const DIRTY_ATTRIBUTION_CACHE_TTL_MS = 2000;
 const dirtyAttributionCache = new Map();
 
-const HEARTBEATS_FILE = path.join(DATA_DIR, 'heartbeats.jsonl');
+// LEGACY_HEARTBEATS_FILE: read-only on boot for backward compat with the
+// pre-rotation single-file layout. New writes go to HEARTBEATS_DIR/<date>.jsonl
+// so the file stays bounded as session count grows.
+const LEGACY_HEARTBEATS_FILE = path.join(DATA_DIR, 'heartbeats.jsonl');
+const HEARTBEATS_DIR = path.join(DATA_DIR, 'heartbeats');
 const HEARTBEAT_FLUSH_DEBOUNCE_MS = 500;
 const HEARTBEAT_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const heartbeats = new Map();
 const pendingHeartbeatSids = new Set();
 let heartbeatFlushTimer = null;
@@ -42,31 +47,55 @@ function writeJSON(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
+function getCurrentHeartbeatFile() {
+    const today = new Date().toISOString().slice(0, 10);
+    return path.join(HEARTBEATS_DIR, `${today}.jsonl`);
+}
+
+function getReplayHeartbeatSources() {
+    // The 24h window can span midnight, so today + yesterday is the minimum
+    // coverage. Include the legacy single-file path so heartbeats written
+    // before rotation landed don't disappear after upgrade.
+    const sources = [LEGACY_HEARTBEATS_FILE];
+    const seenDates = new Set();
+    const now = Date.now();
+    for (let offset = 0; offset <= HEARTBEAT_REPLAY_WINDOW_MS; offset += ONE_DAY_MS) {
+        const date = new Date(now - offset).toISOString().slice(0, 10);
+        if (seenDates.has(date)) continue;
+        seenDates.add(date);
+        sources.push(path.join(HEARTBEATS_DIR, `${date}.jsonl`));
+    }
+    return sources;
+}
+
 function loadHeartbeatsFromDisk() {
     if (heartbeatsLoaded) return;
     heartbeatsLoaded = true;
-    let content = '';
-    try {
-        content = fs.readFileSync(HEARTBEATS_FILE, 'utf8');
-    } catch {
-        return;
-    }
 
     const cutoffMs = Date.now() - HEARTBEAT_REPLAY_WINDOW_MS;
-    for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        let row;
+    for (const file of getReplayHeartbeatSources()) {
+        let content = '';
         try {
-            row = JSON.parse(trimmed);
+            content = fs.readFileSync(file, 'utf8');
         } catch {
             continue;
         }
-        if (!row || typeof row.sid !== 'string' || !Number.isFinite(row.lastSeenMs)) continue;
-        if (row.lastSeenMs < cutoffMs) continue;
-        const existing = heartbeats.get(row.sid);
-        if (existing && existing.lastSeenMs >= row.lastSeenMs) continue;
-        heartbeats.set(row.sid, row);
+
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            let row;
+            try {
+                row = JSON.parse(trimmed);
+            } catch {
+                continue;
+            }
+            if (!row || typeof row.sid !== 'string' || !Number.isFinite(row.lastSeenMs)) continue;
+            if (row.lastSeenMs < cutoffMs) continue;
+            const existing = heartbeats.get(row.sid);
+            if (existing && existing.lastSeenMs >= row.lastSeenMs) continue;
+            heartbeats.set(row.sid, row);
+        }
     }
 }
 
@@ -89,8 +118,8 @@ function flushHeartbeats() {
     if (lines.length === 0) return;
 
     try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        fs.appendFileSync(HEARTBEATS_FILE, lines.join('\n') + '\n');
+        fs.mkdirSync(HEARTBEATS_DIR, { recursive: true });
+        fs.appendFileSync(getCurrentHeartbeatFile(), lines.join('\n') + '\n');
     } catch {
         // Disk pressure shouldn't break the in-memory liveness map; the next
         // heartbeat will retry the append.

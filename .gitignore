@@ -10,6 +10,7 @@ data/orchestrations.json
 # User-state migrated from ~/.watchpost/ (2026-04-19)
 data/changelog.db*
 data/heartbeats.jsonl*
+data/heartbeats/
 data/covers/
 data/summaries/
 data/user-notes.json

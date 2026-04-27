@@ -20,6 +20,7 @@ These four tasks together close the "who's working on what right now?" gap in Wa
 | TASK-002 | API: Add `/api/active-sessions?cwd=` for sub-15min session liveness    | P0       | DONE     | -            |
 | TASK-003 | API: Add `POST /api/sessions/heartbeat` + JSONL persistence            | P0       | DONE     | -            |
 | TASK-004 | Hooks: Wire SessionStart/Stop hooks to POST heartbeat from sessions    | P1       | DONE     | TASK-003     |
+| TASK-1771 | API: Daily-rotate heartbeats.jsonl into `data/heartbeats/YYYY-MM-DD.jsonl` | P2  | IN PROGRESS | TASK-003 |
 
 ---
 
@@ -138,6 +139,37 @@ The heartbeat endpoint is useless without sessions actually pinging it. Wire `Se
 - Start a fresh Claude Code session in any project.
 - `curl -sG --data-urlencode "minutes=2" http://localhost:6010/api/active-sessions` shows the new sid within seconds.
 - Killing Watchpost mid-session does not cause the hook to error out (runs `|| true`).
+
+---
+
+### TASK-1771: API: Daily-rotate heartbeats.jsonl into `data/heartbeats/YYYY-MM-DD.jsonl`
+
+**Priority:** P2 | **Status:** IN PROGRESS
+
+**Depends on:** TASK-003
+
+#### Problem
+
+TASK-003 shipped a single unbounded `data/heartbeats.jsonl`. With TASK-004's SessionStart+Stop hooks now active and PostToolUse expansion possible, the file grows linearly with session count. Boot replay scans the whole file every time. Spec called this out under "Side effects to watch" but deferred to a follow-up.
+
+#### Scope
+
+- Write new heartbeats to `data/heartbeats/YYYY-MM-DD.jsonl` (UTC date, matching the changelog rotation pattern at `data/changelog/<project>/YYYY-MM-DD.jsonl`).
+- Boot replay reads today's + yesterday's daily file plus the legacy `data/heartbeats.jsonl` (read-only) so existing entries don't disappear after upgrade.
+- Replay still applies the 24h window filter — anything older is dropped on rebuild.
+- Daily directory is created lazily on first flush.
+
+#### Key files
+
+- `controlroom/api.js` — replace `HEARTBEATS_FILE` write target with a date-keyed file under `HEARTBEATS_DIR`; expand `loadHeartbeatsFromDisk` to scan multiple sources.
+- `.gitignore` — add `data/heartbeats/`.
+
+#### Verification
+
+- POST a heartbeat → file lands in `data/heartbeats/YYYY-MM-DD.jsonl` for today's UTC date.
+- Pre-seed yesterday's file with a fresh entry → restart Watchpost → that sid replays into the in-memory map and surfaces in `/api/active-sessions`.
+- Pre-seed `data/heartbeats.jsonl` (legacy) with a fresh entry → restart → that sid also replays.
+- Pre-seed an old (>24h) entry → restart → that sid does NOT appear.
 
 ---
 
