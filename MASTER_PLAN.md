@@ -20,7 +20,7 @@ These four tasks together close the "who's working on what right now?" gap in Wa
 | TASK-002 | API: Add `/api/active-sessions?cwd=` for sub-15min session liveness    | P0       | DONE     | -            |
 | TASK-003 | API: Add `POST /api/sessions/heartbeat` + JSONL persistence            | P0       | DONE     | -            |
 | TASK-004 | Hooks: Wire SessionStart/Stop hooks to POST heartbeat from sessions    | P1       | DONE     | TASK-003     |
-| TASK-1771 | API: Daily-rotate heartbeats.jsonl into `data/heartbeats/YYYY-MM-DD.jsonl` | P2  | IN PROGRESS | TASK-003 |
+| TASK-1771 | API: Daily-rotate heartbeats.jsonl into `data/heartbeats/YYYY-MM-DD.jsonl` | P2  | DONE     | TASK-003 |
 
 ---
 
@@ -144,7 +144,7 @@ The heartbeat endpoint is useless without sessions actually pinging it. Wire `Se
 
 ### TASK-1771: API: Daily-rotate heartbeats.jsonl into `data/heartbeats/YYYY-MM-DD.jsonl`
 
-**Priority:** P2 | **Status:** IN PROGRESS
+**Priority:** P2 | **Status:** DONE (2026-04-27)
 
 **Depends on:** TASK-003
 
