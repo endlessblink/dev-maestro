@@ -27,6 +27,41 @@ npm start
 Then in Windows, open `http://localhost:6010`. WSL forwards localhost
 automatically. No further config needed.
 
+### WSL2 with project on a Windows drive (e.g. D:)
+
+If your project lives on a Windows drive (say `D:\my-projects\foo`) and you
+want Watchpost (running in WSL2) to display Claude transcripts written by
+Windows-native sessions on that same project, add a path mapping so the
+Windows-style `D:\my-projects\foo` resolves to the WSL2-style `/mnt/d/my-projects/foo`:
+
+In `.env`:
+
+```ini
+WATCHPOST_PATH_MAPPINGS=[{"linux":"/mnt/d","windows":"D:\\"},{"linux":"/mnt/c","windows":"C:\\"}]
+```
+
+Or in `projects.json`:
+
+```json
+{
+  "pathMappings": [
+    { "linux": "/mnt/d", "windows": "D:\\" },
+    { "linux": "/mnt/c", "windows": "C:\\" }
+  ],
+  "projects": [ ... ]
+}
+```
+
+You typically do **not** need to also configure
+`WATCHPOST_CLAUDE_PROJECTS_DIRS` — Claude transcripts in WSL2 live under
+`~/.claude/projects` (the WSL2 home), and Windows-native Claude transcripts
+live at `C:\Users\you\.claude\projects` which is `/mnt/c/Users/you/.claude/projects`
+from WSL2. Only set the env var if you want to merge both sources:
+
+```ini
+WATCHPOST_CLAUDE_PROJECTS_DIRS=/home/you/.claude/projects,/mnt/c/Users/you/.claude/projects
+```
+
 ---
 
 ## Mode 2: Native Windows
