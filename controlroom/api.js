@@ -19,6 +19,14 @@ const OPENCODE_STORAGE_DIR = path.join(process.env.HOME || '', '.local', 'share'
 const DIRTY_ATTRIBUTION_CACHE_TTL_MS = 2000;
 const dirtyAttributionCache = new Map();
 
+const HEARTBEATS_FILE = path.join(DATA_DIR, 'heartbeats.jsonl');
+const HEARTBEAT_FLUSH_DEBOUNCE_MS = 500;
+const HEARTBEAT_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const heartbeats = new Map();
+const pendingHeartbeatSids = new Set();
+let heartbeatFlushTimer = null;
+let heartbeatsLoaded = false;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function readJSON(filePath, fallback) {
@@ -32,6 +40,78 @@ function readJSON(filePath, fallback) {
 function writeJSON(filePath, data) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+function loadHeartbeatsFromDisk() {
+    if (heartbeatsLoaded) return;
+    heartbeatsLoaded = true;
+    let content = '';
+    try {
+        content = fs.readFileSync(HEARTBEATS_FILE, 'utf8');
+    } catch {
+        return;
+    }
+
+    const cutoffMs = Date.now() - HEARTBEAT_REPLAY_WINDOW_MS;
+    for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        let row;
+        try {
+            row = JSON.parse(trimmed);
+        } catch {
+            continue;
+        }
+        if (!row || typeof row.sid !== 'string' || !Number.isFinite(row.lastSeenMs)) continue;
+        if (row.lastSeenMs < cutoffMs) continue;
+        const existing = heartbeats.get(row.sid);
+        if (existing && existing.lastSeenMs >= row.lastSeenMs) continue;
+        heartbeats.set(row.sid, row);
+    }
+}
+
+function scheduleHeartbeatFlush() {
+    if (heartbeatFlushTimer) return;
+    heartbeatFlushTimer = setTimeout(flushHeartbeats, HEARTBEAT_FLUSH_DEBOUNCE_MS);
+    if (typeof heartbeatFlushTimer.unref === 'function') heartbeatFlushTimer.unref();
+}
+
+function flushHeartbeats() {
+    heartbeatFlushTimer = null;
+    if (pendingHeartbeatSids.size === 0) return;
+
+    const lines = [];
+    for (const sid of pendingHeartbeatSids) {
+        const entry = heartbeats.get(sid);
+        if (entry) lines.push(JSON.stringify(entry));
+    }
+    pendingHeartbeatSids.clear();
+    if (lines.length === 0) return;
+
+    try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+        fs.appendFileSync(HEARTBEATS_FILE, lines.join('\n') + '\n');
+    } catch {
+        // Disk pressure shouldn't break the in-memory liveness map; the next
+        // heartbeat will retry the append.
+    }
+}
+
+function getLiveHeartbeats(cutoffMs, cwd) {
+    loadHeartbeatsFromDisk();
+    const out = [];
+    for (const entry of heartbeats.values()) {
+        if (!Number.isFinite(entry.lastSeenMs) || entry.lastSeenMs < cutoffMs) continue;
+        if (cwd && entry.cwd) {
+            try {
+                if (path.resolve(entry.cwd) !== cwd) continue;
+            } catch {
+                continue;
+            }
+        }
+        out.push(entry);
+    }
+    return out;
 }
 
 function safeJSONStringify(value) {
@@ -1365,6 +1445,30 @@ Start by reviewing the recent changes and pick up the next task.`;
             sessionsById.set(sid, current);
         }
 
+        // Merge heartbeat-only sessions: warm-but-quiet sessions (waiting on
+        // user input, between tool calls) won't show up in the changelog scan
+        // but are still alive via /api/sessions/heartbeat.
+        for (const hb of getLiveHeartbeats(cutoffMs, cwd)) {
+            const sid = hb.sid;
+            const existing = sessionsById.get(sid);
+            if (existing) {
+                if (hb.lastSeenMs > existing.lastSeenMs) existing.lastSeenMs = hb.lastSeenMs;
+                if (!existing.agent && hb.agent) existing.agent = hb.agent;
+                if (hb.activeTaskId) existing.taskTags.add(hb.activeTaskId);
+            } else {
+                const synthetic = {
+                    sid,
+                    agent: hb.agent || null,
+                    lastSeenMs: hb.lastSeenMs,
+                    toolCalls: 0,
+                    distinctFiles: new Set(),
+                    taskTags: new Set()
+                };
+                if (hb.activeTaskId) synthetic.taskTags.add(hb.activeTaskId);
+                sessionsById.set(sid, synthetic);
+            }
+        }
+
         return [...sessionsById.values()].map(session => ({
             ...session,
             distinctFiles: session.distinctFiles.size,
@@ -1439,6 +1543,41 @@ Start by reviewing the recent changes and pick up the next task.`;
         } catch (error) {
             res.status(500).json({ error: 'Failed to compute active sessions', detail: error.message });
         }
+    });
+
+    app.post('/api/sessions/heartbeat', (req, res) => {
+        const body = req.body || {};
+        const sid = typeof body.sid === 'string' ? body.sid.trim() : '';
+        const cwdRaw = typeof body.cwd === 'string' ? body.cwd.trim() : '';
+        if (!sid || !cwdRaw) {
+            res.status(400).json({ error: 'sid and cwd are required strings' });
+            return;
+        }
+
+        let resolvedCwd;
+        try {
+            resolvedCwd = path.resolve(cwdRaw);
+        } catch {
+            res.status(400).json({ error: 'cwd is not a resolvable path' });
+            return;
+        }
+
+        // No auth: Watchpost is local-only by design. Any localhost process
+        // can poison the heartbeat map; that's an accepted risk for a dev
+        // dashboard, not a production service.
+        loadHeartbeatsFromDisk();
+        const entry = {
+            sid,
+            cwd: resolvedCwd,
+            activeTaskId: typeof body.activeTaskId === 'string' && body.activeTaskId ? body.activeTaskId : null,
+            agent: typeof body.agent === 'string' && body.agent ? body.agent : null,
+            lastSeenMs: Date.now()
+        };
+        heartbeats.set(sid, entry);
+        pendingHeartbeatSids.add(sid);
+        scheduleHeartbeatFlush();
+
+        res.json({ ok: true, sid, lastSeenMs: entry.lastSeenMs });
     });
 
     // ── 19. GET /api/changelog/stats ──────────────────────────────────────
