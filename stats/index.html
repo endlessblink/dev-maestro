@@ -731,11 +731,18 @@
     <script>
         // API configuration - same as kanban board
         const API_BASE = window.location.origin;
+        let currentProjectRoot = '';
+
+        function withProjectContext(url) {
+            if (!currentProjectRoot) return url;
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}cwd=${encodeURIComponent(currentProjectRoot)}`;
+        }
 
         // Parse MASTER_PLAN.md for detailed metrics
         async function fetchAndParse() {
             try {
-                const response = await fetch(`${API_BASE}/api/master-plan?v=${Date.now()}`);
+                const response = await fetch(withProjectContext(`${API_BASE}/api/master-plan?v=${Date.now()}`));
                 if (!response.ok) throw new Error('Failed to fetch MASTER_PLAN.md');
                 const json = await response.json();
                 const text = json.content;
@@ -1270,6 +1277,9 @@
 
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'tab-activated') {
+                init();
+            } else if (event.data?.type === 'switch-project') {
+                currentProjectRoot = event.data.projectRoot || '';
                 init();
             }
         });

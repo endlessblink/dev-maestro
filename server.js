@@ -65,9 +65,9 @@ const healthScanner = require('./scripts/health-scanner');
 const app = express();
 const PORT = process.env.PORT || 6010;
 
-// Cache for health scan results
-let healthCache = null;
-let healthScanInProgress = false;
+// Cache for health scan results, keyed per project context
+const healthCache = new Map();
+const healthScanInProgress = new Set();
 
 // SSE Clients
 let clients = [];
@@ -81,6 +81,301 @@ const broadcastLog = (message) => {
     });
 };
 
+function getRegisteredProjects() {
+    const projectsFile = path.join(__dirname, 'projects.json');
+    const outlookPath = path.join(__dirname, 'data', 'outlook.json');
+
+    try {
+        const parsed = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
+        const projects = Array.isArray(parsed)
+            ? parsed
+            : Array.isArray(parsed?.projects)
+                ? parsed.projects
+                : [];
+
+        let changed = false;
+        let mergedProjects = [...projects];
+
+        try {
+            const outlook = JSON.parse(fs.readFileSync(outlookPath, 'utf8'));
+            const passiveProjects = Array.isArray(outlook?.payload?.projects) ? outlook.payload.projects : [];
+
+            for (const passiveProject of passiveProjects) {
+                const root = passiveProject?.root ? path.resolve(passiveProject.root) : null;
+                const name = passiveProject?.name || (root ? path.basename(root) : null);
+                if (!root || !name) continue;
+
+                const exists = mergedProjects.some(project => {
+                    const projectRoot = project.root || project.path;
+                    return (projectRoot && path.resolve(projectRoot) === root) || project.name === name;
+                });
+
+                if (exists) continue;
+
+                const markerPath = path.join(root, '.watchpost.json');
+                let masterPlan = null;
+
+                try {
+                    if (fs.existsSync(markerPath)) {
+                        const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+                        if (typeof marker?.masterPlanPath === 'string' && fs.existsSync(marker.masterPlanPath)) {
+                            masterPlan = path.resolve(marker.masterPlanPath);
+                        }
+                    }
+                } catch {
+                    // Ignore malformed marker files and fall back to common paths.
+                }
+
+                if (!masterPlan) {
+                    const candidates = [
+                        path.join(root, 'docs', 'MASTER_PLAN.md'),
+                        path.join(root, 'MASTER_PLAN.md')
+                    ];
+                    masterPlan = candidates.find(candidate => fs.existsSync(candidate)) || null;
+                }
+
+                mergedProjects.push({
+                    name,
+                    root,
+                    masterPlan,
+                    modules: [],
+                    source: 'auto-discovered',
+                    addedAt: new Date().toISOString().slice(0, 10)
+                });
+                changed = true;
+            }
+        } catch {
+            // Ignore missing outlook.json.
+        }
+
+        if (changed) {
+            const nextData = Array.isArray(parsed) ? mergedProjects : { ...parsed, projects: mergedProjects };
+            fs.writeFileSync(projectsFile, JSON.stringify(nextData, null, 2));
+        }
+
+        return mergedProjects;
+    } catch (err) {
+        console.error('[Locks] Failed to read projects.json:', err.message);
+    }
+
+    return [];
+}
+
+function getRequestCwd(req) {
+    let queryCwd = null;
+    if (typeof req?.originalUrl === 'string') {
+        const rawQuery = req.originalUrl.split('?')[1] || '';
+        const match = rawQuery.match(/(?:^|&)cwd=([^&]*)/);
+        if (match) {
+            try {
+                queryCwd = decodeURIComponent(match[1]);
+            } catch {
+                queryCwd = match[1];
+            }
+        }
+    }
+
+    if (!queryCwd && typeof req?.query?.cwd === 'string') {
+        queryCwd = req.query.cwd;
+    }
+
+    const bodyCwd = typeof req?.body?.cwd === 'string' ? req.body.cwd : null;
+    const headerCwd = typeof req?.headers?.['x-watchpost-cwd'] === 'string'
+        ? req.headers['x-watchpost-cwd']
+        : null;
+
+    const raw = queryCwd || bodyCwd || headerCwd;
+    if (!raw) return null;
+
+    try {
+        return path.resolve(raw);
+    } catch {
+        return null;
+    }
+}
+
+function findProjectForCwd(cwd) {
+    if (!cwd) return null;
+
+    let bestMatch = null;
+    const projects = getRegisteredProjects();
+
+    for (const project of projects) {
+        const root = project.root || project.path;
+        if (!root || !cwd.startsWith(root)) continue;
+
+        if (!bestMatch || root.length > bestMatch.root.length) {
+            bestMatch = { ...project, root };
+        }
+    }
+
+    if (bestMatch) return bestMatch;
+
+    let current = path.resolve(cwd);
+    while (true) {
+        const markerPath = path.join(current, '.watchpost.json');
+        const hasProjectMarker = fs.existsSync(markerPath);
+        const hasDocsMasterPlan = fs.existsSync(path.join(current, 'docs', 'MASTER_PLAN.md'));
+        const hasRootMasterPlan = fs.existsSync(path.join(current, 'MASTER_PLAN.md'));
+        const hasGitRoot = fs.existsSync(path.join(current, '.git'));
+
+        if (hasProjectMarker || hasDocsMasterPlan || hasRootMasterPlan || hasGitRoot) {
+            let masterPlan = null;
+            let inferredName = path.basename(current);
+
+            try {
+                if (hasProjectMarker) {
+                    const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+                    if (typeof marker?.masterPlanPath === 'string' && fs.existsSync(marker.masterPlanPath)) {
+                        masterPlan = path.resolve(marker.masterPlanPath);
+                    }
+                    if (typeof marker?.projectName === 'string' && marker.projectName.trim()) {
+                        inferredName = marker.projectName.trim();
+                    }
+                }
+            } catch {
+                // Ignore malformed marker and fall back to common paths.
+            }
+
+            if (!masterPlan) {
+                const candidates = [
+                    path.join(current, 'docs', 'MASTER_PLAN.md'),
+                    path.join(current, 'MASTER_PLAN.md')
+                ];
+                masterPlan = candidates.find(candidate => fs.existsSync(candidate)) || null;
+            }
+
+            const existing = projects.find(project => {
+                const projectRoot = project.root || project.path;
+                return projectRoot && path.resolve(projectRoot) === current;
+            });
+
+            if (existing) {
+                return { ...existing, root: path.resolve(existing.root || existing.path) };
+            }
+
+            const nextProjects = [...projects, {
+                name: inferredName,
+                root: current,
+                masterPlan,
+                modules: [],
+                source: 'auto-discovered',
+                addedAt: new Date().toISOString().slice(0, 10)
+            }];
+            const projectsFile = path.join(__dirname, 'projects.json');
+            const parsed = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
+            const nextData = Array.isArray(parsed) ? nextProjects : { ...parsed, projects: nextProjects };
+            fs.writeFileSync(projectsFile, JSON.stringify(nextData, null, 2));
+
+            return {
+                name: inferredName,
+                root: current,
+                masterPlan
+            };
+        }
+
+        const parent = path.dirname(current);
+        if (parent === current) break;
+        current = parent;
+    }
+
+    return bestMatch;
+}
+
+function getDefaultMasterPlanPath() {
+    return path.join(__dirname, '../docs/MASTER_PLAN.md');
+}
+
+function getConfiguredMasterPlanPath() {
+    return process.env.MASTER_PLAN_PATH
+        ? path.resolve(process.env.MASTER_PLAN_PATH)
+        : getDefaultMasterPlanPath();
+}
+
+function getPassiveActiveProject() {
+    const outlookPath = path.join(__dirname, 'data', 'outlook.json');
+
+    try {
+        const parsed = JSON.parse(fs.readFileSync(outlookPath, 'utf8'));
+        const activeProjectName = parsed?.payload?.activeProject;
+        if (!activeProjectName) return null;
+
+        const matchedProject = getRegisteredProjects().find(project => project.name === activeProjectName);
+        const passiveProject = Array.isArray(parsed?.payload?.projects)
+            ? parsed.payload.projects.find(project => project?.name === activeProjectName)
+            : null;
+
+        const root = matchedProject?.root || matchedProject?.path || passiveProject?.root;
+        if (!root) return null;
+
+        const masterPlan = matchedProject?.masterPlan || null;
+
+        return {
+            source: masterPlan ? 'passive' : 'passive-unregistered',
+            cwd: null,
+            projectName: matchedProject?.name || passiveProject?.name || path.basename(root),
+            projectRoot: path.resolve(root),
+            masterPlanPath: masterPlan ? path.resolve(masterPlan) : null
+        };
+    } catch {
+        return null;
+    }
+}
+
+function getMasterPlanContext(req) {
+    const requestCwd = getRequestCwd(req);
+    const matchedProject = findProjectForCwd(requestCwd);
+
+    if (matchedProject) {
+        return {
+            source: matchedProject.masterPlan ? 'cwd' : 'cwd-unregistered',
+            cwd: requestCwd,
+            projectName: matchedProject.name,
+            projectRoot: path.resolve(matchedProject.root),
+            masterPlanPath: matchedProject.masterPlan ? path.resolve(matchedProject.masterPlan) : null
+        };
+    }
+
+    const passiveProject = getPassiveActiveProject();
+    if (passiveProject) {
+        return passiveProject;
+    }
+
+    const configuredPath = getConfiguredMasterPlanPath();
+    return {
+        source: process.env.MASTER_PLAN_PATH ? 'configured' : 'default',
+        cwd: requestCwd,
+        projectName: null,
+        projectRoot: path.dirname(configuredPath),
+        masterPlanPath: configuredPath
+    };
+}
+
+function getProjectRootForRequest(req) {
+    const requestCwd = getRequestCwd(req);
+    const matchedProject = findProjectForCwd(requestCwd);
+
+    if (matchedProject?.root) return path.resolve(matchedProject.root);
+    if (requestCwd) return requestCwd;
+
+    return getMasterPlanContext(req).projectRoot;
+}
+
+function getHealthCacheKey(req) {
+    return getProjectRootForRequest(req);
+}
+
+function isPidAlive(pid) {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 // Enable CORS
 app.use(cors());
 
@@ -93,18 +388,18 @@ app.use(express.static(__dirname));
 // Status API - for Claude to detect if Watchpost is running
 app.get('/api/status', (req, res) => {
     const pkg = require('./package.json');
-    const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
-    const masterPlanPath = process.env.MASTER_PLAN_PATH
-        ? path.resolve(process.env.MASTER_PLAN_PATH)
-        : defaultPath;
+    const context = getMasterPlanContext(req);
 
     res.json({
         running: true,
         name: 'Watchpost',
         version: pkg.version,
         port: PORT,
-        project: path.dirname(masterPlanPath),
-        masterPlanPath: masterPlanPath,
+        project: context.projectRoot,
+        masterPlanPath: context.masterPlanPath,
+        projectName: context.projectName,
+        requestCwd: context.cwd,
+        resolutionSource: context.source,
         uptime: process.uptime(),
         url: `http://localhost:${PORT}`
     });
@@ -123,12 +418,13 @@ app.post('/api/config/project', express.json(), (req, res) => {
 
 // API Endpoint to get MASTER_PLAN.md content
 app.get('/api/master-plan', (req, res) => {
-    // Default to ../docs/MASTER_PLAN.md relative to this script
-    const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
-    // Allow override via env var, resolving relative to CWD or using absolute path
-    const masterPlanPath = process.env.MASTER_PLAN_PATH
-        ? path.resolve(process.env.MASTER_PLAN_PATH)
-        : defaultPath;
+    const { masterPlanPath } = getMasterPlanContext(req);
+
+    if (!masterPlanPath) {
+        return res.status(404).json({
+            error: 'No MASTER_PLAN.md registered for this project'
+        });
+    }
 
     console.log(`[API] Fetching MASTER_PLAN.md from: ${masterPlanPath}`);
 
@@ -149,12 +445,7 @@ app.get('/api/master-plan', (req, res) => {
 app.use(express.json());
 
 // Helper to get Master Plan path
-const getMasterPlanPath = () => {
-    const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
-    return process.env.MASTER_PLAN_PATH
-        ? path.resolve(process.env.MASTER_PLAN_PATH)
-        : defaultPath;
-};
+const getMasterPlanPath = (req) => getMasterPlanContext(req).masterPlanPath;
 
 // Helper to scan for existing IDs and find the next available one
 const getNextId = (content, prefix = 'TASK') => {
@@ -175,7 +466,7 @@ const getNextId = (content, prefix = 'TASK') => {
 // API Endpoint to get the next available ID
 app.get('/api/next-id', (req, res) => {
     const prefix = req.query.prefix || 'TASK';
-    const masterPlanPath = getMasterPlanPath();
+    const masterPlanPath = getMasterPlanPath(req);
 
     console.log(`[API] Calculating next ID for prefix: ${prefix}`);
 
@@ -199,7 +490,7 @@ app.get('/api/next-id', (req, res) => {
 app.post('/api/task/:id/status', (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    const masterPlanPath = getMasterPlanPath();
+    const masterPlanPath = getMasterPlanPath(req);
     console.log(`[API] Updating task ${id} status to ${status}`);
 
     fs.readFile(masterPlanPath, 'utf8', (err, data) => {
@@ -302,7 +593,7 @@ app.post('/api/task/:id/status', (req, res) => {
 app.post('/api/task/:id/complexity', (req, res) => {
     const { id } = req.params;
     const { complexity } = req.body;
-    const masterPlanPath = getMasterPlanPath();
+    const masterPlanPath = getMasterPlanPath(req);
     console.log(`[API] Updating task ${id} complexity to ${complexity}`);
 
     fs.readFile(masterPlanPath, 'utf8', (err, data) => {
@@ -379,7 +670,7 @@ app.post('/api/task/:id/complexity', (req, res) => {
 app.post('/api/task/:id', (req, res) => {
     const { id } = req.params;
     const { property, value } = req.body;
-    const masterPlanPath = getMasterPlanPath();
+    const masterPlanPath = getMasterPlanPath(req);
     console.log(`[API] Updating task ${id} property ${property} to ${value}`);
 
     if (property !== 'priority') {
@@ -445,24 +736,26 @@ app.post('/api/task/:id', (req, res) => {
 // GET /api/health - Full health scan (slow, ~30-60s)
 app.get('/api/health', async (req, res) => {
     console.log('[API] Starting full health scan...');
+    const cacheKey = getHealthCacheKey(req);
+    const projectRoot = getProjectRootForRequest(req);
 
-    if (healthScanInProgress) {
+    if (healthScanInProgress.has(cacheKey)) {
         return res.status(429).json({
             error: 'Scan already in progress',
-            cached: healthCache
+            cached: healthCache.get(cacheKey) || null
         });
     }
 
     try {
-        healthScanInProgress = true;
-        const result = await healthScanner.runFullScan((msg) => broadcastLog(msg));
-        healthCache = result;
-        healthScanInProgress = false;
+        healthScanInProgress.add(cacheKey);
+        const result = await healthScanner.runFullScan({ cwd: projectRoot, onLog: (msg) => broadcastLog(msg) });
+        healthCache.set(cacheKey, result);
+        healthScanInProgress.delete(cacheKey);
 
         console.log(`[API] Full scan completed: Score ${result.health.score}/100 (${result.health.grade})`);
         res.json(result);
     } catch (err) {
-        healthScanInProgress = false;
+        healthScanInProgress.delete(cacheKey);
         console.error(`[API] Health scan error: ${err.message}`);
         res.status(500).json({
             error: 'Health scan failed',
@@ -474,9 +767,10 @@ app.get('/api/health', async (req, res) => {
 // GET /api/health/quick - Quick scan (TS + ESLint only, ~5-10s)
 app.get('/api/health/quick', async (req, res) => {
     console.log('[API] Starting quick health scan...');
+    const projectRoot = getProjectRootForRequest(req);
 
     try {
-        const result = await healthScanner.runQuickScan();
+        const result = await healthScanner.runQuickScan({ cwd: projectRoot });
         console.log('[API] Quick scan completed');
         res.json(result);
     } catch (err) {
@@ -490,7 +784,10 @@ app.get('/api/health/quick', async (req, res) => {
 
 // GET /api/health/cached - Return last scan results (instant)
 app.get('/api/health/cached', (req, res) => {
-    if (!healthCache) {
+    const cacheKey = getHealthCacheKey(req);
+    const cached = healthCache.get(cacheKey);
+
+    if (!cached) {
         return res.status(404).json({
             error: 'No cached scan available',
             message: 'Run a full scan first with GET /api/health'
@@ -498,41 +795,46 @@ app.get('/api/health/cached', (req, res) => {
     }
 
     res.json({
-        ...healthCache,
+        ...cached,
         fromCache: true,
-        cacheAge: Date.now() - new Date(healthCache.timestamp).getTime()
+        cacheAge: Date.now() - new Date(cached.timestamp).getTime()
     });
 });
 
 // GET /api/health/status - Check if scan is in progress
 app.get('/api/health/status', (req, res) => {
+    const cacheKey = getHealthCacheKey(req);
+    const cached = healthCache.get(cacheKey);
     res.json({
-        scanning: healthScanInProgress,
-        hasCachedResult: !!healthCache,
-        lastScanTime: healthCache?.timestamp || null
+        scanning: healthScanInProgress.has(cacheKey),
+        hasCachedResult: !!cached,
+        lastScanTime: cached?.timestamp || null
     });
 });
 
 // POST /api/health/scan - Trigger background scan (non-blocking)
 app.post('/api/health/scan', (req, res) => {
-    if (healthScanInProgress) {
+    const cacheKey = getHealthCacheKey(req);
+    const projectRoot = getProjectRootForRequest(req);
+
+    if (healthScanInProgress.has(cacheKey)) {
         return res.status(429).json({
             error: 'Scan already in progress'
         });
     }
 
     // Start scan in background
-    healthScanInProgress = true;
+    healthScanInProgress.add(cacheKey);
     console.log('[API] Background scan triggered...');
 
-    healthScanner.runFullScan((msg) => broadcastLog(msg))
+    healthScanner.runFullScan({ cwd: projectRoot, onLog: (msg) => broadcastLog(msg) })
         .then(result => {
-            healthCache = result;
-            healthScanInProgress = false;
+            healthCache.set(cacheKey, result);
+            healthScanInProgress.delete(cacheKey);
             console.log(`[API] Background scan completed: Score ${result.health.score}/100`);
         })
         .catch(err => {
-            healthScanInProgress = false;
+            healthScanInProgress.delete(cacheKey);
             console.error(`[API] Background scan error: ${err.message}`);
         });
 
@@ -546,15 +848,17 @@ app.post('/api/health/scan', (req, res) => {
 // GET /api/health/report - Generate AI-friendly markdown report
 app.get('/api/health/report', async (req, res) => {
     const excludeArchive = req.query.includeArchive !== 'true';
+    const cacheKey = getHealthCacheKey(req);
+    const projectRoot = getProjectRootForRequest(req);
 
     // Use cached results if available, otherwise run a scan
-    let scanData = healthCache;
+    let scanData = healthCache.get(cacheKey);
 
     if (!scanData) {
         console.log('[API] No cached results, running full scan for report...');
         try {
-            scanData = await healthScanner.runFullScan();
-            healthCache = scanData;
+            scanData = await healthScanner.runFullScan({ cwd: projectRoot });
+            healthCache.set(cacheKey, scanData);
         } catch (err) {
             return res.status(500).json({
                 error: 'Failed to generate report',
@@ -574,14 +878,16 @@ app.get('/api/health/report', async (req, res) => {
 // GET /api/health/report/json - Return report data as JSON for programmatic use
 app.get('/api/health/report/json', async (req, res) => {
     const excludeArchive = req.query.includeArchive !== 'true';
+    const cacheKey = getHealthCacheKey(req);
+    const projectRoot = getProjectRootForRequest(req);
 
-    let scanData = healthCache;
+    let scanData = healthCache.get(cacheKey);
 
     if (!scanData) {
         console.log('[API] No cached results, running full scan for report...');
         try {
-            scanData = await healthScanner.runFullScan();
-            healthCache = scanData;
+            scanData = await healthScanner.runFullScan({ cwd: projectRoot });
+            healthCache.set(cacheKey, scanData);
         } catch (err) {
             return res.status(500).json({
                 error: 'Failed to generate report',
@@ -607,7 +913,7 @@ app.get('/api/health/report/json', async (req, res) => {
 
 // GET /api/skills - Dynamically scan .claude/skills/ directory
 app.get('/api/skills', (req, res) => {
-    const skillsDir = path.join(__dirname, '../.claude/skills');
+    const skillsDir = path.join(getProjectRootForRequest(req), '.claude', 'skills');
 
     try {
         if (!fs.existsSync(skillsDir)) {
@@ -696,7 +1002,7 @@ app.get('/api/skills', (req, res) => {
 
 // GET /api/docs - Dynamically scan docs/ directory
 app.get('/api/docs', (req, res) => {
-    const docsDir = path.join(__dirname, '../docs');
+    const docsDir = path.join(getProjectRootForRequest(req), 'docs');
 
     try {
         if (!fs.existsSync(docsDir)) {
@@ -786,31 +1092,45 @@ app.get('/api/docs', (req, res) => {
 
 // GET /api/locks - List active task locks
 app.get('/api/locks', (req, res) => {
-    const locksDir = path.join(__dirname, '../.claude/locks');
-
     try {
-        if (!fs.existsSync(locksDir)) {
-            return res.json({ locks: [] });
-        }
-
-        const files = fs.readdirSync(locksDir).filter(f => f.endsWith('.lock'));
         const locks = [];
+        const requestCwd = getRequestCwd(req);
+        const matchedProject = findProjectForCwd(requestCwd);
+        const projects = matchedProject ? [matchedProject] : getRegisteredProjects();
 
-        for (const file of files) {
-            try {
-                const content = fs.readFileSync(path.join(locksDir, file), 'utf8');
-                const lock = JSON.parse(content);
-                const taskId = file.replace('.lock', '');
+        for (const project of projects) {
+            const locksDir = path.join(project.root || project.path || '', '.claude', 'locks');
+            if (!locksDir || !fs.existsSync(locksDir)) continue;
 
-                locks.push({
-                    task_id: taskId,
-                    session_id: lock.session_id || 'unknown',
-                    session_short: (lock.session_id || '').slice(0, 8),
-                    locked_at: lock.locked_at || new Date(lock.timestamp * 1000).toLocaleString(),
-                    files: lock.files || []
-                });
-            } catch (e) {
-                // Skip invalid lock files
+            const files = fs.readdirSync(locksDir).filter(f => f.endsWith('.lock'));
+            for (const file of files) {
+                try {
+                    const fullPath = path.join(locksDir, file);
+                    const content = fs.readFileSync(fullPath, 'utf8');
+                    const lock = JSON.parse(content);
+
+                    if (lock.pid && !isPidAlive(Number(lock.pid))) {
+                        try {
+                            fs.unlinkSync(fullPath);
+                        } catch (err) {
+                            console.warn('[Locks] Failed to remove stale lock:', fullPath, err.message);
+                        }
+                        continue;
+                    }
+
+                    const taskId = lock.task_id || file.replace('.lock', '');
+
+                    locks.push({
+                        task_id: taskId,
+                        session_id: lock.session_id || 'unknown',
+                        session_short: (lock.session_id || '').slice(0, 8),
+                        locked_at: lock.locked_at || new Date(lock.timestamp * 1000).toLocaleString(),
+                        files: lock.files || [],
+                        project: project.name || path.basename(project.root || project.path || '')
+                    });
+                } catch (e) {
+                    // Skip invalid lock files.
+                }
             }
         }
 

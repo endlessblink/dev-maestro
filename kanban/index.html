@@ -2230,6 +2230,19 @@
       },
       useApi: true
     };
+    let currentProjectRoot = '';
+
+    function withProjectContext(url) {
+      if (!currentProjectRoot) return url;
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}cwd=${encodeURIComponent(currentProjectRoot)}`;
+    }
+
+    function apiFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      if (currentProjectRoot) headers.set('x-watchpost-cwd', currentProjectRoot);
+      return fetch(withProjectContext(url), { ...options, headers });
+    }
 
     // Global parsed data cache
     let MASTER_PLAN_DATA = null;
@@ -2261,6 +2274,7 @@
      * Status categories:
      * - 'done': Completed, finished, closed tasks
      * - 'in-progress': Active work, paused, blocked, review
+     * - 'planned': Explicitly planned / deferred tasks
      * - 'todo': Default for unrecognized or new tasks
      */
     function parseTaskStatus(statusText) {
@@ -2280,6 +2294,10 @@
         'REVIEW', 'IN REVIEW', 'TESTING', 'QA', 'UNDER REVIEW',
         'MONITORING', 'AWAITING', 'PENDING REVIEW', 'NEEDS REVIEW',
         '👀'
+      ];
+
+      const plannedPatterns = [
+        'PLANNED', 'PLAN', '📋', 'DEFERRED', 'BACKLOG'
       ];
 
       // In-progress patterns - task is being worked on or temporarily stopped
@@ -2316,7 +2334,14 @@
         }
       }
 
-      // Check in-progress patterns FOURTH
+      // Check planned patterns FOURTH
+      for (const pattern of plannedPatterns) {
+        if (text.includes(pattern)) {
+          return 'planned';
+        }
+      }
+
+      // Check in-progress patterns FIFTH
       for (const pattern of inProgressPatterns) {
         if (text.includes(pattern)) {
           return 'in-progress';
@@ -2327,12 +2352,24 @@
       return 'todo';
     }
 
+    function inferExplicitStatus(task) {
+      if (!task) return 'todo';
+      if (task.status && task.status !== 'todo') return task.status;
+
+      const combined = [task.title || '', task.description || '', task.notes || ''].join(' | ').toUpperCase();
+      const statusMatch = combined.match(/STATUS:\s*([^|\n]+)/i);
+      if (!statusMatch) return task.status || 'todo';
+
+      const parsed = parseTaskStatus(statusMatch[1].trim());
+      return parsed !== 'todo' ? parsed : (task.status || 'todo');
+    }
+
     // Parse MASTER_PLAN.md and extract all sections
     async function parseMasterPlan() {
       try {
         // Add cache-busting timestamp to prevent stale data
         const cacheBuster = `?t=${Date.now()}`;
-        const response = await fetch(CONFIG.files.masterPlan + cacheBuster);
+        const response = await apiFetch(CONFIG.files.masterPlan + cacheBuster);
 
         // Handle API response format (returns JSON with { content: ... })
         let content;
@@ -2508,6 +2545,21 @@
                 } else {
                   data.activeWork[taskIdx].priority = priorityValue;
                 }
+
+                // Mixed meta lines often carry status too:
+                // **Priority:** P1 | **Status:** PLANNED (2026-04-12)
+                const statusMatch = trimmed.match(/\*\*Status\*\*:\s*([^|]+)/i);
+                if (statusMatch) {
+                  const parsedStatus = parseTaskStatus(statusMatch[1].trim());
+                  if (parsedStatus !== 'todo') {
+                    data.activeWork[taskIdx].status = parsedStatus;
+                    if (parsedStatus === 'done') {
+                      data.activeWork[taskIdx].progress = 100;
+                    } else if ((parsedStatus === 'in-progress' || parsedStatus === 'paused') && data.activeWork[taskIdx].progress === 0) {
+                      data.activeWork[taskIdx].progress = 50;
+                    }
+                  }
+                }
               }
               continue; // Don't add priority line to description
             }
@@ -2532,11 +2584,13 @@
               continue; // Don't add complexity line to description
             }
 
-            // Extract **Status**: line as the task's status (override header status)
-            if (trimmed.startsWith('**Status**:')) {
+            // Extract inline **Status** markers, including mixed meta lines like:
+            // **Priority:** P1 | **Status:** PLANNED (2026-04-12)
+            if (trimmed.includes('**Status**:')) {
               const taskIdx = data.activeWork.findIndex(t => t.id === currentItem.id);
               if (taskIdx >= 0) {
-                const statusValue = trimmed.replace('**Status**:', '').trim();
+                const statusMatch = trimmed.match(/\*\*Status\*\*:\s*([^|]+)/i);
+                const statusValue = statusMatch ? statusMatch[1].trim() : trimmed.replace('**Status**:', '').trim();
                 const parsedStatus = parseTaskStatus(statusValue);
                 if (parsedStatus !== 'todo') { // Only override if we found a meaningful status
                   data.activeWork[taskIdx].status = parsedStatus;
@@ -2920,23 +2974,25 @@
           }
         }
 
+        const normalizedItems = allItems.map(item => {
+          const status = inferExplicitStatus(item);
+          const progress = item.progress !== undefined ? item.progress : (status === 'done' ? 100 : (status === 'in-progress' || status === 'paused' ? 50 : 0));
+          return { ...item, status, progress };
+        });
+
         const tasks = {
-          todo: allItems.filter(i => {
-            // Keep in todo ONLY if progress is 0 and not marked done
-            return i.status === 'todo' && (i.progress === 0 || i.progress === undefined);
+          todo: normalizedItems.filter(i => i.status === 'todo' || i.status === 'planned'),
+          inProgress: normalizedItems.filter(i => {
+            // Column placement must follow explicit task status from MASTER_PLAN.
+            // Progress is visual only and must not silently promote planned/todo tasks.
+            return i.status === 'in-progress' && i.progress < 100;
           }),
-          inProgress: allItems.filter(i => {
-            // In progress if explicitly set OR (progress > 0 and < 100 and not done)
-            // Note: Review requires EXPLICIT assignment, never auto-promoted by progress
-            return (i.status === 'in-progress' && i.progress < 100) ||
-              (i.status === 'todo' && i.progress > 0 && i.progress < 100 && i.status !== 'review');
-          }),
-          paused: allItems.filter(i => i.status === 'paused'),
-          review: allItems.filter(i => {
+          paused: normalizedItems.filter(i => i.status === 'paused'),
+          review: normalizedItems.filter(i => {
             // Review ONLY if explicitly set
             return i.status === 'review' && i.status !== 'done';
           }),
-          done: allItems.filter(i => i.status === 'done')
+          done: normalizedItems.filter(i => i.status === 'done')
         };
         console.log('[renderKanban] Column counts:', {
           todo: tasks.todo.length,
@@ -3009,10 +3065,12 @@
               // Get status class for badge
               const statusClass = task.status === 'done' ? 'done' :
                 task.status === 'in-progress' ? 'in-progress' :
+                  task.status === 'planned' ? 'todo' :
                   task.status === 'paused' ? 'paused' :
                     task.status === 'review' ? 'review' : 'todo';
               const statusLabel = task.status === 'done' ? 'DONE' :
                 task.status === 'in-progress' ? 'IN PROGRESS' :
+                  task.status === 'planned' ? 'PLANNED' :
                   task.status === 'paused' ? 'PAUSED' :
                     task.status === 'review' ? 'REVIEW' : 'TODO';
               const copyTextEncoded = encodeURIComponent(`${task.id} ${task.title}`);
@@ -3024,7 +3082,7 @@
                 <div class="badge-wrapper">
                   <div class="task-status ${statusClass} editable" onclick="toggleStatusDropdown('${task.id}', event)" title="Click to change status">${statusLabel}</div>
                   <div class="badge-dropdown status-dropdown" id="status-dropdown-${task.id}">
-                    <button class="badge-dropdown-option${task.status === 'todo' ? ' selected' : ''}" onclick="updateInlineStatus('${task.id}', 'todo', event)">${ICONS.todo}TODO</button>
+                    <button class="badge-dropdown-option${task.status === 'todo' || task.status === 'planned' ? ' selected' : ''}" onclick="updateInlineStatus('${task.id}', 'todo', event)">${ICONS.todo}${task.status === 'planned' ? 'PLANNED' : 'TODO'}</button>
                     <button class="badge-dropdown-option${task.status === 'in-progress' ? ' selected' : ''}" onclick="updateInlineStatus('${task.id}', 'in-progress', event)">${ICONS.inProgress}IN PROGRESS</button>
                     <button class="badge-dropdown-option${task.status === 'paused' ? ' selected' : ''}" onclick="updateInlineStatus('${task.id}', 'paused', event)">${ICONS.paused}PAUSED</button>
                     <button class="badge-dropdown-option${task.status === 'review' ? ' selected' : ''}" onclick="updateInlineStatus('${task.id}', 'review', event)">${ICONS.review}REVIEW</button>
@@ -3288,7 +3346,7 @@
 
       try {
         console.log(`[Modal] Calling API: ${API_BASE}/api/task/${currentEditTask.id}/status`);
-        const response = await fetch(`${API_BASE}/api/task/${currentEditTask.id}/status`, {
+        const response = await apiFetch(`${API_BASE}/api/task/${currentEditTask.id}/status`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: newStatus })
@@ -3307,7 +3365,7 @@
         }
       } catch (error) {
         console.error(`[Modal] Error:`, error);
-        showSyncStatus('error', `✗ Server not running. Start with: cd ~/.watchpost && npm start`);
+        showSyncStatus('error', '✗ Server not running. Start with: watchpost dashboard');
       }
     }
 
@@ -3325,7 +3383,7 @@
       showSyncStatus('loading', 'Saving priority...');
 
       try {
-        const response = await fetch(`${API_BASE}/api/task/${currentEditTask.id}`, {
+        const response = await apiFetch(`${API_BASE}/api/task/${currentEditTask.id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ property: 'priority', value: newPriority })
@@ -3350,7 +3408,7 @@
           showSyncStatus('error', `✗ ${result.error || 'Failed to update priority'}`);
         }
       } catch (error) {
-        showSyncStatus('error', `✗ Server not running. Start with: cd ~/.watchpost && npm start`);
+        showSyncStatus('error', '✗ Server not running. Start with: watchpost dashboard');
       }
     }
 
@@ -3375,7 +3433,7 @@
       showSyncStatus('loading', 'Saving complexity...');
 
       try {
-        const response = await fetch(`${API_BASE}/api/task/${currentEditTask.id}/complexity`, {
+        const response = await apiFetch(`${API_BASE}/api/task/${currentEditTask.id}/complexity`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ complexity: newComplexity })
@@ -3391,7 +3449,7 @@
           showSyncStatus('error', `✗ ${result.error || 'Failed to update complexity'}`);
         }
       } catch (error) {
-        showSyncStatus('error', `✗ Server not running. Start with: cd ~/.watchpost && npm start`);
+        showSyncStatus('error', '✗ Server not running. Start with: watchpost dashboard');
       }
     }
 
@@ -3473,7 +3531,7 @@
       badge.textContent = '...';
 
       try {
-        const response = await fetch(`${API_BASE}/api/task/${taskId}/complexity`, {
+        const response = await apiFetch(`${API_BASE}/api/task/${taskId}/complexity`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ complexity: newComplexity })
@@ -3517,7 +3575,7 @@
 
       try {
         console.log(`[InlineStatus] Calling API: ${API_BASE}/api/task/${taskId}/status`);
-        const response = await fetch(`${API_BASE}/api/task/${taskId}/status`, {
+        const response = await apiFetch(`${API_BASE}/api/task/${taskId}/status`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: newStatus })
@@ -3540,7 +3598,7 @@
       } catch (error) {
         console.error(`[InlineStatus] Error:`, error);
         badge.textContent = originalText;
-        showToast('✗ Server not running. Start with: cd ~/.watchpost && npm start', 'error');
+        showToast('✗ Server not running. Start with: watchpost dashboard', 'error');
       }
     }
 
@@ -3555,7 +3613,7 @@
       badge.textContent = '...';
 
       try {
-        const response = await fetch(`${API_BASE}/api/task/${taskId}`, {
+        const response = await apiFetch(`${API_BASE}/api/task/${taskId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ property: 'priority', value: newPriority })
@@ -3575,7 +3633,7 @@
         }
       } catch (error) {
         badge.textContent = originalText;
-        showToast('✗ Server not running. Start with: cd ~/.watchpost && npm start', 'error');
+        showToast('✗ Server not running. Start with: watchpost dashboard', 'error');
       }
     }
 
@@ -4136,7 +4194,7 @@
           // Call API
           try {
             showToast(`Updating ${taskId} to ${newStatus}...`, 'info');
-            const response = await fetch(`${API_BASE}/api/task/${taskId}/status`, {
+            const response = await apiFetch(`${API_BASE}/api/task/${taskId}/status`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ status: newStatus })
@@ -4503,6 +4561,7 @@
     // Listen for project switch from parent frame
     window.addEventListener('message', (e) => {
       if (e.data?.type === 'switch-project') {
+        currentProjectRoot = e.data.projectRoot || '';
         renderKanban();
       }
     });

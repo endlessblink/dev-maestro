@@ -565,6 +565,13 @@
         let locks = [];
         let dependencies = [];
         let activeLockIds = new Set();
+        let currentProjectRoot = '';
+
+        function withProjectContext(url) {
+            if (!currentProjectRoot) return url;
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}cwd=${encodeURIComponent(currentProjectRoot)}`;
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', init);
@@ -584,7 +591,7 @@
         // Load active locks
         async function loadLocks() {
             try {
-                const response = await fetch('/api/locks?t=' + Date.now());
+                const response = await fetch(withProjectContext('/api/locks?t=' + Date.now()));
                 const data = await response.json();
                 locks = data.locks || [];
                 activeLockIds = new Set(locks.map(l => l.task_id));
@@ -647,7 +654,7 @@
         // Load dependencies from MASTER_PLAN
         async function loadDependencies() {
             try {
-                const response = await fetch('/api/master-plan?t=' + Date.now());
+                const response = await fetch(withProjectContext('/api/master-plan?t=' + Date.now()));
                 const data = await response.json();
                 dependencies = parseDependencies(data.content);
                 renderDependencies();
@@ -916,6 +923,9 @@
         // Listen for tab activation
         window.addEventListener('message', (event) => {
             if (event.data?.type === 'tab-activated') {
+                refreshAll();
+            } else if (event.data?.type === 'switch-project') {
+                currentProjectRoot = event.data.projectRoot || '';
                 refreshAll();
             }
         });

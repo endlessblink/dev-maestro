@@ -73,11 +73,12 @@ function runCommand(command, args = [], options = {}) {
 /**
  * Scan TypeScript errors using vue-tsc
  */
-async function scanTypeScript(onLog) {
+async function scanTypeScript(onLog, cwd) {
     if (onLog) onLog('Starting TypeScript scan...\n');
     const result = await runCommand('npx', ['vue-tsc', '--noEmit', '--pretty', 'false'], {
         timeout: SCANNER_TIMEOUT,
-        onLog
+        onLog,
+        cwd
     });
 
     if (result.timedOut) {
@@ -118,11 +119,13 @@ async function scanTypeScript(onLog) {
 /**
  * Scan ESLint issues
  */
-async function scanESLint(onLog) {
+async function scanESLint(onLog, cwd) {
     if (onLog) onLog('Starting ESLint scan...\n');
+    const projectRoot = cwd || PROJECT_ROOT;
     // Don't pass onLog to runCommand to avoid streaming raw JSON
     const result = await runCommand('npx', ['eslint', 'src', '--format', 'json', '--max-warnings', '9999'], {
-        timeout: SCANNER_TIMEOUT
+        timeout: SCANNER_TIMEOUT,
+        cwd
     });
 
     if (result.timedOut) {
@@ -144,7 +147,7 @@ async function scanESLint(onLog) {
 
             if (file.errorCount > 0 || file.warningCount > 0) {
                 filesWithIssues.push({
-                    file: path.relative(PROJECT_ROOT, file.filePath),
+                    file: path.relative(projectRoot, file.filePath),
                     errors: file.errorCount,
                     warnings: file.warningCount,
                     messages: (file.messages || []).slice(0, 5).map(m => ({
@@ -179,10 +182,11 @@ async function scanESLint(onLog) {
 /**
  * Scan dead code using knip
  */
-async function scanDeadCode(onLog) {
+async function scanDeadCode(onLog, cwd) {
     if (onLog) onLog('Starting Dead Code scan (knip)...\n');
     const result = await runCommand('npx', ['knip', '--reporter', 'json'], {
-        timeout: SCANNER_TIMEOUT
+        timeout: SCANNER_TIMEOUT,
+        cwd
     });
 
     if (result.timedOut) {
@@ -222,10 +226,11 @@ async function scanDeadCode(onLog) {
 /**
  * Scan npm audit for security vulnerabilities
  */
-async function scanAudit(onLog) {
+async function scanAudit(onLog, cwd) {
     if (onLog) onLog('Starting Security Audit...\n');
     const result = await runCommand('npm', ['audit', '--json'], {
-        timeout: SCANNER_TIMEOUT
+        timeout: SCANNER_TIMEOUT,
+        cwd
     });
 
     if (result.timedOut) {
@@ -262,10 +267,11 @@ async function scanAudit(onLog) {
 /**
  * Check for outdated dependencies
  */
-async function scanOutdated(onLog) {
+async function scanOutdated(onLog, cwd) {
     if (onLog) onLog('Checking for outdated dependencies...\n');
     const result = await runCommand('npm', ['outdated', '--json'], {
-        timeout: SCANNER_TIMEOUT
+        timeout: SCANNER_TIMEOUT,
+        cwd
     });
 
     if (result.timedOut) {
@@ -312,9 +318,10 @@ async function scanOutdated(onLog) {
 /**
  * Calculate bundle size from dist folder
  */
-async function scanBundleSize(onLog) {
+async function scanBundleSize(onLog, cwd) {
     if (onLog) onLog('Analyzing bundle size...\n');
-    const distPath = path.join(PROJECT_ROOT, 'dist', 'assets');
+    const projectRoot = cwd || PROJECT_ROOT;
+    const distPath = path.join(projectRoot, 'dist', 'assets');
 
     try {
         if (!fs.existsSync(distPath)) {
@@ -361,9 +368,10 @@ async function scanBundleSize(onLog) {
 /**
  * Check test coverage
  */
-async function scanCoverage(onLog) {
+async function scanCoverage(onLog, cwd) {
     if (onLog) onLog('Checking test coverage...\n');
-    const coveragePath = path.join(PROJECT_ROOT, 'coverage', 'coverage-summary.json');
+    const projectRoot = cwd || PROJECT_ROOT;
+    const coveragePath = path.join(projectRoot, 'coverage', 'coverage-summary.json');
 
     try {
         if (!fs.existsSync(coveragePath)) {
@@ -400,9 +408,10 @@ async function scanCoverage(onLog) {
 /**
  * Check build status
  */
-async function scanBuildStatus(onLog) {
+async function scanBuildStatus(onLog, cwd) {
     if (onLog) onLog('Checking build status...\n');
-    const distPath = path.join(PROJECT_ROOT, 'dist');
+    const projectRoot = cwd || PROJECT_ROOT;
+    const distPath = path.join(projectRoot, 'dist');
 
     try {
         if (!fs.existsSync(distPath)) {
@@ -472,7 +481,9 @@ function calculateHealthScore(results) {
 /**
  * Run full health scan (all scanners in parallel)
  */
-async function runFullScan(onLog) {
+async function runFullScan(options = {}) {
+    const onLog = typeof options === 'function' ? options : options.onLog;
+    const cwd = typeof options === 'object' ? options.cwd : undefined;
     const startTime = Date.now();
 
     console.log('[Health Scanner] Starting full scan...');
@@ -489,14 +500,14 @@ async function runFullScan(onLog) {
         coverage,
         buildStatus
     ] = await Promise.allSettled([
-        scanTypeScript(onLog),
-        scanESLint(onLog),
-        scanDeadCode(onLog),
-        scanAudit(onLog),
-        scanOutdated(onLog),
-        scanBundleSize(onLog),
-        scanCoverage(onLog),
-        scanBuildStatus(onLog)
+        scanTypeScript(onLog, cwd),
+        scanESLint(onLog, cwd),
+        scanDeadCode(onLog, cwd),
+        scanAudit(onLog, cwd),
+        scanOutdated(onLog, cwd),
+        scanBundleSize(onLog, cwd),
+        scanCoverage(onLog, cwd),
+        scanBuildStatus(onLog, cwd)
     ]);
 
     // Extract results, handling any rejected promises
@@ -529,14 +540,15 @@ async function runFullScan(onLog) {
 /**
  * Run quick scan (TypeScript + ESLint only)
  */
-async function runQuickScan() {
+async function runQuickScan(options = {}) {
+    const cwd = typeof options === 'object' ? options.cwd : undefined;
     const startTime = Date.now();
 
     console.log('[Health Scanner] Starting quick scan...');
 
     const [typescript, eslint] = await Promise.allSettled([
-        scanTypeScript(),
-        scanESLint()
+        scanTypeScript(undefined, cwd),
+        scanESLint(undefined, cwd)
     ]);
 
     const results = {

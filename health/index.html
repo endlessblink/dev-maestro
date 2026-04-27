@@ -646,6 +646,13 @@
     <script>
         const API_BASE = 'http://localhost:6010';
         let currentData = null;
+        let currentProjectRoot = '';
+
+        function withProjectContext(url) {
+            if (!currentProjectRoot) return url;
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}cwd=${encodeURIComponent(currentProjectRoot)}`;
+        }
 
         // Setup Log Stream
         const terminal = document.getElementById('scanTerminal');
@@ -683,12 +690,15 @@
         window.addEventListener('message', (event) => {
             if (event.data?.type === 'tab-activated') {
                 loadCachedResults();
+            } else if (event.data?.type === 'switch-project') {
+                currentProjectRoot = event.data.projectRoot || '';
+                loadCachedResults();
             }
         });
 
         async function loadCachedResults() {
             try {
-                const res = await fetch(`${API_BASE}/api/health/cached`);
+                const res = await fetch(withProjectContext(`${API_BASE}/api/health/cached`));
                 if (res.ok) {
                     const data = await res.json();
                     currentData = data;
@@ -713,7 +723,7 @@
             document.getElementById('statusSubtitle').textContent = 'Running full system scan... This may take up to 60 seconds.';
 
             try {
-                const res = await fetch(`${API_BASE}/api/health`);
+                const res = await fetch(withProjectContext(`${API_BASE}/api/health`));
 
                 if (!res.ok) {
                     throw new Error(`Server returned ${res.status}`);
@@ -741,7 +751,7 @@
             document.getElementById('statusSubtitle').textContent = 'Running quick scan (TypeScript + ESLint)...';
 
             try {
-                const res = await fetch(`${API_BASE}/api/health/quick`);
+                const res = await fetch(withProjectContext(`${API_BASE}/api/health/quick`));
                 const data = await res.json();
 
                 // Update only TS and ESLint cards
@@ -935,13 +945,13 @@
                 // If no cached data, run a scan first
                 if (!currentData) {
                     document.getElementById('statusSubtitle').textContent = 'Running scan before generating report...';
-                    const scanRes = await fetch(`${API_BASE}/api/health`);
+                    const scanRes = await fetch(withProjectContext(`${API_BASE}/api/health`));
                     currentData = await scanRes.json();
                     renderResults(currentData);
                 }
 
                 // Fetch the markdown report
-                const res = await fetch(`${API_BASE}/api/health/report`);
+                const res = await fetch(withProjectContext(`${API_BASE}/api/health/report`));
                 const markdown = await res.text();
 
                 // Create download link
@@ -977,7 +987,7 @@
                 if (!currentData) {
                     await runFullScan();
                 }
-                const res = await fetch(`${API_BASE}/api/health/report`);
+                const res = await fetch(withProjectContext(`${API_BASE}/api/health/report`));
                 const markdown = await res.text();
                 await navigator.clipboard.writeText(markdown);
                 document.getElementById('statusSubtitle').textContent = 'Report copied to clipboard!';

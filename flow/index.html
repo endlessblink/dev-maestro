@@ -454,6 +454,34 @@
       flex-wrap: nowrap;
       min-width: max-content;
       padding-bottom: 2px;
+      align-items: stretch;
+    }
+    .sprint-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 0 0 auto;
+    }
+    .sprint-connector {
+      width: 44px;
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      flex: 0 0 auto;
+      position: relative;
+      overflow: hidden;
+    }
+    .sprint-connector::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      transform-origin: left center;
+      transform: scaleX(0);
+      background: linear-gradient(90deg, #22c55e, var(--color-flow));
+    }
+    .sprint-connector.completed::after,
+    .sprint-connector.current::after {
+      transform: scaleX(1);
     }
     .sprint-item {
       display: block;
@@ -483,12 +511,53 @@
       color: var(--text-primary);
       box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25) inset;
     }
+    .sprint-item.completed {
+      border-color: rgba(34, 197, 94, 0.3);
+      background: rgba(34, 197, 94, 0.06);
+      color: var(--text-secondary);
+    }
+    .sprint-item.locked {
+      opacity: 0.72;
+      cursor: not-allowed;
+    }
+    .sprint-item.locked:hover {
+      background: transparent;
+      color: var(--text-muted);
+      border-color: var(--border-subtle);
+    }
     .sprint-item-letter {
       font-size: 9.5px;
       font-weight: 700;
       letter-spacing: 0.14em;
       color: var(--color-flow);
       opacity: 0.85;
+    }
+    .sprint-item-state {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .sprint-item-state.current {
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .sprint-item-state.completed {
+      color: #86efac;
+      background: rgba(34, 197, 94, 0.1);
+      border-color: rgba(34, 197, 94, 0.25);
+    }
+    .sprint-item-state.locked {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
     }
     .sprint-item-name {
       font-size: 13px;
@@ -548,6 +617,359 @@
       padding: 28px 36px;
       overflow-y: auto;
     }
+    .flow-board {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .flow-section {
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 16px 18px;
+    }
+    .flow-section-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .flow-section-header h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .flow-section-header p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .flow-section-count {
+      color: var(--text-subtle);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .flow-section-count.primary {
+      color: #c7d2fe;
+    }
+    .flow-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .flow-row {
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 16px 18px 18px;
+      background: linear-gradient(180deg, rgba(18, 20, 28, 0.96), rgba(16, 18, 24, 0.92));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .flow-row.current {
+      border-color: rgba(99, 102, 241, 0.42);
+      box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.12), inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .flow-row.blocked {
+      border-color: rgba(239, 68, 68, 0.34);
+    }
+    .flow-row.upnext {
+      opacity: 0.94;
+      background: linear-gradient(180deg, rgba(22, 24, 30, 0.95), rgba(18, 20, 26, 0.9));
+    }
+    .flow-row-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .flow-row-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .flow-row-labels {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .flow-row-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+    .flow-row-owner,
+    .flow-row-state,
+    .flow-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .flow-row-owner {
+      color: #a5b4fc;
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .flow-row-owner.unclaimed {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
+    }
+    .flow-row-state.ready {
+      color: #86efac;
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.24);
+    }
+    .flow-row-state.in-progress {
+      color: #fcd34d;
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.24);
+    }
+    .flow-row-state.blocked {
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.24);
+    }
+    .flow-row-state.locked {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
+    }
+    .flow-row-hint {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .flow-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .flow-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 11px;
+      border-radius: 7px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .flow-btn:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+    .flow-btn.primary {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.28);
+      color: #c7d2fe;
+    }
+    .flow-sequence {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 4px 2px 2px;
+    }
+    .flow-arrow {
+      flex: 0 0 auto;
+      width: 42px;
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      position: relative;
+    }
+    .flow-arrow::after {
+      content: '';
+      position: absolute;
+      right: -1px;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      border-top: 2px solid rgba(255,255,255,0.2);
+      border-right: 2px solid rgba(255,255,255,0.2);
+      transform: translateY(-50%) rotate(45deg);
+    }
+    .flow-node {
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+      padding: 16px 18px;
+      min-width: 180px;
+      max-width: 220px;
+      min-height: 118px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .flow-node:hover {
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+    .flow-node.done {
+      border-color: rgba(34, 197, 94, 0.28);
+      background: linear-gradient(180deg, rgba(34,197,94,0.08), rgba(34,197,94,0.04));
+      opacity: 0.72;
+    }
+    .flow-node.current {
+      border-color: rgba(99, 102, 241, 0.42);
+      background: linear-gradient(180deg, rgba(99,102,241,0.16), rgba(99,102,241,0.08));
+      box-shadow: 0 10px 30px rgba(99,102,241,0.12), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .flow-node.next {
+      border-color: rgba(245, 158, 11, 0.34);
+      background: linear-gradient(180deg, rgba(245,158,11,0.1), rgba(245,158,11,0.04));
+    }
+    .flow-node.blocked {
+      border-color: rgba(239, 68, 68, 0.34);
+      background: linear-gradient(180deg, rgba(239,68,68,0.1), rgba(239,68,68,0.04));
+    }
+    .flow-node.locked {
+      opacity: 0.64;
+    }
+    .flow-node-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+      background: rgba(255,255,255,0.05);
+    }
+    .flow-node.current .flow-node-eyebrow {
+      color: #c7d2fe;
+      background: rgba(99,102,241,0.18);
+    }
+    .flow-node.next .flow-node-eyebrow {
+      color: #fcd34d;
+      background: rgba(245,158,11,0.14);
+    }
+    .flow-node.blocked .flow-node-eyebrow {
+      color: #fca5a5;
+      background: rgba(239,68,68,0.14);
+    }
+    .flow-node.done .flow-node-eyebrow {
+      color: #86efac;
+      background: rgba(34,197,94,0.14);
+    }
+    .flow-node-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .flow-node-title {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.45;
+      text-wrap: balance;
+    }
+    .flow-node-empty {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .flow-chip {
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.22);
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 10.5px;
+    }
+    .flow-chip.line {
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.22);
+      cursor: default;
+    }
+    .flow-backlog details {
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+    .flow-collapsed details {
+      border-top: 0;
+      padding-top: 0;
+      margin-top: 0;
+    }
+    .flow-backlog details:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+    .flow-backlog summary {
+      cursor: pointer;
+      color: var(--text-primary);
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+    .flow-empty {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+      padding: 4px 0;
+    }
+    .flow-backlog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .flow-backlog-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+    }
+    .flow-backlog-item:hover {
+      background: var(--surface-hover);
+    }
+    .flow-backlog-empty {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
     .sprint-main-header {
       display: flex;
       align-items: flex-start;
@@ -571,6 +993,302 @@
     .sprint-main-header .sub b.ready { color: #22c55e; }
     .sprint-main-header .sub b.active { color: #f59e0b; }
     .sprint-main-header .sub b.blocked { color: #ef4444; }
+
+    .delivery-spine {
+      margin-top: 22px;
+      padding: 16px 18px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(99, 102, 241, 0.05), rgba(255,255,255,0.015));
+    }
+    .delivery-spine-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .delivery-spine-title h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .delivery-spine-title span {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .delivery-spine-note {
+      margin: 0 0 14px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .delivery-lines-panel {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.015);
+    }
+    .delivery-lines-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .delivery-line-row {
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: var(--surface-secondary);
+    }
+    .delivery-line-row.current {
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.06);
+    }
+    .delivery-line-row.locked {
+      opacity: 0.78;
+    }
+    .delivery-line-row-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .delivery-line-row-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .delivery-line-row-id {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-flow);
+    }
+    .delivery-line-row-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .delivery-line-row-state {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .delivery-line-row-state.current {
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .delivery-line-row-state.locked {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
+    }
+    .delivery-line-row-counts {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 10.5px;
+      color: var(--text-subtle);
+    }
+    .delivery-line-row-counts span {
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .delivery-line-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .delivery-line-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .delivery-line-btn:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+    .delivery-line-btn.primary {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.25);
+      color: #c7d2fe;
+    }
+    .delivery-line-btn.primary:hover {
+      border-color: var(--color-flow);
+      color: var(--text-primary);
+    }
+    .delivery-line-steps {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding-top: 10px;
+    }
+    .delivery-line-step {
+      min-width: 148px;
+      max-width: 148px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 11px;
+    }
+    .delivery-line-step.done {
+      border-color: rgba(34, 197, 94, 0.25);
+      background: rgba(34, 197, 94, 0.06);
+    }
+    .delivery-line-step.current {
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.08);
+    }
+    .delivery-line-step.next {
+      border-color: rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .delivery-line-step.blocked {
+      border-color: rgba(239, 68, 68, 0.24);
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .delivery-line-step-top {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .delivery-line-step-order {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+    }
+    .delivery-line-step-id {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .delivery-line-step-state {
+      margin-left: auto;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+    }
+    .delivery-line-step-title {
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .delivery-line-step-arrow {
+      flex: 0 0 auto;
+      color: var(--text-subtle);
+      font-size: 14px;
+    }
+    .task-spine {
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .task-spine-step {
+      min-width: 220px;
+      max-width: 220px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--surface-secondary);
+      padding: 12px 14px;
+    }
+    .task-spine-step.done {
+      border-color: rgba(34, 197, 94, 0.28);
+      background: rgba(34, 197, 94, 0.06);
+    }
+    .task-spine-step.current {
+      border-color: rgba(245, 158, 11, 0.4);
+      background: rgba(245, 158, 11, 0.08);
+    }
+    .task-spine-step.next {
+      border-color: rgba(99, 102, 241, 0.38);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .task-spine-step.blocked {
+      border-color: rgba(239, 68, 68, 0.24);
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .task-spine-step.parked {
+      opacity: 0.86;
+    }
+    .task-spine-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .task-spine-order {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-subtle);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .task-spine-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .task-spine-state {
+      margin-left: auto;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+    }
+    .task-spine-title {
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    .task-spine-wait {
+      margin-top: 8px;
+      font-size: 10.5px;
+      color: #fca5a5;
+      line-height: 1.45;
+    }
+    .task-spine-connector {
+      width: 28px;
+      flex: 0 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-subtle);
+      font-size: 16px;
+    }
 
     .bucket {
       margin-top: 28px;
@@ -931,7 +1649,7 @@
         <button id="zoom-out" title="Zoom out">−</button>
       </div>
 
-      <!-- Sprint-focused view (hidden unless MASTER_PLAN has `### Current sprint framing`) -->
+      <!-- Delivery-focused view (shown when MASTER_PLAN exposes Delivery Lines or legacy sprint framing) -->
       <div class="sprint-layout" id="sprint-layout" hidden>
         <nav class="sprint-sidebar" aria-label="Sprints">
           <div class="sprint-sidebar-header">Delivery Line</div>
@@ -949,7 +1667,7 @@
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
         Click a task for details.<br>
-        In sprint mode, the left sidebar is the delivery spine. Each sprint now shows one current focus, one next step, and then the blocked queue behind it.
+        In delivery mode, the main pane shows current flows, up-next lines, and backlog while this side pane holds task detail.
       </div>
     </aside>
   </div>
@@ -988,6 +1706,15 @@
     let reconnectAttempts = 0;
     const MAX_RECONNECT_ATTEMPTS = 5;
     let refreshTimer = null;
+    let currentDeliveryLines = [];
+    let selectedLineId = null;
+    let currentProjectRoot = '';
+    let currentProjectFilter = '';
+    let activeLocks = [];
+    let activityByTask = new Map();
+    let activityEntries = [];
+    let liveRefreshTimer = null;
+    const ACTIVE_INSTANCE_WINDOW_MS = 90 * 60 * 1000;
 
     let showInferred = true;         // render inferred edges (dashed)
     let useInferredForWaves = true;  // inferred edges drive wave computation (auto-layer)
@@ -1081,13 +1808,18 @@
         } else if (current) {
           current.body += line + '\n';
 
-          const prMatch = trimmed.match(/^[-*]\s*\*\*Priority\*\*:\s*(.+?)\s*$/i);
+          const prMatch = trimmed.match(/\*\*Priority:\*\*\s*([^|]+)/i) || trimmed.match(/^[-*]\s*\*\*Priority\*\*:\s*(.+?)\s*$/i);
           if (prMatch) {
             const p = prMatch[1].toLowerCase();
             current.priority = p.startsWith('high') ? 'high'
               : p.startsWith('med') ? 'medium'
               : p.startsWith('low') ? 'low'
               : '';
+          }
+          const statusMatch = trimmed.match(/\*\*Status:\*\*\s*([^|]+)/i) || trimmed.match(/^[-*]?\s*\*\*Status\*\*:\s*(.+?)\s*$/i);
+          if (statusMatch) {
+            const parsed = parseStatus(statusMatch[1].toUpperCase(), '', false);
+            if (parsed !== 'unknown') current.status = parsed;
           }
           const depMatch = trimmed.match(/^[-*]\s*\*\*Depends[- ]on\*\*:\s*(.+?)\s*$/i);
           if (depMatch) {
@@ -1134,6 +1866,7 @@
       if (src.includes('IN PROGRESS') || src.includes('IN-PROGRESS') || src.includes('🔄')) return 'in-progress';
       if (src.includes('REVIEW') || src.includes('👀')) return 'review';
       if (src.includes('PAUSED') || src.includes('⏸')) return 'paused';
+      if (src.includes('TODO') || src.includes('TO DO') || src.includes('TBD') || src.includes('PLANNED') || src.includes('📋')) return 'planned';
       if (src.includes('PLANNED') || src.includes('📋')) return 'planned';
       if (strikethrough) return 'done';
       return 'unknown';
@@ -1490,19 +2223,21 @@
 
     function renderGraph() {
       const tasks = allTasks;
-
-      // ── Two-mode dispatch: if MASTER_PLAN has a `### Current sprint framing`
-      //    block, render the focused sprint view instead of the streams graph.
-      const sprints = parseSprintFraming(rawMarkdown);
-      if (sprints.length > 0) {
-        setViewMode('sprint');
-        renderSprintView(tasks, sprints);
-        return;
-      }
-      setViewMode('streams');
-
       const edgeMap = extractEdges(tasks);
       const recommended = rankTasks(tasks, edgeMap);
+
+      // ── Delivery mode: prefer explicit Delivery Lines, fallback to legacy sprint framing.
+      const deliveryLines = parseDeliveryLines(rawMarkdown);
+      const sprints = parseSprintFraming(rawMarkdown);
+      const lines = deliveryLines.length > 0 ? deliveryLines : buildLegacyDeliveryLinesFromSprints(sprints);
+      if (lines.length > 0) {
+        setViewMode('delivery');
+        renderDeliveryView(tasks, lines);
+        return;
+      }
+      currentDeliveryLines = [];
+      selectedLineId = null;
+      setViewMode('streams');
 
       const visibleTasks = tasks.filter(t => showDone || t.status !== 'done');
       const isEmpty = visibleTasks.length === 0;
@@ -1763,6 +2498,394 @@
       return sprints;
     }
 
+    function normalizeLineId(raw, fallbackIndex) {
+      const value = String(raw || '').trim().replace(/\s+/g, ' ');
+      return value || `LINE ${fallbackIndex + 1}`;
+    }
+
+    function parseDeliveryLines(markdown) {
+      if (!markdown || !/###\s+Delivery\s+Lines/i.test(markdown)) return [];
+      const lines = markdown.split('\n');
+      const results = [];
+      let inBlock = false;
+      let current = null;
+
+      function flush() {
+        if (!current) return;
+        current.dependsOnLineIds = [...new Set(current.dependsOnLineIds)];
+        current.sequenceTaskIds = [...new Set(current.sequenceTaskIds)];
+        current.supportTaskIds = [...new Set(current.supportTaskIds)].filter(id => !current.sequenceTaskIds.includes(id));
+        if (current.sequenceTaskIds.length > 0) results.push(current);
+      }
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!inBlock) {
+          if (/^###\s+Delivery\s+Lines/i.test(trimmed)) {
+            inBlock = true;
+          }
+          continue;
+        }
+
+        if (/^###\s+/.test(trimmed) && !/^###\s+Delivery\s+Lines/i.test(trimmed)) {
+          break;
+        }
+
+        const headerMatch = trimmed.match(/^\d+\.\s*\*\*(.+?)\*\*:?\s*$/);
+        if (headerMatch) {
+          flush();
+          const headerText = headerMatch[1].trim();
+          const namedMatch = headerText.match(/^(LINE\s+[A-Z0-9-]+)\s*[-–—]\s*(.+)$/i);
+          current = {
+            id: normalizeLineId(namedMatch ? namedMatch[1].toUpperCase() : '', results.length),
+            name: namedMatch ? namedMatch[2].trim() : headerText,
+            dependsOnLineIds: [],
+            sequenceTaskIds: [],
+            supportTaskIds: [],
+            source: 'delivery-lines',
+          };
+          continue;
+        }
+
+        if (!current || !trimmed) continue;
+
+        const dependsMatch = trimmed.match(/^Depends-on:\s*(.+)$/i);
+        if (dependsMatch) {
+          const ids = dependsMatch[1].match(/LINE\s+[A-Z0-9-]+/gi) || [];
+          current.dependsOnLineIds.push(...ids.map((id, index) => normalizeLineId(id.toUpperCase(), index)));
+          continue;
+        }
+
+        const sequenceMatch = trimmed.match(/^Sequence:\s*(.+)$/i);
+        if (sequenceMatch) {
+          current.sequenceTaskIds.push(...(sequenceMatch[1].match(ID_PATTERN) || []));
+          continue;
+        }
+
+        const supportsMatch = trimmed.match(/^Supports:\s*(.+)$/i);
+        if (supportsMatch) {
+          current.supportTaskIds.push(...(supportsMatch[1].match(ID_PATTERN) || []));
+        }
+      }
+
+      flush();
+      return results;
+    }
+
+    function buildLegacyDeliveryLinesFromSprints(sprints) {
+      return sprints.map((sprint, index) => ({
+        id: normalizeLineId(`LINE ${String.fromCharCode(65 + index)}`, index),
+        name: sprint.name,
+        dependsOnLineIds: index === 0 ? [] : [normalizeLineId(`LINE ${String.fromCharCode(64 + index)}`, index - 1)],
+        sequenceTaskIds: [...sprint.ids],
+        supportTaskIds: [],
+        source: 'legacy-sprint',
+        legacyLetter: sprint.letter,
+      }));
+    }
+
+    function getLineOwner(lineState) {
+      if (!lineState.currentTaskId) return null;
+      return activeLocks.find(lock => lock.task_id === lineState.currentTaskId) || null;
+    }
+
+    function deriveLineStates(lines, taskById) {
+      const runtimeByLine = buildLineRuntimeMap(lines);
+      const lineTaskToLineId = new Map();
+      lines.forEach(line => {
+        [...line.sequenceTaskIds, ...line.supportTaskIds].forEach(taskId => {
+          if (!lineTaskToLineId.has(taskId)) lineTaskToLineId.set(taskId, line.id);
+        });
+      });
+
+      const doneByLineId = new Map();
+      lines.forEach(line => {
+        const sequenceTasks = line.sequenceTaskIds.map(id => taskById.get(id)).filter(Boolean);
+        const isDone = sequenceTasks.length > 0 && sequenceTasks.every(task => task.status === 'done');
+        doneByLineId.set(line.id, isDone);
+      });
+
+      return lines.map(line => {
+        const sequenceTasks = line.sequenceTaskIds.map(id => taskById.get(id)).filter(Boolean);
+        const currentTask = sequenceTasks.find(task => task.status !== 'done') || null;
+        const nextTask = currentTask
+          ? sequenceTasks.slice(sequenceTasks.indexOf(currentTask) + 1).find(task => task.status !== 'done') || null
+          : null;
+        const externalBlockerIds = currentTask
+          ? (currentTask.unfinishedBlockerIds || []).filter(id => lineTaskToLineId.get(id) !== line.id)
+          : [];
+        const blockingLineIds = (line.dependsOnLineIds || []).filter(depId => !doneByLineId.get(depId));
+        const runtime = runtimeByLine.get(line.id) || null;
+        const lockOwner = getLineOwner({ currentTaskId: currentTask?.id || null });
+        const owner = lockOwner || (isRuntimeActive(runtime) && runtime?.sid
+          ? {
+              session_short: String(runtime.sid).slice(0, 8),
+              session_id: runtime.sid,
+              task_id: currentTask?.id || '',
+              inferred: true,
+            }
+          : null);
+        const activity = activityByTask.get(currentTask?.id || '') || null;
+
+        let state = 'ready';
+        if (blockingLineIds.length > 0) state = 'locked';
+        else if (currentTask?.status === 'in-progress') state = 'in-progress';
+        else if (externalBlockerIds.length > 0) state = 'blocked';
+
+        return {
+          ...line,
+          currentTaskId: currentTask?.id || null,
+          nextTaskId: nextTask?.id || null,
+          isDone: doneByLineId.get(line.id) === true,
+          state,
+          blockingLineIds,
+          externalBlockerIds,
+          owner,
+          activity,
+          runtime,
+          isLiveInstance: Boolean(lockOwner) || isRuntimeActive(runtime),
+          supportTasks: line.supportTaskIds.map(id => taskById.get(id)).filter(task => task && task.status !== 'done'),
+        };
+      });
+    }
+
+    function buildBacklogGroups(lineStates, taskById) {
+      const assignedIds = new Set();
+      lineStates.forEach(line => {
+        line.sequenceTaskIds.forEach(id => assignedIds.add(id));
+        line.supportTaskIds.forEach(id => assignedIds.add(id));
+      });
+
+      const groups = lineStates
+        .map(line => ({ id: line.id, title: line.name, tasks: line.supportTasks || [] }))
+        .filter(group => group.tasks.length > 0);
+
+      const unassigned = [...taskById.values()]
+        .filter(task => task.status !== 'done' && !assignedIds.has(task.id));
+
+      if (unassigned.length > 0) {
+        groups.push({ id: '__unassigned__', title: 'Other tasks', tasks: unassigned });
+      }
+
+      return groups;
+    }
+
+    function lineStateLabel(line) {
+      if (line.state === 'in-progress') return 'In Progress';
+      if (line.state === 'blocked') return 'Blocked';
+      if (line.state === 'locked') return 'Locked';
+      return 'Ready';
+    }
+
+    function lineActivityLabel(line) {
+      if (line.owner) return `Instance ${line.owner.session_short}`;
+      if (line.runtime?.ts) return `Recent activity ${formatRelativeTime(line.runtime.ts)}`;
+      if (line.activity?.ts) return `Updated ${formatRelativeTime(line.activity.ts)}`;
+      return 'No active instance';
+    }
+
+    function buildLinePrompt(lineState, taskById) {
+      const sequence = lineState.sequenceTaskIds
+        .map(id => taskById.get(id))
+        .filter(Boolean)
+        .map(task => `- ${task.id}: ${task.title}`)
+        .join('\n');
+      const support = (lineState.supportTasks || []).map(task => `- ${task.id}: ${task.title}`).join('\n') || '(none)';
+      const blockers = lineState.externalBlockerIds.length > 0
+        ? lineState.externalBlockerIds.join(', ')
+        : lineState.blockingLineIds.length > 0
+          ? lineState.blockingLineIds.join(', ')
+          : 'none';
+      return [
+        `Kick off ${lineState.name}.`,
+        '',
+        `Current: ${lineState.currentTaskId || 'none'}`,
+        `Next: ${lineState.nextTaskId || 'none'}`,
+        `Blocked by: ${blockers}`,
+        '',
+        'Critical path:',
+        sequence || '(none)',
+        '',
+        'Supporting tasks:',
+        support,
+      ].join('\n');
+    }
+
+    function getNodeDisplayState(rawState) {
+      if (rawState === 'in-progress') return { cls: 'current', label: 'Current' };
+      if (rawState === 'planned') return { cls: 'next', label: 'Next' };
+      if (rawState === 'done') return { cls: 'done', label: 'Done' };
+      if (rawState === 'blocked') return { cls: 'blocked', label: 'Blocked' };
+      if (rawState === 'locked') return { cls: 'locked', label: 'Locked' };
+      return { cls: 'next', label: 'Next' };
+    }
+
+    function renderFlowNode(task, rawState, fallbackText = '') {
+      const { cls, label } = getNodeDisplayState(rawState);
+      if (!task) {
+        return `
+          <div class="flow-node ${cls}" aria-disabled="true">
+            <span class="flow-node-eyebrow">${label}</span>
+            <div class="flow-node-empty">${escapeHtml(fallbackText || 'No step')}</div>
+          </div>`;
+      }
+      return `
+        <div class="flow-node ${cls}" data-id="${task.id}" role="button" tabindex="0">
+          <span class="flow-node-eyebrow">${label}</span>
+          <div class="flow-node-id">${task.id}</div>
+          <div class="flow-node-title">${escapeHtml(task.title || '')}</div>
+        </div>`;
+    }
+
+    function renderFlowSequence(items) {
+      return `<div class="flow-sequence">${items.map((item, index) => {
+        const node = renderFlowNode(item.task, item.state, item.fallbackText || '');
+        if (index === items.length - 1) return node;
+        return `${node}<div class="flow-arrow" aria-hidden="true"></div>`;
+      }).join('')}</div>`;
+    }
+
+    function renderCurrentFlowRow(line, taskById) {
+      const currentTask = line.currentTaskId ? taskById.get(line.currentTaskId) : null;
+      const nextTask = line.nextTaskId ? taskById.get(line.nextTaskId) : null;
+      const blockerTask = line.externalBlockerIds[0] ? taskById.get(line.externalBlockerIds[0]) : null;
+      const blockerChip = blockerTask
+        ? `<button class="flow-chip" type="button" data-id="${blockerTask.id}">Needs ${blockerTask.id}</button>`
+        : '';
+      const sequence = [{ task: currentTask, state: line.state === 'blocked' ? 'blocked' : 'in-progress' }];
+      if (nextTask) sequence.push({ task: nextTask, state: 'planned' });
+
+      return `
+        <article class="flow-row current ${line.state === 'blocked' ? 'blocked' : ''}">
+          <div class="flow-row-top">
+            <div class="flow-row-meta">
+              <div class="flow-row-labels">
+                <span class="flow-row-name">${escapeHtml(line.name)}</span>
+                <span class="flow-row-state ${line.state}">${lineStateLabel(line)}</span>
+                <span class="flow-row-owner ${line.owner ? '' : 'unclaimed'}">${line.owner ? `Instance ${line.owner.session_short}` : 'Instance open'}</span>
+              </div>
+              <div class="flow-row-hint">${escapeHtml(lineActivityLabel(line))}${nextTask ? '' : ' · Final visible step'}</div>
+            </div>
+            <div class="flow-row-actions">
+              ${blockerChip}
+              <button class="flow-btn primary" type="button" data-action="continue-line" data-line-id="${line.id}">Continue</button>
+            </div>
+          </div>
+          ${renderFlowSequence(sequence)}
+        </article>`;
+    }
+
+    function renderBacklog(groups) {
+      if (groups.length === 0) {
+        return '<div class="flow-backlog-empty">No deferred or supporting tasks outside the active path.</div>';
+      }
+
+      return `<div class="flow-backlog">${groups.map(group => `
+        <details>
+          <summary>${escapeHtml(group.title)} (${group.tasks.length})</summary>
+          <div class="flow-backlog-list">
+            ${group.tasks.map(task => `
+              <div class="flow-backlog-item" data-id="${task.id}" role="button" tabindex="0">
+                <div>
+                  <div class="flow-mini-id">${task.id}</div>
+                  <div class="flow-mini-title">${escapeHtml(task.title || '')}</div>
+                </div>
+                <div class="flow-row-hint">${statusLabel(task.status)}</div>
+              </div>`).join('')}
+          </div>
+        </details>`).join('')}</div>`;
+    }
+
+    function renderCollapsedFlows(lines, taskById) {
+      if (lines.length === 0) return '';
+      return `
+        <section class="flow-section flow-collapsed">
+          <div class="flow-section-header">
+            <div>
+              <h2>Other Planned Flows</h2>
+              <p>Hidden by default so you can focus on the active instance.</p>
+            </div>
+          </div>
+          <details>
+            <summary>${lines.length} hidden flow${lines.length === 1 ? '' : 's'}</summary>
+            <div class="flow-list" style="margin-top:12px;">
+              ${lines.map(line => renderCurrentFlowRow(line, taskById)).join('')}
+            </div>
+          </details>
+        </section>`;
+    }
+
+    function renderDeliveryStats(lineStates, backlogGroups, taskById) {
+      const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+      const current = lineStates.filter(line => !line.isDone && line.blockingLineIds.length === 0);
+      const blocked = current.filter(line => line.state === 'blocked').length;
+      const inProgress = current.filter(line => line.state === 'in-progress').length;
+      const ready = current.filter(line => line.state === 'ready').length;
+      const overdue = [...taskById.values()].filter(task => task.status !== 'done' && task.dueDate && task.dueDate < new Date()).length;
+      set('stat-ready', ready);
+      set('stat-blocked', blocked);
+      set('stat-active', inProgress);
+      set('stat-review', lineStates.filter(line => line.blockingLineIds.length > 0 && !line.isDone).length);
+      set('stat-overdue', overdue);
+    }
+
+    function renderDeliveryView(tasks, lines) {
+      currentDeliveryLines = lines;
+      const taskById = new Map(tasks.map(task => [task.id, task]));
+      const lineStates = deriveLineStates(lines, taskById)
+        .filter(line => !line.isDone)
+        .sort((a, b) => {
+          const rank = line => line.owner ? 0 : line.state === 'in-progress' ? 1 : line.state === 'ready' ? 2 : line.state === 'blocked' ? 3 : 4;
+          const byRank = rank(a) - rank(b);
+          if (byRank !== 0) return byRank;
+          return a.name.localeCompare(b.name);
+        });
+      const activeFlows = lineStates.filter(line => line.isLiveInstance);
+      const availableFlows = lineStates.filter(line => !line.isLiveInstance);
+      const backlogGroups = buildBacklogGroups(lineStates, taskById);
+
+      const lineStatesById = new Map(lineStates.map(line => [line.id, line]));
+      if (!selectedLineId || !lineStatesById.has(selectedLineId)) {
+        selectedLineId = activeFlows[0]?.id || availableFlows[0]?.id || null;
+      }
+      const focusTaskId = selectedId && taskById.has(selectedId)
+        ? selectedId
+        : (lineStatesById.get(selectedLineId)?.currentTaskId || activeFlows[0]?.currentTaskId || availableFlows[0]?.currentTaskId || null);
+      if (focusTaskId) selectedId = focusTaskId;
+
+      renderDeliveryStats(lineStates, backlogGroups, taskById);
+
+      const main = document.getElementById('sprint-main');
+      main.innerHTML = `
+        <div class="flow-board">
+          <section class="flow-section">
+            <div class="flow-section-header">
+              <div>
+                <h2>Active Instances</h2>
+                <p>These lanes are backed by live rough-cut context from recent logs or active locks.</p>
+              </div>
+              <span class="flow-section-count primary">${activeFlows.length}</span>
+            </div>
+            <div class="flow-list">
+              ${activeFlows.length > 0 ? activeFlows.map(line => renderCurrentFlowRow(line, taskById)).join('') : '<div class="flow-empty">No active instances from current rough-cut logs or locks.</div>'}
+            </div>
+          </section>
+          ${renderCollapsedFlows(availableFlows, taskById)}
+          <section class="flow-section">
+            <div class="flow-section-header">
+              <div>
+                <h2>Backlog</h2>
+                <p>Supporting work and non-critical tasks stay out of the main path.</p>
+              </div>
+            </div>
+            ${renderBacklog(backlogGroups)}
+          </section>
+        </div>`;
+
+      wireCardClicks(main, taskById);
+      renderSidePanel(focusTaskId ? taskById.get(focusTaskId) : null);
+    }
+
     /* ─── Sprint-focused renderer ────────────────────────────────── */
     let selectedSprintLetter = null;
     let showRemaining = false;
@@ -1784,26 +2907,70 @@
       return buckets;
     }
 
+    function getActiveSprintIndex(sprints, taskById) {
+      for (let i = 0; i < sprints.length; i++) {
+        const b = classifySprintTasks(sprints[i], taskById);
+        if (b.inProgress.length || b.ready.length || b.blocked.length) return i;
+      }
+      return Math.max(0, sprints.length - 1);
+    }
+
+    function getSprintState(sprint, sprintIndex, activeSprintIndex, taskById) {
+      const b = classifySprintTasks(sprint, taskById);
+      const isDone = b.inProgress.length === 0 && b.ready.length === 0 && b.blocked.length === 0 && b.done.length > 0;
+      if (isDone) return 'completed';
+      if (sprintIndex === activeSprintIndex) return 'current';
+      if (sprintIndex > activeSprintIndex) return 'locked';
+      return 'completed';
+    }
+
+    function getVisibleSprintEntries(sprints, taskById) {
+      const activeSprintIndex = getActiveSprintIndex(sprints, taskById);
+      const visibleSprintEntries = sprints
+        .map((sp, i) => ({ sprint: sp, index: i, state: getSprintState(sp, i, activeSprintIndex, taskById) }))
+        .filter(entry => entry.state !== 'completed');
+      return visibleSprintEntries.length > 0
+        ? visibleSprintEntries
+        : sprints
+            .map((sp, i) => ({ sprint: sp, index: i, state: getSprintState(sp, i, activeSprintIndex, taskById) }))
+            .slice(-1);
+    }
+
     function renderSprintSidebar(sprints, taskById) {
       const list = document.getElementById('sprint-list');
       list.innerHTML = '';
-      sprints.forEach((sp, i) => {
+      const sprintEntries = getVisibleSprintEntries(sprints, taskById);
+
+      sprintEntries.forEach((entry, visibleIndex) => {
+        const sp = entry.sprint;
+        const i = entry.index;
         const b = classifySprintTasks(sp, taskById);
         const total = sp.ids.length;
         const done = b.done.length;
         const pct = total ? Math.round((done / total) * 100) : 0;
+        const state = entry.state;
+
+        const shell = document.createElement('div');
+        shell.className = 'sprint-step';
 
         const btn = document.createElement('button');
-        btn.className = 'sprint-item' + (sp.letter === selectedSprintLetter ? ' active' : '');
+        btn.className = `sprint-item ${state}` + (sp.letter === selectedSprintLetter ? ' active' : '');
         btn.type = 'button';
         btn.setAttribute('role', 'listitem');
         btn.setAttribute('aria-current', sp.letter === selectedSprintLetter ? 'page' : 'false');
+        btn.setAttribute('aria-disabled', state === 'locked' ? 'true' : 'false');
         btn.dataset.letter = sp.letter;
         btn.dataset.index = String(i);
 
         const countsBits = [];
         if (b.inProgress.length) countsBits.push(`<span class="pill active">${b.inProgress.length} active</span>`);
         if (b.ready.length)      countsBits.push(`<span class="pill ready">${b.ready.length} ready</span>`);
+
+        const stateLabel = state === 'completed'
+          ? 'Complete'
+          : state === 'current'
+            ? 'Open now'
+            : 'Locked';
 
         btn.innerHTML = `
           <div class="sprint-item-letter">SPRINT ${sp.letter}</div>
@@ -1813,6 +2980,7 @@
             <span class="pill">${done}/${total} done</span>
             ${countsBits.join('')}
           </div>
+          <div class="sprint-item-state ${state}">${stateLabel}</div>
           <button class="sprint-item-copy" type="button" data-action="copy-sprint-prompt" data-letter="${sp.letter}" aria-label="Copy kickoff prompt for Sprint ${sp.letter}">Copy prompt</button>
         `;
         btn.addEventListener('click', () => selectSprint(sp.letter));
@@ -1837,8 +3005,147 @@
             }
           }
         });
-        list.appendChild(btn);
+        shell.appendChild(btn);
+        if (visibleIndex < sprintEntries.length - 1) {
+          const connector = document.createElement('div');
+          const connectorState = state === 'completed' ? 'completed' : state === 'current' ? 'current' : 'locked';
+          connector.className = `sprint-connector ${connectorState}`;
+          connector.setAttribute('aria-hidden', 'true');
+          shell.appendChild(connector);
+        }
+        list.appendChild(shell);
       });
+    }
+
+    function getSprintTaskState(task, sprint, taskById, primaryActive, recommendedNext) {
+      const buckets = classifySprintTasks(sprint, taskById);
+      const activeIds = new Set((buckets.inProgress || []).map(t => t.id));
+      const readyIds = new Set((buckets.ready || []).map(t => t.id));
+      const blockedById = new Map((buckets.blocked || []).map(t => [t.id, t]));
+      if (!task) return { state: 'blocked', label: 'Missing', wait: '' };
+      if (task.status === 'done') return { state: 'done', label: 'Done', wait: '' };
+      if (primaryActive && task.id === primaryActive.id) return { state: 'current', label: 'Current', wait: '' };
+      if (activeIds.has(task.id)) return { state: 'current', label: 'Active', wait: '' };
+      if (recommendedNext && task.id === recommendedNext.id) return { state: 'next', label: 'Next', wait: '' };
+      if (blockedById.has(task.id)) {
+        const blockerIds = blockedById.get(task.id).unfinishedBlockerIds || [];
+        return { state: 'blocked', label: 'Blocked', wait: blockerIds.join(', ') };
+      }
+      if (readyIds.has(task.id)) return { state: 'parked', label: 'Ready', wait: '' };
+      return { state: 'parked', label: 'Parked', wait: '' };
+    }
+
+    function renderDeliveryLinesOverview(sprints, taskById) {
+      const entries = getVisibleSprintEntries(sprints, taskById);
+      const rows = entries.map(entry => {
+        const sprint = entry.sprint;
+        const buckets = classifySprintTasks(sprint, taskById);
+        const orderedInProgress = orderSprintBucket(sprint, buckets.inProgress);
+        const orderedReady = orderSprintBucket(sprint, buckets.ready);
+        const primaryActive = orderedInProgress[0] || null;
+        const recommendedNext = orderedReady[0] || null;
+        const stateLabel = entry.state === 'current' ? 'Open now' : 'Locked';
+        const steps = sprint.ids.map((id, index) => {
+          const task = taskById.get(id);
+          const taskState = getSprintTaskState(task, sprint, taskById, primaryActive, recommendedNext);
+          const title = task ? escapeHtml(task.title || '') : 'Task not found in MASTER_PLAN';
+          return `
+            <div class="delivery-line-step ${taskState.state}" data-id="${task ? task.id : ''}">
+              <div class="delivery-line-step-top">
+                <span class="delivery-line-step-order">${index + 1}</span>
+                <span class="delivery-line-step-id">${id}</span>
+                <span class="delivery-line-step-state">${taskState.label}</span>
+              </div>
+              <div class="delivery-line-step-title">${title}</div>
+            </div>`;
+        }).join('<div class="delivery-line-step-arrow" aria-hidden="true">→</div>');
+
+        return `
+          <section class="delivery-line-row ${entry.state}" data-letter="${sprint.letter}">
+            <div class="delivery-line-row-top">
+              <div>
+                <div class="delivery-line-row-meta">
+                  <span class="delivery-line-row-id">Sprint ${sprint.letter}</span>
+                  <span class="delivery-line-row-name">${escapeHtml(sprint.name)}</span>
+                  <span class="delivery-line-row-state ${entry.state}">${stateLabel}</span>
+                </div>
+                <div class="delivery-line-row-counts">
+                  <span>${buckets.done.length}/${sprint.ids.length} done</span>
+                  <span>${buckets.inProgress.length} active</span>
+                  <span>${buckets.ready.length} ready</span>
+                  <span>${buckets.blocked.length} blocked</span>
+                </div>
+              </div>
+              <div class="delivery-line-row-actions">
+                <button class="delivery-line-btn primary" type="button" data-action="focus-line" data-letter="${sprint.letter}">${entry.state === 'current' ? 'Follow line' : 'Preview line'}</button>
+                <button class="delivery-line-btn" type="button" data-action="copy-line-prompt" data-letter="${sprint.letter}">Copy kickoff prompt</button>
+              </div>
+            </div>
+            <div class="delivery-line-steps">${steps}</div>
+          </section>`;
+      }).join('');
+
+      return `
+        <section class="delivery-lines-panel" aria-labelledby="delivery-lines-heading">
+          <div class="delivery-spine-title">
+            <h2 id="delivery-lines-heading">Delivery lines</h2>
+            <span>separate followable kickoff paths</span>
+          </div>
+          <p class="delivery-spine-note">
+            Each workstream is shown as its own line. Start with the open line, then follow its ordered steps until the next locked line unlocks.
+          </p>
+          <div class="delivery-lines-list">${rows}</div>
+        </section>`;
+    }
+
+    function renderTaskSpine(sprint, taskById, primaryActive, recommendedNext) {
+      const parts = [];
+      sprint.ids.forEach((id, index) => {
+        const task = taskById.get(id);
+        let body = '';
+        if (!task) {
+          body = `
+            <div class="task-spine-step blocked">
+              <div class="task-spine-top">
+                <span class="task-spine-order">Step ${index + 1}</span>
+                <span class="task-spine-id">${id}</span>
+                <span class="task-spine-state">Missing</span>
+              </div>
+              <div class="task-spine-title">Task is referenced in sprint framing but was not parsed from MASTER_PLAN.</div>
+            </div>`;
+        } else {
+          const taskState = getSprintTaskState(task, sprint, taskById, primaryActive, recommendedNext);
+          const waitLine = taskState.wait ? `<div class="task-spine-wait">waits for ${taskState.wait}</div>` : '';
+
+          body = `
+            <div class="task-spine-step ${taskState.state}" data-id="${task.id}">
+              <div class="task-spine-top">
+                <span class="task-spine-order">Step ${index + 1}</span>
+                <span class="task-spine-id">${task.id}</span>
+                <span class="task-spine-state">${taskState.label}</span>
+              </div>
+              <div class="task-spine-title">${escapeHtml(task.title || '')}</div>
+              ${waitLine}
+            </div>`;
+        }
+
+        parts.push(body);
+        if (index < sprint.ids.length - 1) {
+          parts.push('<div class="task-spine-connector" aria-hidden="true">→</div>');
+        }
+      });
+
+      return `
+        <section class="delivery-spine" aria-labelledby="delivery-spine-heading">
+          <div class="delivery-spine-title">
+            <h2 id="delivery-spine-heading">Execution line</h2>
+            <span>one direction from finished work to the next unlock</span>
+          </div>
+          <p class="delivery-spine-note">
+            This sprint is shown as an ordered line. Finish the current step, then the next visible step opens; later work stays parked or blocked until its predecessors clear.
+          </p>
+          <div class="task-spine">${parts.join('')}</div>
+        </section>`;
     }
 
     function renderSprintMain(sprint, taskById) {
@@ -1849,18 +3156,27 @@
       }
       const b = classifySprintTasks(sprint, taskById);
       const activeTotal = b.inProgress.length + b.ready.length + b.blocked.length;
+      const orderedInProgress = orderSprintBucket(sprint, b.inProgress);
+      const orderedReady = orderSprintBucket(sprint, b.ready);
+      const primaryActive = orderedInProgress[0] || null;
+      const recommendedNext = orderedReady[0] || null;
+      const deliveryLinesHTML = renderDeliveryLinesOverview(currentSprints, taskById);
+      const spineHTML = renderTaskSpine(sprint, taskById, primaryActive, recommendedNext);
 
       // Fully done?
       if (activeTotal === 0 && b.done.length > 0) {
         main.innerHTML = `
+          ${deliveryLinesHTML}
           <div class="sprint-main-header">
             <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
             <div class="sub"><b>🎉 Complete</b> — ${b.done.length} task${b.done.length === 1 ? '' : 's'} shipped.</div>
           </div>
+          ${spineHTML}
           <div class="sprint-empty" style="margin-top:24px;">
             All tasks in this sprint are done. Use the sidebar to switch to the next sprint.
           </div>
         `;
+        wireCardClicks(main, taskById);
         focusSprintHeading();
         return;
       }
@@ -1879,27 +3195,26 @@
           .map(id => `<span class="blocker" data-id="${id}">${id}</span>`)
           .join('') || '<span style="color:var(--text-subtle)">(all blockers inside this sprint)</span>';
         main.innerHTML = `
+          ${deliveryLinesHTML}
           <div class="sprint-main-header">
             <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
             <div class="sub">${b.done.length} done · <b class="blocked">${b.blocked.length} blocked</b> · 0 unblocked</div>
           </div>
+          ${spineHTML}
           <div class="sprint-empty" style="margin-top:24px;">
             <b>Sprint ${sprint.letter} is fully blocked.</b><br>
             Finish these prerequisite tasks first (they live outside this sprint):
             <div class="blocker-list">${chips}</div>
           </div>
         `;
+        wireCardClicks(main, taskById);
         wireBlockerChips(main, taskById);
         focusSprintHeading();
         return;
       }
 
-      const orderedInProgress = orderSprintBucket(sprint, b.inProgress);
-      const orderedReady = orderSprintBucket(sprint, b.ready);
       const orderedBlocked = orderSprintBucket(sprint, b.blocked);
-      const primaryActive = orderedInProgress[0] || null;
       const extraActive = orderedInProgress.slice(1);
-      const recommendedNext = orderedReady[0] || null;
       const parkedReady = orderedReady.slice(1);
 
       // Normal render
@@ -2005,7 +3320,7 @@
             ${showRemaining ? remainingTableHTML(hiddenTasks) : ''}`
         : '';
 
-      main.innerHTML = headerHTML + focusHTML + alsoActiveHTML + nextHTML + upNextHTML + remainingHTML;
+      main.innerHTML = deliveryLinesHTML + headerHTML + spineHTML + focusHTML + alsoActiveHTML + nextHTML + upNextHTML + remainingHTML;
       wireCardClicks(main, taskById);
       focusSprintHeading();
     }
@@ -2114,6 +3429,75 @@
           }
         });
       });
+      root.querySelectorAll('.task-spine-step[data-id]').forEach(step => {
+        step.setAttribute('tabindex', '0');
+        step.setAttribute('role', 'button');
+        step.addEventListener('click', () => openTaskDetail(step.dataset.id));
+        step.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openTaskDetail(step.dataset.id);
+          }
+        });
+      });
+      root.querySelectorAll('[data-action="focus-line"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectSprint(btn.dataset.letter);
+        });
+      });
+      root.querySelectorAll('[data-action="continue-line"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const line = currentDeliveryLines.find(item => item.id === btn.dataset.lineId);
+          if (!line) return;
+          const taskById = new Map(allTasks.map(task => [task.id, task]));
+          const lineState = deriveLineStates([line], taskById)[0];
+          if (lineState?.currentTaskId) openTaskDetail(lineState.currentTaskId);
+          try {
+            await navigator.clipboard.writeText(buildLinePrompt(lineState, taskById));
+            showToast(`Copied kickoff prompt for ${line.name}`, 'success');
+          } catch {
+            showToast('Clipboard copy failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-action="copy-line-prompt"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const line = currentDeliveryLines.find(item => item.id === btn.dataset.lineId);
+          if (!line) return;
+          const taskById = new Map(allTasks.map(task => [task.id, task]));
+          const lineState = deriveLineStates([line], taskById)[0];
+          try {
+            await navigator.clipboard.writeText(buildLinePrompt(lineState, taskById));
+            showToast(`Copied kickoff prompt for ${line.name}`, 'success');
+          } catch {
+            showToast('Clipboard copy failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('.delivery-line-step[data-id]').forEach(step => {
+        if (!step.dataset.id) return;
+        step.setAttribute('tabindex', '0');
+        step.setAttribute('role', 'button');
+        step.addEventListener('click', () => openTaskDetail(step.dataset.id));
+        step.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openTaskDetail(step.dataset.id);
+          }
+        });
+      });
+      root.querySelectorAll('.flow-node[data-id], .flow-backlog-item[data-id], .flow-chip[data-id]').forEach(el => {
+        el.addEventListener('click', () => openTaskDetail(el.dataset.id));
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openTaskDetail(el.dataset.id);
+          }
+        });
+      });
       root.querySelectorAll('.next-row').forEach(row => {
         const id = row.dataset.id;
         row.addEventListener('click', () => openTaskDetail(id));
@@ -2180,10 +3564,18 @@
     let currentSprints = [];
 
     function selectSprint(letter) {
+      const taskById = new Map(allTasks.map(t => [t.id, t]));
+      const activeSprintIndex = getActiveSprintIndex(currentSprints, taskById);
+      const targetIndex = currentSprints.findIndex(s => s.letter === letter);
+      if (targetIndex === -1) return;
+      if (targetIndex > activeSprintIndex) {
+        const gate = currentSprints[activeSprintIndex];
+        showToast(`Sprint ${letter} stays locked until Sprint ${gate?.letter || '?'} is finished`, 'error');
+        return;
+      }
       if (letter === selectedSprintLetter) return;
       selectedSprintLetter = letter;
       showRemaining = false;
-      const taskById = new Map(allTasks.map(t => [t.id, t]));
       const sprint = currentSprints.find(s => s.letter === letter);
       renderSprintSidebar(currentSprints, taskById);
       renderSprintMain(sprint, taskById);
@@ -2224,11 +3616,7 @@
     }
 
     function getDefaultSprintLetter(sprints, taskById) {
-      for (const sprint of sprints) {
-        const b = classifySprintTasks(sprint, taskById);
-        if (b.inProgress.length || b.ready.length || b.blocked.length) return sprint.letter;
-      }
-      return sprints[0]?.letter;
+      return sprints[getActiveSprintIndex(sprints, taskById)]?.letter || sprints[0]?.letter;
     }
 
     function buildSprintPrompt(letter) {
@@ -2281,18 +3669,20 @@
       const zoomEl = document.querySelector('.zoom-controls');
       const layoutEl = document.getElementById('sprint-layout');
       const sidePane = document.getElementById('side-pane');
-      const isSprint = mode === 'sprint';
-      if (rootEl) rootEl.style.gridTemplateColumns = isSprint ? '1fr' : '1fr 340px';
-      if (graphPane) graphPane.style.display = isSprint ? 'none' : '';
-      if (emptyEl) emptyEl.style.display = isSprint ? 'none' : '';
-      if (legendEl) legendEl.style.display = isSprint ? 'none' : '';
-      if (zoomEl) zoomEl.style.display = isSprint ? 'none' : '';
-      if (layoutEl) layoutEl.hidden = !isSprint;
-      if (sidePane) sidePane.style.display = isSprint ? 'none' : '';
+      const sidebar = document.querySelector('.sprint-sidebar');
+      const isDelivery = mode === 'delivery';
+      if (rootEl) rootEl.style.gridTemplateColumns = mode === 'streams' ? '1fr 340px' : '1fr 340px';
+      if (graphPane) graphPane.style.display = mode === 'streams' ? '' : 'none';
+      if (emptyEl) emptyEl.style.display = mode === 'streams' ? '' : 'none';
+      if (legendEl) legendEl.style.display = mode === 'streams' ? '' : 'none';
+      if (zoomEl) zoomEl.style.display = mode === 'streams' ? '' : 'none';
+      if (layoutEl) layoutEl.hidden = mode === 'streams';
+      if (sidebar) sidebar.style.display = isDelivery ? 'none' : '';
+      if (sidePane) sidePane.style.display = '';
       // Toolbar toggles that only apply to streams view
       ['toggle-rank-labels', 'toggle-auto-infer', 'toggle-inferred', 'fit-view'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = isSprint ? 'none' : '';
+        if (el) el.style.display = mode === 'streams' ? '' : 'none';
       });
     }
 
@@ -2441,6 +3831,120 @@
     }
     function escapeAttr(s) { return escapeHtml(s); }
 
+    function basenamePath(value) {
+      if (!value) return '';
+      const parts = String(value).split(/[\\/]/).filter(Boolean);
+      return parts[parts.length - 1] || '';
+    }
+
+    function deriveProjectFilter(status) {
+      if (!status) return '';
+      if (status.projectName) return status.projectName;
+      const base = basenamePath(status.project);
+      if (base && base !== 'docs') return base;
+      const parts = String(status.project || '').split(/[\\/]/).filter(Boolean);
+      if (parts.length >= 2 && parts[parts.length - 1] === 'docs') {
+        return parts[parts.length - 2] || '';
+      }
+      return base;
+    }
+
+    async function fetchJson(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function fetchStatusContext() {
+      try {
+        const suffix = currentProjectRoot ? `?cwd=${encodeURIComponent(currentProjectRoot)}` : '';
+        return await fetchJson(`${API_BASE}/api/status${suffix}`);
+      } catch {
+        return null;
+      }
+    }
+
+    async function fetchLocksForProject(projectRoot) {
+      try {
+        const suffix = projectRoot ? `?cwd=${encodeURIComponent(projectRoot)}` : '';
+        const json = await fetchJson(`${API_BASE}/api/locks${suffix}`);
+        return json.locks || [];
+      } catch {
+        return [];
+      }
+    }
+
+    async function fetchRecentActivity(projectFilter) {
+      try {
+        const query = projectFilter
+          ? `?project=${encodeURIComponent(projectFilter)}&days=7&limit=250`
+          : '?days=7&limit=120';
+        const json = await fetchJson(`${API_BASE}/api/changelog${query}`);
+        return json.entries || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function buildActivityByTask(entries) {
+      const latestByTask = new Map();
+      for (const entry of entries) {
+        const blob = `${entry.cmd || ''} ${entry.summary || ''} ${entry.file || ''}`;
+        const ids = blob.match(ID_PATTERN) || [];
+        for (const id of ids) {
+          const existing = latestByTask.get(id);
+          if (!existing || String(entry.ts || '') > String(existing.ts || '')) {
+            latestByTask.set(id, { ts: entry.ts || '', tool: entry.tool || '', agent: entry.agent || '' });
+          }
+        }
+      }
+      return latestByTask;
+    }
+
+    function getEntryTaskIds(entry) {
+      const blob = `${entry.cmd || ''} ${entry.summary || ''} ${entry.file || ''}`;
+      return [...new Set(blob.match(ID_PATTERN) || [])];
+    }
+
+    function buildLineRuntimeMap(lines) {
+      const byLine = new Map(lines.map(line => [line.id, null]));
+      for (const line of lines) {
+        const lineTaskIds = new Set([...line.sequenceTaskIds, ...line.supportTaskIds]);
+        for (const entry of activityEntries) {
+          const taskIds = getEntryTaskIds(entry);
+          if (!taskIds.some(id => lineTaskIds.has(id))) continue;
+          const existing = byLine.get(line.id);
+          if (!existing || String(entry.ts || '') > String(existing.ts || '')) {
+            byLine.set(line.id, {
+              ts: entry.ts || '',
+              sid: entry.sid || '',
+              agent: entry.agent || '',
+              tool: entry.tool || '',
+            });
+          }
+        }
+      }
+      return byLine;
+    }
+
+    function isRuntimeActive(runtime) {
+      if (!runtime?.ts) return false;
+      const age = Date.now() - new Date(runtime.ts).getTime();
+      return Number.isFinite(age) && age <= ACTIVE_INSTANCE_WINDOW_MS;
+    }
+
+    function formatRelativeTime(ts) {
+      if (!ts) return '';
+      const diffMs = Date.now() - new Date(ts).getTime();
+      if (!Number.isFinite(diffMs)) return '';
+      const minutes = Math.max(1, Math.round(diffMs / 60000));
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 48) return `${hours}h ago`;
+      const days = Math.round(hours / 24);
+      return `${days}d ago`;
+    }
+
     /* ─── Pan / zoom ───────────────────────────────────────────────── */
     function applyTransform() {
       const vp = document.getElementById('viewport');
@@ -2543,13 +4047,23 @@
     /* ─── Data fetch ──────────────────────────────────────────────── */
     async function fetchAndRender(shouldFit = false) {
       try {
-        const res = await fetch(`${API_BASE}/api/master-plan`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
+        const [status, json] = await Promise.all([
+          fetchStatusContext(),
+          fetchJson(`${API_BASE}/api/master-plan${currentProjectRoot ? `?cwd=${encodeURIComponent(currentProjectRoot)}` : ''}`),
+        ]);
         rawMarkdown = json.content || '';
         allTasks = parseMasterPlan(rawMarkdown);
+        currentProjectRoot = status?.project || '';
+        currentProjectFilter = deriveProjectFilter(status);
+        const [locks, recentEntries] = await Promise.all([
+          fetchLocksForProject(currentProjectRoot),
+          fetchRecentActivity(currentProjectFilter),
+        ]);
+        activeLocks = locks;
+        activityEntries = recentEntries;
+        activityByTask = buildActivityByTask(recentEntries);
         renderGraph();
-        if (shouldFit) requestAnimationFrame(() => requestAnimationFrame(fitView));
+        if (shouldFit && currentDeliveryLines.length === 0) requestAnimationFrame(() => requestAnimationFrame(fitView));
       } catch (err) {
         console.error('[Flow] Fetch error:', err);
         showToast('Failed to load MASTER_PLAN.md', 'error');
@@ -2558,6 +4072,11 @@
     function debouncedRefresh() {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => fetchAndRender(false), 300);
+    }
+
+    function startLiveRefresh() {
+      if (liveRefreshTimer) clearInterval(liveRefreshTimer);
+      liveRefreshTimer = setInterval(() => fetchAndRender(false), 15000);
     }
 
     /* ─── SSE ─────────────────────────────────────────────────────── */
@@ -2633,6 +4152,7 @@
         requestAnimationFrame(() => requestAnimationFrame(fitView));
         debouncedRefresh();
       } else if (event.data?.type === 'switch-project') {
+        currentProjectRoot = event.data.projectRoot || '';
         fetchAndRender(true);
       }
     });
@@ -2641,10 +4161,12 @@
     });
     window.addEventListener('beforeunload', () => {
       if (eventSource) eventSource.close();
+      if (liveRefreshTimer) clearInterval(liveRefreshTimer);
     });
 
     function init() {
       fetchAndRender(true);
+      startLiveRefresh();
       setTimeout(connectSSE, 1000);
     }
     if (document.readyState === 'loading') {

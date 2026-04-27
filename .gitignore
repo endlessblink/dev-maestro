@@ -17,6 +17,7 @@ data/happy-audit.jsonl
 data/orchestrations.json
 local/views.legacy/
 projects.json
+projects.json.*
 settings.json
 local/config.json
 local/happy-config.json

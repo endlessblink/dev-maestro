@@ -72,6 +72,7 @@ MASTER_PLAN_PATH=/path/to/your/project/docs/MASTER_PLAN.md
 | Tab | Description |
 |-----|-------------|
 | **Kanban** | Development task tracking parsed from MASTER_PLAN.md |
+| **Flow** | Delivery-line orchestration view (`Current Flows`, `Up Next`, `Backlog`) |
 | **Health** | Code quality scanning (TypeScript, ESLint, Knip, npm audit) |
 | **Skills** | Claude Code skills with analytics and dependency graph |
 | **Docs** | Interactive documentation canvas with search |
@@ -86,6 +87,7 @@ MASTER_PLAN_PATH=/path/to/your/project/docs/MASTER_PLAN.md
 - **40+ REST endpoints** + 4 SSE channels for real-time updates
 - **Live sync** - Changes to MASTER_PLAN.md auto-refresh the UI
 - **Drag-and-drop** task status updates
+- **Delivery-line flow view** - Explicit workstreams with current/next focus, locks, and backlog
 - **Health scanning** with 8+ code quality metrics
 - **Dark theme** optimized for developers
 
@@ -132,6 +134,31 @@ Description...
 - `(⏸️ PAUSED)` → Blocked
 - `(👀 REVIEW)` → Review
 - `~~TASK-XXX~~ (✅ DONE)` → Done (requires strikethrough on ID)
+
+### Optional Delivery Lines Block
+
+For the Flow tab, you can define explicit workstreams in `MASTER_PLAN.md`:
+
+```markdown
+### Delivery Lines
+
+1. **LINE A — Record State Fidelity**
+   Sequence: TASK-147 -> TASK-121 -> TASK-123
+
+2. **LINE B — Shared Zoom / Render Truth**
+   Depends-on: LINE A
+   Sequence: TASK-122 -> TASK-160 -> TASK-161 -> TASK-146
+
+3. **LINE C — Export Truth and Quality**
+   Depends-on: LINE B
+   Sequence: TASK-028 -> TASK-029
+   Supports: TASK-050, TASK-052
+```
+
+Rules:
+- `Sequence` defines the critical path shown in `Current Flows` / `Up Next`
+- `Supports` are kept out of the main path and shown in the backlog/detail views
+- `Depends-on` blocks the whole line until the prerequisite line is complete
 
 ## Shell Alias (Optional)
 

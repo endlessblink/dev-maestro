@@ -2632,9 +2632,13 @@ function renderFilterChips() {
 
 // ── Hero Card ─────────────────────────────────────────────────────────────
 let activeProjectPath = null;
+const SAVED_PROJECT_ROOT_KEY = 'watchpost-active-project-root';
 
 async function loadActiveProject() {
-    const status = await apiFetch('/api/status');
+    const savedProjectRoot = localStorage.getItem(SAVED_PROJECT_ROOT_KEY) || '';
+    const status = await apiFetch(savedProjectRoot
+        ? `/api/status?cwd=${encodeURIComponent(savedProjectRoot)}`
+        : '/api/status');
     if (status && status.project) {
         activeProjectPath = status.project;
         // Update topbar project name
@@ -2938,7 +2942,7 @@ function bindCardEvents(container, rowSelector) {
             const topbar = document.getElementById('topbarProjectName');
             if (topbar) topbar.textContent = project.name;
             renderHeroCard();
-            window.parent.postMessage({ type: 'activate-and-navigate', project: name }, '*');
+            window.parent.postMessage({ type: 'activate-and-navigate', project: name, projectRoot: project.root, masterPlanPath: project.masterPlan }, '*');
             return;
         }
 

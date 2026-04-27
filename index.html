@@ -845,12 +845,12 @@
     <script>
         const tabs = document.querySelectorAll('.tab');
         const panels = document.querySelectorAll('.panel');
+        const SAVED_PROJECT_ROOT_KEY = 'watchpost-active-project-root';
+        const SAVED_PROJECT_NAME_KEY = 'watchpost-active-project-name';
+        const SAVED_MASTER_PLAN_KEY = 'watchpost-active-master-plan';
 
-        // Restore saved tab
+        // Restore saved tab after project context is initialized.
         const savedTab = localStorage.getItem('watchpost-tab');
-        if (savedTab) {
-            switchTab(savedTab);
-        }
 
         tabs.forEach(tab => {
             tab.addEventListener('click', () => {
@@ -875,10 +875,18 @@
                 if (iframe) {
                     // Lazy load iframe on first activation
                     if (iframe.dataset.src && !iframe.src) {
+                        iframe.addEventListener('load', () => {
+                            if (activeProjectRoot && iframe.contentWindow) {
+                                iframe.contentWindow.postMessage({ type: 'switch-project', projectRoot: activeProjectRoot }, '*');
+                            }
+                        }, { once: true });
                         iframe.src = iframe.dataset.src;
                     } else if (iframe.contentWindow) {
                         // Send refresh message on subsequent activations
                         // This fixes Chromium canvas disappearing bug
+                        if (activeProjectRoot) {
+                            iframe.contentWindow.postMessage({ type: 'switch-project', projectRoot: activeProjectRoot }, '*');
+                        }
                         iframe.contentWindow.postMessage({ type: 'tab-activated' }, '*');
                     }
                 }
@@ -890,17 +898,46 @@
             if (badge) badge.textContent = name || '—';
         }
 
-        // Project-switch flow: update badge, switch to kanban, tell kanban iframe to re-render.
+        let activeProjectRoot = '';
+
+        function persistActiveProject({ project, projectRoot, masterPlanPath }) {
+            if (projectRoot) localStorage.setItem(SAVED_PROJECT_ROOT_KEY, projectRoot);
+            if (project) localStorage.setItem(SAVED_PROJECT_NAME_KEY, project);
+            if (masterPlanPath) localStorage.setItem(SAVED_MASTER_PLAN_KEY, masterPlanPath);
+        }
+
+        function getSavedProjectContext() {
+            return {
+                projectRoot: localStorage.getItem(SAVED_PROJECT_ROOT_KEY) || '',
+                project: localStorage.getItem(SAVED_PROJECT_NAME_KEY) || '',
+                masterPlanPath: localStorage.getItem(SAVED_MASTER_PLAN_KEY) || ''
+            };
+        }
+
+        function broadcastProjectContext(projectRoot) {
+            if (!projectRoot) return;
+            document.querySelectorAll('iframe').forEach((iframe) => {
+                if (iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'switch-project', projectRoot }, '*');
+                }
+            });
+        }
+
+        // Project-switch flow: update badge, switch to kanban, tell task views to re-render.
         // Shared by (a) iframe-originated { type:'activate-and-navigate', project } messages
         // and (b) the new top-right project switcher (see initProjectSwitcher below).
-        function handleActivateAndNavigate({ project }) {
+        function handleActivateAndNavigate({ project, projectRoot, masterPlanPath }) {
             updateActiveBadge(project);
+            if (projectRoot) activeProjectRoot = projectRoot;
+            if (masterPlanPath) activeMasterPlan = masterPlanPath;
+            persistActiveProject({ project, projectRoot, masterPlanPath });
             const kanbanIframe = document.querySelector('#kanban iframe');
             const alreadyLoaded = kanbanIframe && !!kanbanIframe.src;
             switchTab('kanban');
             localStorage.setItem('watchpost-tab', 'kanban');
+            if (projectRoot) broadcastProjectContext(projectRoot);
             if (alreadyLoaded && kanbanIframe.contentWindow) {
-                kanbanIframe.contentWindow.postMessage({ type: 'switch-project' }, '*');
+                kanbanIframe.contentWindow.postMessage({ type: 'switch-project', projectRoot }, '*');
             }
         }
 
@@ -912,7 +949,7 @@
             if (e.data?.type !== 'activate-and-navigate') return;
 
             if (e.data.project) {
-                handleActivateAndNavigate({ project: e.data.project });
+                handleActivateAndNavigate({ project: e.data.project, projectRoot: e.data.projectRoot, masterPlanPath: e.data.masterPlanPath });
             } else if (e.data.target) {
                 const targetPanel = document.getElementById(e.data.target);
                 if (!targetPanel) return;
@@ -932,11 +969,21 @@
         // Show active project on load — prefer the registry name (matched by masterPlanPath) over
         // the raw path basename, so the badge reflects the real project (e.g. "rough-cut") not
         // the filesystem leaf (e.g. "docs").
+        const savedProjectContext = getSavedProjectContext();
+        if (savedProjectContext.projectRoot) activeProjectRoot = savedProjectContext.projectRoot;
+        if (savedProjectContext.masterPlanPath) activeMasterPlan = savedProjectContext.masterPlanPath;
+        if (savedProjectContext.project) updateActiveBadge(savedProjectContext.project);
+
+        switchTab(savedTab || 'controlroom');
+
         Promise.all([
-            fetch('/api/status').then(r => r.json()).catch(() => null),
+            fetch(savedProjectContext.projectRoot
+                ? `/api/status?cwd=${encodeURIComponent(savedProjectContext.projectRoot)}`
+                : '/api/status').then(r => r.json()).catch(() => null),
             fetch('/api/projects/enriched').then(r => r.json()).catch(() => null),
         ]).then(([status, enriched]) => {
             if (status?.masterPlanPath) activeMasterPlan = status.masterPlanPath;
+            if (status?.project) activeProjectRoot = status.project;
             let displayName = '';
             if (Array.isArray(enriched) && status?.masterPlanPath) {
                 const match = enriched.find(p => p.masterPlan && p.masterPlan === status.masterPlanPath);
@@ -947,6 +994,10 @@
                 displayName = parts[parts.length - 1] || '';
             }
             if (displayName) updateActiveBadge(displayName);
+            persistActiveProject({ project: displayName || status?.projectName || savedProjectContext.project, projectRoot: status?.project || activeProjectRoot, masterPlanPath: status?.masterPlanPath || activeMasterPlan });
+            if (status?.project || activeProjectRoot) {
+                broadcastProjectContext(status?.project || activeProjectRoot);
+            }
         });
 
         // ── Project Switcher ──────────────────────────────────────────────
@@ -1126,7 +1177,7 @@
                 if (p.masterPlan === activeMasterPlan) {
                     // Already active — just close and jump to kanban.
                     closePopover();
-                    handleActivateAndNavigate({ project: p.name });
+                    handleActivateAndNavigate({ project: p.name, projectRoot: p.root, masterPlanPath: p.masterPlan });
                     return;
                 }
                 try {
@@ -1139,7 +1190,7 @@
                     activeMasterPlan = p.masterPlan;
                     projects = null; // force refresh on reopen so stats refresh
                     closePopover();
-                    handleActivateAndNavigate({ project: p.name });
+                    handleActivateAndNavigate({ project: p.name, projectRoot: p.root, masterPlanPath: p.masterPlan });
                 } catch (err) {
                     console.error('[project-switcher] Switch failed:', err);
                     showTransientError(`Switch failed: ${err.message || err}`);

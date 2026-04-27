@@ -410,8 +410,27 @@
         // ── Render ──────────────────────────────────────────────────────────
 
         let currentProject = '';
+        let currentProjectRoot = '';
         let currentDays = 7;
         let showProjectBadge = true;
+
+        async function syncProjectFromRoot(projectRoot) {
+            currentProjectRoot = projectRoot || '';
+            if (!currentProjectRoot) {
+                currentProject = '';
+            } else {
+                try {
+                    const res = await fetch(`${BASE}/api/status?cwd=${encodeURIComponent(currentProjectRoot)}`);
+                    const status = await res.json();
+                    currentProject = status.projectName || '';
+                } catch {
+                    currentProject = '';
+                }
+            }
+
+            const select = document.getElementById('projectSelect');
+            if (select) select.value = currentProject;
+        }
 
         async function loadProjects() {
             try {
@@ -561,6 +580,8 @@
         window.addEventListener('message', e => {
             if (e.data && e.data.type === 'tab-activated') {
                 refresh();
+            } else if (e.data?.type === 'switch-project') {
+                syncProjectFromRoot(e.data.projectRoot).then(() => refresh());
             }
         });
 

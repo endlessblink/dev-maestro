@@ -12,6 +12,22 @@
 
 ---
 
+## Delivery Lines
+
+1. **LINE A — Setup & Foundation**
+   Sequence: TASK-001 -> TASK-002
+
+2. **LINE B — Core Features**
+   Depends-on: LINE A
+   Sequence: TASK-003 -> TASK-004
+
+3. **LINE C — Quality & Documentation**
+   Depends-on: LINE B
+   Sequence: TASK-005 -> TASK-007 -> TASK-008
+   Supports: TASK-006
+
+---
+
 ## Phase 1: Setup
 
 ### TASK-001: Initialize project structure

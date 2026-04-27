@@ -397,6 +397,13 @@
         let graph = null;
         let selectedNode = null;
         let hoveredNode = null;
+        let currentProjectRoot = '';
+
+        function withProjectContext(url) {
+            if (!currentProjectRoot) return url;
+            const separator = url.includes('?') ? '&' : '?';
+            return `${url}${separator}cwd=${encodeURIComponent(currentProjectRoot)}`;
+        }
 
         // Category emojis
         const CATEGORY_EMOJIS = {
@@ -420,12 +427,13 @@
         // Load data and initialize
         async function init() {
             try {
-                const response = await fetch('/api/docs?v=' + Date.now());
+                const response = await fetch(withProjectContext('/api/docs?v=' + Date.now()));
                 graphData = await response.json();
 
                 updateStats();
                 buildLegend();
-                initGraph();
+                if (graph) refreshGraph();
+                else initGraph();
             } catch (error) {
                 console.error('Failed to load graph data:', error);
                 document.getElementById('graph').innerHTML =
@@ -698,6 +706,9 @@
             if (event.data && event.data.type === 'tab-activated') {
                 console.log('Tab activated - refreshing canvas');
                 refreshGraph();
+            } else if (event.data?.type === 'switch-project') {
+                currentProjectRoot = event.data.projectRoot || '';
+                init();
             }
         });
 

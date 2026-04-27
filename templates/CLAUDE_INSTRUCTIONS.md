@@ -128,4 +128,26 @@ Watchpost provides a Kanban dashboard at `http://localhost:6010` that:
 - Supports drag-and-drop to update task status
 - Auto-refreshes when the file changes
 
+### Optional Delivery Lines Block for Flow View
+
+If you want Watchpost's Flow tab to show clean workstreams instead of inferring them from sections, add this block:
+
+```markdown
+### Delivery Lines
+
+1. **LINE A — Workstream Name**
+   Sequence: TASK-001 -> TASK-002 -> TASK-003
+
+2. **LINE B — Another Workstream**
+   Depends-on: LINE A
+   Sequence: TASK-004 -> TASK-005
+   Supports: TASK-006, TASK-007
+```
+
+Rules:
+- `Sequence` = ordered critical path for the line
+- `Depends-on` = line-level prerequisite (e.g. `Depends-on: LINE A`)
+- `Supports` = related tasks kept in backlog/detail, not in the main visible path
+- Keep line names concise and action-oriented
+
 For more information: https://github.com/endlessblink/watchpost
