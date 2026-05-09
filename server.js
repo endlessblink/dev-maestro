@@ -292,8 +292,14 @@ function findProjectForCwd(cwd) {
                 addedAt: new Date().toISOString().slice(0, 10)
             }];
             const projectsFile = wpPaths.projectsFile();
-            const parsed = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
+            let parsed = { projects: [] };
+            try {
+                parsed = JSON.parse(fs.readFileSync(projectsFile, 'utf8'));
+            } catch (err) {
+                if (err.code !== 'ENOENT') throw err;
+            }
             const nextData = Array.isArray(parsed) ? nextProjects : { ...parsed, projects: nextProjects };
+            fs.mkdirSync(path.dirname(projectsFile), { recursive: true });
             fs.writeFileSync(projectsFile, JSON.stringify(nextData, null, 2));
 
             return {
@@ -309,6 +315,133 @@ function findProjectForCwd(cwd) {
     }
 
     return bestMatch;
+}
+
+// Walk every Claude Code session JSONL once, collect distinct cwds, and
+// auto-register any that point at a directory containing MASTER_PLAN.md
+// (root or docs/) or a .watchpost.json marker. Conservative on purpose —
+// we deliberately do NOT register cwds that only have a .git, because users
+// run Claude from $HOME and other random ancestors. Idempotent: dedupes
+// against existing roots/names. Stored cwds come from per-machine transcripts,
+// so they're already in the current OS's path form (no mapPathToCurrentOS
+// needed for the discovered path itself).
+function discoverFromClaudeTranscripts() {
+    const claudeDirs = wpPaths.claudeProjectsDirs();
+    if (!claudeDirs || claudeDirs.length === 0) {
+        return { discovered: 0, scanned: 0, transcriptCwds: 0, added: [] };
+    }
+
+    const cwds = new Set();
+    let scanned = 0;
+
+    for (const root of claudeDirs) {
+        let projectDirs;
+        try { projectDirs = fs.readdirSync(root, { withFileTypes: true }); }
+        catch { continue; }
+        for (const pd of projectDirs) {
+            if (!pd.isDirectory()) continue;
+            const dir = path.join(root, pd.name);
+            let files;
+            try { files = fs.readdirSync(dir); } catch { continue; }
+            for (const f of files) {
+                if (!f.endsWith('.jsonl')) continue;
+                scanned++;
+                const fp = path.join(dir, f);
+                try {
+                    const fd = fs.openSync(fp, 'r');
+                    const buf = Buffer.alloc(16 * 1024);
+                    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+                    fs.closeSync(fd);
+                    const text = buf.subarray(0, n).toString('utf8');
+                    for (const line of text.split('\n')) {
+                        const t = line.trim();
+                        if (!t) continue;
+                        let row;
+                        try { row = JSON.parse(t); } catch { continue; }
+                        if (typeof row?.cwd === 'string' && row.cwd) {
+                            cwds.add(row.cwd);
+                            break;
+                        }
+                    }
+                } catch {
+                    // Unreadable transcript — ignore.
+                }
+            }
+        }
+    }
+
+    if (cwds.size === 0) return { discovered: 0, scanned, transcriptCwds: 0, added: [] };
+
+    const projectsFile = wpPaths.projectsFile();
+    let parsed;
+    try { parsed = JSON.parse(fs.readFileSync(projectsFile, 'utf8')); }
+    catch { parsed = { projects: [] }; }
+    const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.projects) ? parsed.projects : []);
+
+    const knownRoots = new Set();
+    const knownNames = new Set();
+    for (const p of list) {
+        const raw = p?.root || p?.path;
+        if (raw) {
+            try { knownRoots.add(path.resolve(wpPaths.mapPathToCurrentOS(raw))); } catch {}
+        }
+        if (p?.name) knownNames.add(p.name);
+    }
+
+    const additions = [];
+    for (const cwd of cwds) {
+        let resolved;
+        try { resolved = path.resolve(cwd); } catch { continue; }
+        if (knownRoots.has(resolved)) continue;
+        try { if (!fs.existsSync(resolved)) continue; } catch { continue; }
+
+        let masterPlan = null;
+        const rootMp = path.join(resolved, 'MASTER_PLAN.md');
+        const docsMp = path.join(resolved, 'docs', 'MASTER_PLAN.md');
+        const marker = path.join(resolved, '.watchpost.json');
+        if (fs.existsSync(rootMp)) masterPlan = rootMp;
+        else if (fs.existsSync(docsMp)) masterPlan = docsMp;
+        else if (fs.existsSync(marker)) {
+            try {
+                const m = JSON.parse(fs.readFileSync(marker, 'utf8'));
+                if (typeof m?.masterPlanPath === 'string' && fs.existsSync(m.masterPlanPath)) {
+                    masterPlan = path.resolve(m.masterPlanPath);
+                }
+            } catch {}
+        }
+        if (!masterPlan) continue;
+
+        let name = path.basename(resolved);
+        if (knownNames.has(name)) {
+            name = `${name}-${path.basename(path.dirname(resolved))}`;
+            if (knownNames.has(name)) continue;
+        }
+
+        additions.push({
+            name,
+            root: resolved,
+            masterPlan,
+            modules: [],
+            source: 'transcript-discovered',
+            addedAt: new Date().toISOString().slice(0, 10)
+        });
+        knownRoots.add(resolved);
+        knownNames.add(name);
+    }
+
+    if (additions.length === 0) {
+        return { discovered: 0, scanned, transcriptCwds: cwds.size, added: [] };
+    }
+
+    const next = [...list, ...additions];
+    const nextData = Array.isArray(parsed) ? next : { ...parsed, projects: next };
+    fs.writeFileSync(projectsFile, JSON.stringify(nextData, null, 2));
+    return {
+        discovered: additions.length,
+        scanned,
+        transcriptCwds: cwds.size,
+        added: additions.map(a => ({ name: a.name, root: a.root }))
+    };
 }
 
 function getDefaultMasterPlanPath() {
@@ -1322,7 +1455,53 @@ app.get('/api/events', (req, res) => {
     });
 });
 
-app.listen(PORT, () => {
-    console.log(`Watchpost running at http://localhost:${PORT}`);
-    console.log(`Serving static files from: ${__dirname}`);
+app.post('/api/discover/refresh', (_req, res) => {
+    try {
+        const result = discoverFromClaudeTranscripts();
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
 });
+
+app.get('/api/discover/status', (_req, res) => {
+    try {
+        const projects = getRegisteredProjects();
+        res.json({
+            ok: true,
+            total: projects.length,
+            bySource: projects.reduce((acc, p) => {
+                const s = p.source || 'manual';
+                acc[s] = (acc[s] || 0) + 1;
+                return acc;
+            }, {})
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+module.exports = { discoverFromClaudeTranscripts, getRegisteredProjects, findProjectForCwd };
+
+if (require.main === module) {
+    const { path: bootstrappedProjectsFile, created: bootstrappedFresh } = wpPaths.ensureProjectsFile();
+    if (bootstrappedFresh) {
+        console.log(`[Bootstrap] Created empty projects.json at ${bootstrappedProjectsFile}`);
+    }
+
+    try {
+        const r = discoverFromClaudeTranscripts();
+        if (r.discovered > 0) {
+            console.log(`[Discover] Auto-registered ${r.discovered} project(s) from Claude transcripts: ${r.added.map(a => a.name).join(', ')}`);
+        } else {
+            console.log(`[Discover] Scanned ${r.scanned} transcript(s), ${r.transcriptCwds} unique cwd(s), 0 new projects.`);
+        }
+    } catch (err) {
+        console.error('[Discover] Startup discovery failed:', err.message);
+    }
+
+    app.listen(PORT, () => {
+        console.log(`Watchpost running at http://localhost:${PORT}`);
+        console.log(`Serving static files from: ${__dirname}`);
+    });
+}

@@ -173,6 +173,118 @@ TASK-003 shipped a single unbounded `data/heartbeats.jsonl`. With TASK-004's Ses
 
 ---
 
+## Flow View Redesign
+
+| ID        | Title                                                                  | Priority | Status  | Dependencies |
+| --------- | ---------------------------------------------------------------------- | -------- | ------- | ------------ |
+| TASK-1772 | Flow: make active-instances per-lane sequence the default Flow view    | P2       | IN PROGRESS | -            |
+
+### TASK-1772: Flow: make active-instances per-lane sequence the default Flow view
+
+**Priority:** P2 | **Status:** IN PROGRESS
+
+#### Goal
+
+Make the delivery-lane / active-instances rendering (`renderDeliveryView()` in `flow/index.html`) the unconditional default for the Flow tab — including for projects whose MASTER_PLAN.md has no delivery lines, sprint framing, or derivable lines today. Currently the lane view is *already* the default for projects with lines (e.g. rough-cut), but Flow falls back to a dagre DAG ("streams" mode) when none parse.
+
+#### Current state (verified by code map of `flow/index.html`)
+
+- `init()` (line 4272) calls `fetchAndRender(true)` → `renderGraph()` (line 2275).
+- `renderGraph()` lines 2280–2295 picks delivery vs streams:
+  ```js
+  const lines = deliveryLines.length > 0 ? deliveryLines
+              : sprints.length > 0     ? buildLinesFromSprints(...)
+              :                          buildDerivedDeliveryLines(tasks);
+  if (lines.length > 0) { setViewMode('delivery'); renderDeliveryView(tasks, lines); return; }
+  setViewMode('streams');   // dagre DAG fallback
+  ```
+- Lane renderers already exist:
+  - `renderDeliveryView()` (lines ~2937–2980) — section frame + subtitle.
+  - `renderCurrentFlowRow()` (lines ~2831–2882) — per-lane card chain with `blocked / in-progress / planned / upcoming` states.
+  - `deriveLineStates()` (lines ~2674–2740) — classifies state and `isLiveInstance` from `activeLocks` + `activityEntries`.
+- Streams toolbar (lines ~1560–1615) is hidden whenever mode ≠ 'streams' (line 3789), so promoting delivery to default automatically hides the DAG-only toolbar without further work.
+- No view-toggle UI exists today — the choice is implicit in `renderGraph()`.
+
+#### What "different from what we have" actually means
+
+Comparing the screenshot (rough-cut, delivery view) to a project without delivery lines:
+- Today: the screenshot view is rough-cut-only (it has explicit delivery lines in its MASTER_PLAN). Other projects render the dagre DAG by default.
+- Goal: the lane / active-instances rendering is the universal landing view, with the DAG retained as an optional drilldown rather than the no-lines fallback.
+
+#### Scope
+
+- In `renderGraph()` (around line 2291), drop the `lines.length > 0` gate so `setViewMode('delivery')` + `renderDeliveryView(tasks, lines)` runs unconditionally; the existing `<div class="flow-empty">No active instances from current rough-cut logs or locks…</div>` branch (line ~2975) covers the empty case.
+- Add a small toolbar toggle (Lanes / Graph) so the dagre view stays reachable. Place it in the toolbar block at lines 1560–1615 alongside the existing streams toggles, but make it visible regardless of `viewMode`. Default selection: Lanes.
+- Audit `deriveLineStates()` to confirm its data sources (`activeLocks`, `activityEntries`) are wired to the same feeds as `/api/active-sessions` and `/api/dirty-attribution` (TASK-001/002/003), so liveness signals stay consistent across the dashboard. If they diverge, file a follow-up rather than rewiring inside this task.
+- Do not delete `flow/index.html.bak-pre-fullseq-20260508-004931`; it stays as the rollback point for the pre-promotion layout.
+
+#### Key files
+
+- `flow/index.html` — `renderGraph()` line ~2280, toolbar lines 1560–1615, mode-visibility line 3789.
+- `flow/index.html.bak-pre-fullseq-20260508-004931` — kept as historical reference (already untracked).
+- `controlroom/api.js` — read-only audit only; no API changes expected for this task.
+
+#### Verification
+
+- Open the Flow tab against a project WITH delivery lines (rough-cut) → lane view renders identically to the current screenshot. No regression.
+- Open the Flow tab against a project WITHOUT delivery lines (e.g. watchpost itself) → lane view's empty state renders instead of the DAG. Toolbar shows the new Lanes / Graph toggle.
+- Click Graph in the toolbar → dagre view renders as before. Click Lanes → returns to the lane view.
+- Each lane shows a chain with at least one BLOCKED/NEXT card and the `Continue` CTA jumps to the gating task's detail.
+- Selecting any card in any lane opens the right detail pane with next-up score and depends-on chips populated from the same source as `/api/master-plan`.
+- Lanes appear/disappear as rough-cut instances start/stop (verify against `/api/active-sessions`).
+- Old layout is reachable via the secondary toggle and still renders without errors.
+
+---
+
+## Project Discovery
+
+| ID        | Title                                                              | Priority | Status         | Dependencies |
+| --------- | ------------------------------------------------------------------ | -------- | -------------- | ------------ |
+| ~~TASK-1773~~ | ✅ Auto-discover projects from Claude Code session transcripts | P1       | ✅ DONE (2026-05-09) | -            |
+
+### ~~TASK-1773~~: Auto-discover projects from Claude Code session transcripts (✅ DONE)
+
+**Priority:** P1 | **Status:** ✅ DONE (2026-05-09)
+
+#### Problem
+
+Watchpost only learned about projects via two paths:
+1. Bulk seed from `data/outlook.json` (`server.js:122-178`) — but `outlook.json` is written by an external producer that doesn't enumerate every project on disk. `rough-cut-mvp` (156KB MASTER_PLAN.md, active git repo, daily Claude sessions) was missing from its payload, so it stayed invisible.
+2. On-demand `findProjectForCwd()` (`server.js:243-310`) — only fires when an API request arrives with `?cwd=…` inside the project. Projects never queried that way stayed invisible forever.
+
+Net effect: a project with a real MASTER_PLAN.md and active Claude sessions could be invisible to `/api/projects`, `/api/master-plan`, the Flow view, and `/master-plan:next` until the user happened to make a Watchpost call from inside it.
+
+#### Resolution
+
+Added `discoverFromClaudeTranscripts()` to `server.js`:
+
+- Walks every `.jsonl` file under `wpPaths.claudeProjectsDirs()` (respects `WATCHPOST_CLAUDE_PROJECTS_DIR` / `WATCHPOST_CLAUDE_PROJECTS_DIRS`).
+- Reads only the first ~16KB of each transcript and extracts the first `cwd` field — bounded cost regardless of session length.
+- For each unique cwd: registers it iff the cwd itself has `MASTER_PLAN.md` (root or `docs/`) or a `.watchpost.json` marker. **Deliberately skips cwds with only `.git`** to avoid false-positives like `~/` or scratch dirs.
+- Idempotent: dedupes against existing roots/names; second invocation adds 0.
+- Source per machine: transcripts are local, so no `mapPathToCurrentOS()` needed for the discovered cwd itself, but stored existing-project paths are still mapped before comparison.
+
+Wiring:
+- Runs once at server startup (gated `if (require.main === module)` so tests can require `server.js` without listening).
+- New endpoints: `POST /api/discover/refresh`, `GET /api/discover/status`.
+- `server.js` now exports `{ discoverFromClaudeTranscripts, getRegisteredProjects, findProjectForCwd }`.
+
+#### Verification
+
+- `tests/regression-discover-transcripts.js` — 8/8 pass: scans transcripts, extracts cwds, registers ≥1 project, persists with the right shape, rough-cut-mvp soft-check, idempotency.
+- `tests/regression-projects-bootstrap.js` — 7/7 pass after relaxing the post-bootstrap "exactly empty" assertion (startup discovery now legitimately populates the file).
+- Live restart: registry went 22 → 26 projects. Three new ones surfaced (`MAIN VULT`, `steady-stream`, `bina-ve-ze`) — all have a real `MASTER_PLAN.md` on disk.
+- `POST /api/discover/refresh` returns `{ discovered: 0, scanned: 22539, transcriptCwds: 27 }` after warm-up — confirms idempotency under load.
+- `GET /api/discover/status` exposes the new `bySource` breakdown: `{ manual: 3, auto-discovered: 20, transcript-discovered: 3 }`.
+
+#### Files
+
+- `server.js` — new function, two endpoints, gated startup, module.exports.
+- `tests/regression-discover-transcripts.js` — new.
+- `tests/regression-projects-bootstrap.js` — assertion relaxed to match new startup behavior.
+
+---
+
 ## Migrated Historical Tasks From FlowState
 
 These entries were moved from `flow-state/docs/MASTER_PLAN.md` so Watchpost work is tracked in the Watchpost repo. Source IDs and completion statuses are preserved.
