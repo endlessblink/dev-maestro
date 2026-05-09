@@ -1741,12 +1741,18 @@
       // "Export Core", "AI"). Tasks appearing under it — whether as summary-table
       // rows or detailed sub-sections — are grouped into this section's stream.
       const sectionHeaderRe = /^#{2,3}\s+(.+?)\s*$/;
-      // Summary-table row:
-      //   | ~~TASK-012~~ | Title... | P0 | ✅ DONE (date) | TASK-010, TASK-011 |
-      // Groups: 1=id  2=title  3=priority  4=status  5=dependencies
-      const tableRowRe = /^\|\s*(?:~~)?((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?\s*\|\s*(.*?)\s*\|\s*([A-Z0-9-]+)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/;
-
       let currentSection = null;
+      let tableHeaders = null;
+
+      const cleanCell = value => String(value || '').replace(/[~*`]/g, '').trim();
+      const normalizeHeader = value => cleanCell(value).toLowerCase();
+      const priorityToRank = priority => {
+        const p = cleanCell(priority).toLowerCase();
+        return p.startsWith('p0') || p.startsWith('p1') || p.includes('high')
+          ? 'high'
+          : p.startsWith('p2') || p.includes('medium') ? 'medium' : 'low';
+      };
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmed = line.trim();
@@ -1764,21 +1770,42 @@
         }
 
         // Summary-table row → create a shallow task record (detailed section may
-        // add body/priority/etc later via dedup)
-        const tblMatch = !headerMatch ? trimmed.match(tableRowRe) : null;
-        if (tblMatch) {
-          const [, id, title, priority, status, depsRaw] = tblMatch;
+        // add body/priority/etc later via dedup). Supports both 5-column tables
+        // with Dependencies and 4-column summary tables without dependencies.
+        if (!headerMatch && trimmed.startsWith('|')) {
+          const rawCells = trimmed.split('|').slice(1, -1);
+          const normalizedCells = rawCells.map(normalizeHeader);
+
+          if (normalizedCells.includes('id') || normalizedCells.includes('task')) {
+            tableHeaders = normalizedCells;
+            continue;
+          }
+
+          if (/^\|\s*-+/.test(trimmed)) continue;
+          if (!tableHeaders) continue;
+
+          const idCol = tableHeaders.includes('id') ? tableHeaders.indexOf('id') : tableHeaders.indexOf('task');
+          const titleCol = tableHeaders.findIndex(h => /title|description|feature|task name/.test(h));
+          const priorityCol = tableHeaders.findIndex(h => /priority|prio/.test(h));
+          const statusCol = tableHeaders.findIndex(h => /status|state/.test(h));
+          const depsCol = tableHeaders.findIndex(h => /depend|block/.test(h));
+          if (idCol < 0 || priorityCol < 0 || statusCol < 0) continue;
+
+          const id = cleanCell(rawCells[idCol]);
+          if (!/^(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+$/.test(id)) continue;
+
+          const title = cleanCell(rawCells[titleCol >= 0 ? titleCol : 1]);
+          const priority = cleanCell(rawCells[priorityCol]);
+          const status = cleanCell(rawCells[statusCol]);
+          const depsRaw = depsCol >= 0 ? rawCells[depsCol] : '';
           const depsIds = (depsRaw.match(ID_PATTERN) || []);
           const statusParsed = parseStatus(status.toUpperCase(), '', /~~/.test(line));
-          const priorityLower = priority.toLowerCase().startsWith('p0') || priority.toLowerCase().startsWith('p1')
-            ? 'high'
-            : priority.toLowerCase().startsWith('p2') ? 'medium' : 'low';
           // Don't treat table row as a "currently accumulating" task — push directly
           tasks.push({
             id,
-            title: title.replace(/~~/g, '').trim(),
+            title,
             status: statusParsed,
-            priority: priorityLower,
+            priority: priorityToRank(priority),
             dueDate: null,
             dependsOn: depsIds,
             blocks: [],
@@ -1786,6 +1813,8 @@
             streamParent: currentSection,
           });
           continue;
+        } else if (!trimmed.startsWith('|')) {
+          tableHeaders = null;
         }
 
         if (headerMatch) {
@@ -1808,15 +1837,15 @@
         } else if (current) {
           current.body += line + '\n';
 
-          const prMatch = trimmed.match(/\*\*Priority:\*\*\s*([^|]+)/i) || trimmed.match(/^[-*]\s*\*\*Priority\*\*:\s*(.+?)\s*$/i);
+          const prMatch = trimmed.match(/\*\*Priority\*\*:\s*([^|]+)/i) || trimmed.match(/^[-*]\s*\*\*Priority\*\*:\s*(.+?)\s*$/i);
           if (prMatch) {
             const p = prMatch[1].toLowerCase();
-            current.priority = p.startsWith('high') ? 'high'
-              : p.startsWith('med') ? 'medium'
-              : p.startsWith('low') ? 'low'
-              : '';
+            current.priority = p.startsWith('p0') || p.startsWith('p1') || p.includes('high') ? 'high'
+              : p.startsWith('p2') || p.startsWith('med') ? 'medium'
+              : p.startsWith('p3') || p.startsWith('low') ? 'low'
+              : current.priority;
           }
-          const statusMatch = trimmed.match(/\*\*Status:\*\*\s*([^|]+)/i) || trimmed.match(/^[-*]?\s*\*\*Status\*\*:\s*(.+?)\s*$/i);
+          const statusMatch = trimmed.match(/\*\*Status\*\*:\s*([^|]+)/i) || trimmed.match(/^[-*]?\s*\*\*Status\*\*:\s*(.+?)\s*$/i);
           if (statusMatch) {
             const parsed = parseStatus(statusMatch[1].toUpperCase(), '', false);
             if (parsed !== 'unknown') current.status = parsed;
@@ -1862,13 +1891,14 @@
 
     function parseStatus(parenStatus, titleText, strikethrough) {
       const src = parenStatus || titleText || '';
+      if (strikethrough) return 'done';
       if (src.includes('DONE') || src.includes('✅')) return 'done';
+      if (src.includes('SUPERSEDED') || src.includes('CANCELLED') || src.includes('CANCELED') || src.includes('EXTERNAL')) return 'done';
       if (src.includes('IN PROGRESS') || src.includes('IN-PROGRESS') || src.includes('🔄')) return 'in-progress';
       if (src.includes('REVIEW') || src.includes('👀')) return 'review';
-      if (src.includes('PAUSED') || src.includes('⏸')) return 'paused';
-      if (src.includes('TODO') || src.includes('TO DO') || src.includes('TBD') || src.includes('PLANNED') || src.includes('📋')) return 'planned';
+      if (src.includes('PAUSED') || src.includes('BLOCKED') || src.includes('DEFERRED') || src.includes('⏸')) return 'paused';
       if (src.includes('PLANNED') || src.includes('📋')) return 'planned';
-      if (strikethrough) return 'done';
+      if (src.includes('TODO') || src.includes('TO DO') || src.includes('TBD')) return 'planned';
       return 'unknown';
     }
 
@@ -1882,6 +1912,22 @@
     function extractEdges(tasks) {
       const byId = new Map(tasks.map(t => [t.id, t]));
       const edgeMap = new Map();
+      const INFERRED_EDGE_FANOUT_LIMIT = 8;
+      const inferredFanout = new Map();
+      const inferredBlocklistRe = /\b(?:supersedes?|superseded|supersede notes?|replaces?|replaced by|see also|related|reference|references|context|background|history)\b/i;
+
+      function getInferenceBody(task) {
+        return String(task.body || '')
+          .split('\n')
+          .filter(line => {
+            const trimmed = line.trim();
+            if (!trimmed) return false;
+            if (inferredBlocklistRe.test(trimmed)) return false;
+            return true;
+          })
+          .join('\n');
+      }
+
       function addEdge(src, tgt, type) {
         if (!src || !tgt || src === tgt) return;
         if (!byId.has(src) || !byId.has(tgt)) return;
@@ -1889,6 +1935,11 @@
         const existing = edgeMap.get(key);
         // Solid > inferred (stronger signal wins)
         if (!existing || (existing.type === 'inferred' && type === 'solid')) {
+          if (type === 'inferred') {
+            const count = inferredFanout.get(src) || 0;
+            if (count >= INFERRED_EDGE_FANOUT_LIMIT) return;
+            inferredFanout.set(src, count + 1);
+          }
           edgeMap.set(key, { source: src, target: tgt, type });
         }
       }
@@ -1910,7 +1961,7 @@
 
       for (const t of tasks) {
         const explicit = new Set([...t.dependsOn, ...t.blocks]);
-        const refs = t.body.match(ID_PATTERN) || [];
+        const refs = getInferenceBody(t).match(ID_PATTERN) || [];
         const isParent = /^(FEATURE|ROAD)-/.test(t.id);
         for (const ref of refs) {
           if (ref === t.id || explicit.has(ref)) continue;
@@ -2229,7 +2280,11 @@
       // ── Delivery mode: prefer explicit Delivery Lines, fallback to legacy sprint framing.
       const deliveryLines = parseDeliveryLines(rawMarkdown);
       const sprints = parseSprintFraming(rawMarkdown);
-      const lines = deliveryLines.length > 0 ? deliveryLines : buildLegacyDeliveryLinesFromSprints(sprints);
+      const lines = deliveryLines.length > 0
+        ? deliveryLines
+        : sprints.length > 0
+          ? buildLegacyDeliveryLinesFromSprints(sprints)
+          : buildDerivedDeliveryLines(tasks);
       if (lines.length > 0) {
         setViewMode('delivery');
         renderDeliveryView(tasks, lines);
@@ -2584,6 +2639,33 @@
       }));
     }
 
+    function buildDerivedDeliveryLines(tasks) {
+      const STATUS_ORDER = { 'in-progress': 0, review: 1, planned: 2, paused: 3, unknown: 4 };
+      const PRIORITY_ORDER = { high: 0, medium: 1, low: 2, '': 3 };
+      const activeTasks = tasks
+        .filter(task => task.status !== 'done')
+        .sort((a, b) => {
+          const statusDelta = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+          if (statusDelta !== 0) return statusDelta;
+          const priorityDelta = (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9);
+          if (priorityDelta !== 0) return priorityDelta;
+          const aNum = Number((a.id.match(/(\d+)$/) || [0, 0])[1]);
+          const bNum = Number((b.id.match(/(\d+)$/) || [0, 0])[1]);
+          return aNum - bNum;
+        });
+
+      if (activeTasks.length === 0) return [];
+
+      return [{
+        id: normalizeLineId('LINE AUTO', 0),
+        name: 'Auto-prioritized active work',
+        dependsOnLineIds: [],
+        sequenceTaskIds: activeTasks.map(task => task.id),
+        supportTaskIds: [],
+        source: 'derived-priority',
+      }];
+    }
+
     function getLineOwner(lineState) {
       if (!lineState.currentTaskId) return null;
       return activeLocks.find(lock => lock.task_id === lineState.currentTaskId) || null;
@@ -2714,6 +2796,7 @@
     function getNodeDisplayState(rawState) {
       if (rawState === 'in-progress') return { cls: 'current', label: 'Current' };
       if (rawState === 'planned') return { cls: 'next', label: 'Next' };
+      if (rawState === 'upcoming') return { cls: 'next', label: 'Then' };
       if (rawState === 'done') return { cls: 'done', label: 'Done' };
       if (rawState === 'blocked') return { cls: 'blocked', label: 'Blocked' };
       if (rawState === 'locked') return { cls: 'locked', label: 'Locked' };
@@ -2746,14 +2829,36 @@
     }
 
     function renderCurrentFlowRow(line, taskById) {
+      // Render the full declared Sequence from the current step onward, so users
+      // see the whole queued flow — not just current+next. Horizontal scroll
+      // (.flow-sequence has overflow-x:auto) handles very long sequences.
+      const sequenceTasks = (line.sequenceTaskIds || [])
+        .map(id => taskById.get(id))
+        .filter(Boolean);
       const currentTask = line.currentTaskId ? taskById.get(line.currentTaskId) : null;
-      const nextTask = line.nextTaskId ? taskById.get(line.nextTaskId) : null;
+      const startIdx = currentTask
+        ? Math.max(0, sequenceTasks.findIndex(t => t.id === currentTask.id))
+        : 0;
+      const upcoming = sequenceTasks.slice(startIdx);
       const blockerTask = line.externalBlockerIds[0] ? taskById.get(line.externalBlockerIds[0]) : null;
       const blockerChip = blockerTask
         ? `<button class="flow-chip" type="button" data-id="${blockerTask.id}">Needs ${blockerTask.id}</button>`
         : '';
-      const sequence = [{ task: currentTask, state: line.state === 'blocked' ? 'blocked' : 'in-progress' }];
-      if (nextTask) sequence.push({ task: nextTask, state: 'planned' });
+      const sequence = upcoming.map((task, i) => {
+        if (i === 0) {
+          return {
+            task,
+            state: line.state === 'blocked'
+              ? 'blocked'
+              : (task.status === 'in-progress' ? 'in-progress' : 'planned'),
+          };
+        }
+        return {
+          task,
+          state: i === 1 ? 'planned' : 'upcoming',
+        };
+      });
+      const nextTask = upcoming[1] || null;
 
       return `
         <article class="flow-row current ${line.state === 'blocked' ? 'blocked' : ''}">

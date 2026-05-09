@@ -712,25 +712,28 @@ app.post('/api/task/:id', (req, res) => {
     fs.readFile(masterPlanPath, 'utf8', (err, data) => {
         if (err) return res.status(500).json({ error: 'Failed to read file' });
 
-        let content = data;
-        const lines = content.split('\n');
+        const lines = data.split('\n');
         let updated = false;
         let inTargetTask = false;
+        let headerLineIdx = -1;
+        let taskEndIdx = lines.length;
 
-        // streaming-like line processing
+        const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const taskHeaderRegex = new RegExp(`^#{3,4}\\s+(?:~~)?(?:.*?)\\b${escapedId}\\b(?:~~)?(?=\\s|:|$|\\))`);
+        const anyTaskHeaderRegex = /^#{3,4}\s+(?:~~)?(?:.*?)(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+\b/;
+
         for (let i = 0; i < lines.length; i++) {
-            constline = lines[i];
-
             // Detect task start
-            if (lines[i].match(new RegExp(`^###\\s+(?:~~)?${id}`))) {
+            if (lines[i].match(taskHeaderRegex)) {
                 console.log(`[API] Found task header at line ${i}: ${lines[i]}`);
                 inTargetTask = true;
+                headerLineIdx = i;
                 continue;
             }
             // Detect next task start (stop processing)
-            if (inTargetTask && lines[i].startsWith('### ')) {
+            if (inTargetTask && anyTaskHeaderRegex.test(lines[i])) {
                 console.log(`[API] End of task scope at line ${i}: ${lines[i]}`);
-                inTargetTask = false;
+                taskEndIdx = i;
                 break;
             }
 
@@ -738,7 +741,6 @@ app.post('/api/task/:id', (req, res) => {
                 // Look for **Priority**: line
                 if (lines[i].trim().startsWith('**Priority**:')) {
                     console.log(`[API] Found priority line at ${i}: ${lines[i]}`);
-                    const oldLine = lines[i];
                     lines[i] = `**Priority**: ${value}`;
                     console.log(`[API] Updated priority line to: ${lines[i]}`);
                     updated = true;
@@ -747,9 +749,50 @@ app.post('/api/task/:id', (req, res) => {
             }
         }
 
-        if (!updated && inTargetTask) {
-            console.log(`[API] logic finished task scope but didnt find Priority line to update.`);
-            // Optional: Insert priority line if missing?
+        if (!updated && headerLineIdx >= 0) {
+            console.log(`[API] Priority line missing for ${id}; inserting one.`);
+            let insertIdx = headerLineIdx + 1;
+
+            while (insertIdx < taskEndIdx && lines[insertIdx].trim() === '') {
+                insertIdx++;
+            }
+
+            lines.splice(insertIdx, 0, `**Priority**: ${value}`);
+            updated = true;
+        }
+
+        let idCol = -1;
+        let priorityCol = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+
+            if (!trimmed.startsWith('|')) {
+                idCol = -1;
+                priorityCol = -1;
+                continue;
+            }
+
+            const cells = lines[i].split('|');
+            const normalized = cells.map(cell => cell.trim().toLowerCase());
+
+            if ((normalized.includes('id') || normalized.includes('task')) && normalized.includes('priority')) {
+                idCol = normalized.includes('id') ? normalized.indexOf('id') : normalized.indexOf('task');
+                priorityCol = normalized.indexOf('priority');
+                continue;
+            }
+
+            if (idCol < 0 || priorityCol < 0 || trimmed.includes('---')) continue;
+
+            const rowId = (cells[idCol] || '').replace(/[~*`]/g, '').trim();
+            if (rowId !== id) continue;
+
+            const previousPriority = cells[priorityCol] || '';
+            const nextPriority = previousPriority.includes('**') ? `**${value}**` : value;
+            cells[priorityCol] = ` ${nextPriority} `;
+            lines[i] = cells.join('|');
+            console.log(`[API] Updated summary table priority for ${id} at line ${i}`);
+            updated = true;
         }
 
         if (updated) {
@@ -760,6 +803,82 @@ app.post('/api/task/:id', (req, res) => {
         } else {
             res.status(404).json({ error: 'Task or Priority field not found' });
         }
+    });
+});
+
+// API Endpoint to delete a task from MASTER_PLAN.md
+app.delete('/api/task/:id', (req, res) => {
+    const { id } = req.params;
+    const masterPlanPath = getMasterPlanPath(req);
+    console.log(`[API] Deleting task ${id}`);
+
+    fs.readFile(masterPlanPath, 'utf8', (err, data) => {
+        if (err) return res.status(500).json({ error: 'Failed to read file' });
+
+        const lines = data.split('\n');
+        let deleted = false;
+
+        const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const taskHeaderRegex = new RegExp(`^#{3,4}\\s+(?:~~)?(?:.*?)\\b${escapedId}\\b(?:~~)?(?=\\s|:|$|\\))`);
+        const anyTaskHeaderRegex = /^#{3,4}\s+(?:~~)?(?:.*?)(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+\b/;
+
+        for (let i = 0; i < lines.length; i++) {
+            if (!taskHeaderRegex.test(lines[i])) continue;
+
+            let endIdx = lines.length;
+            for (let j = i + 1; j < lines.length; j++) {
+                if (anyTaskHeaderRegex.test(lines[j])) {
+                    endIdx = j;
+                    break;
+                }
+            }
+
+            while (endIdx > i && lines[endIdx - 1].trim() === '') endIdx--;
+            lines.splice(i, endIdx - i);
+            deleted = true;
+            break;
+        }
+
+        let idCol = -1;
+        const tableRowsToDelete = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+
+            if (!trimmed.startsWith('|')) {
+                idCol = -1;
+                continue;
+            }
+
+            const cells = lines[i].split('|');
+            const normalized = cells.map(cell => cell.trim().toLowerCase());
+
+            if (normalized.includes('id') || normalized.includes('task')) {
+                idCol = normalized.includes('id') ? normalized.indexOf('id') : normalized.indexOf('task');
+                continue;
+            }
+
+            if (idCol < 0 || trimmed.includes('---')) continue;
+
+            const rowId = (cells[idCol] || '').replace(/[~*`]/g, '').trim();
+            if (rowId !== id) continue;
+
+            tableRowsToDelete.push(i);
+        }
+
+        for (let i = tableRowsToDelete.length - 1; i >= 0; i--) {
+            lines.splice(tableRowsToDelete[i], 1);
+            deleted = true;
+        }
+
+        if (!deleted) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        fs.writeFile(masterPlanPath, lines.join('\n'), 'utf8', (err) => {
+            if (err) return res.status(500).json({ error: 'Failed to write file' });
+            res.json({ success: true, message: 'Task deleted' });
+        });
     });
 });
 

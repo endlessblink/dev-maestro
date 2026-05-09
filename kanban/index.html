@@ -269,6 +269,8 @@
     .header-actions {
       display: flex;
       gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     .btn {
@@ -407,6 +409,50 @@
 
     .filter-select:hover {
       border-color: var(--border-strong);
+    }
+
+    .bulk-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      background: var(--surface-secondary);
+    }
+
+    .bulk-actions.active {
+      border-color: var(--brand-primary);
+      background: var(--brand-subtle);
+    }
+
+    .bulk-count {
+      min-width: 72px;
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      font-weight: 600;
+    }
+
+    .bulk-btn {
+      padding: 6px 9px;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: var(--font-sm);
+      transition: all var(--transition-fast);
+    }
+
+    .bulk-btn:hover:not(:disabled) {
+      border-color: var(--brand-primary);
+      color: var(--brand-primary);
+    }
+
+    .bulk-btn:disabled,
+    .bulk-actions select:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
 
     .filter-hidden {
@@ -738,6 +784,39 @@
       overflow: visible;
       position: relative;
       flex-shrink: 0;
+    }
+
+    .task-card.selected {
+      box-shadow: 0 0 0 2px var(--brand-primary), 0 8px 22px rgba(0, 0, 0, 0.35);
+      background: linear-gradient(180deg, rgba(78, 205, 196, 0.12), rgba(33, 38, 45, 0.96));
+    }
+
+    .task-select-btn {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-xs);
+      background: transparent;
+      color: transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1;
+      transition: all var(--transition-fast);
+    }
+
+    .task-select-btn:hover {
+      border-color: var(--brand-primary);
+      background: var(--brand-subtle);
+    }
+
+    .task-card.selected .task-select-btn {
+      border-color: var(--brand-primary);
+      background: var(--brand-primary);
+      color: var(--text-on-brand);
     }
 
     .task-copy-btn {
@@ -2039,6 +2118,18 @@
             <option value="p2">P2 / MEDIUM</option>
             <option value="p3">P3 / LOW</option>
           </select>
+          <div id="bulk-actions" class="bulk-actions" title="Select cards, then apply a priority to all selected tasks">
+            <span id="bulk-count" class="bulk-count">0 selected</span>
+            <button class="bulk-btn" type="button" onclick="selectVisibleTasks()">Select visible</button>
+            <select id="bulk-priority-select" class="filter-select" disabled>
+              <option value="P1-HIGH">P1 / HIGH</option>
+              <option value="P2-MEDIUM">P2 / MEDIUM</option>
+              <option value="P3-LOW">P3 / LOW</option>
+            </select>
+            <button id="bulk-apply-priority" class="bulk-btn" type="button" onclick="bulkUpdatePriority()" disabled>Apply</button>
+            <button id="bulk-delete" class="bulk-btn" type="button" onclick="bulkDeleteSelected()" disabled>Delete</button>
+            <button id="bulk-clear-selection" class="bulk-btn" type="button" onclick="clearTaskSelection()" disabled>Clear</button>
+          </div>
           <select id="sort-select" class="filter-select" onchange="applySorting()">
             <option value="priority-desc">Priority (High→Low)</option>
             <option value="priority-asc">Priority (Low→High)</option>
@@ -2246,6 +2337,7 @@
 
     // Global parsed data cache
     let MASTER_PLAN_DATA = null;
+    const selectedTaskIds = new Set();
 
     // SVG Icon definitions for JavaScript-generated content
     const ICONS = {
@@ -3021,7 +3113,7 @@
               const card = document.createElement('div');
               const hasSubtasks = task.subtasks && task.subtasks.length > 0;
               const hasExpandableContent = task.description || hasSubtasks;
-              card.className = `task-card${hasExpandableContent ? ' has-subtasks' : ''}`;
+              card.className = `task-card${hasExpandableContent ? ' has-subtasks' : ''}${selectedTaskIds.has(task.id) ? ' selected' : ''}`;
               card.draggable = true;
               card.setAttribute('data-id', task.id);
 
@@ -3077,6 +3169,7 @@
 
               card.innerHTML = `
               <div class="task-header">
+                <button class="task-select-btn" onclick="toggleTaskSelection('${task.id}', event)" title="Select task" aria-label="Select ${task.id}">${selectedTaskIds.has(task.id) ? '✓' : ''}</button>
                 <button class="expand-toggle" onclick="toggleExpand('${task.id}', event)">${isExpanded ? '▼' : '▶'}</button>
                 <div class="task-id">${task.id}</div>
                 <div class="badge-wrapper">
@@ -3135,6 +3228,10 @@
 
               // Add click handler to show modal
               card.addEventListener('click', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                  toggleTaskSelection(task.id, e);
+                  return;
+                }
                 console.log('Task card clicked:', task.title);
                 e.stopPropagation();
                 card.blur(); // Remove focus state
@@ -3164,6 +3261,7 @@
         initDragAndDrop();
         loadDoneColumnState();
         updateDoneCount();
+        updateBulkActions();
       } catch (error) {
         console.error('Error rendering kanban:', error);
         // Show error message on page instead of white overlay
@@ -3394,12 +3492,12 @@
           showSyncStatus('success', `✓ Priority updated to ${newPriority}`);
           currentEditTask.priority = newPriority;
           // Update card display immediately
-          const card = document.querySelector(`[data-task-id="${currentEditTask.id}"]`);
+          const card = document.querySelector(`[data-id="${currentEditTask.id}"]`);
           if (card) {
             const priorityEl = card.querySelector('.task-priority');
             if (priorityEl) {
               priorityEl.textContent = newPriority;
-              priorityEl.className = 'task-priority ' + getPriorityClass(newPriority);
+              priorityEl.className = 'task-priority ' + getPriorityClass(newPriority) + ' editable';
             }
           }
           // Refresh the kanban to reflect changes from MASTER_PLAN.md
@@ -3408,7 +3506,8 @@
           showSyncStatus('error', `✗ ${result.error || 'Failed to update priority'}`);
         }
       } catch (error) {
-        showSyncStatus('error', '✗ Server not running. Start with: watchpost dashboard');
+        console.error('[Modal] Priority update error:', error);
+        showSyncStatus('error', `✗ ${error.message || 'Server not running. Start with: watchpost dashboard'}`);
       }
     }
 
@@ -3417,6 +3516,141 @@
       if (p.includes('p1') || p.includes('high')) return 'high';
       if (p.includes('p2') || p.includes('medium')) return 'medium';
       return 'low';
+    }
+
+    function updateBulkActions() {
+      const count = selectedTaskIds.size;
+      const actions = document.getElementById('bulk-actions');
+      const countEl = document.getElementById('bulk-count');
+      const prioritySelect = document.getElementById('bulk-priority-select');
+      const applyBtn = document.getElementById('bulk-apply-priority');
+      const deleteBtn = document.getElementById('bulk-delete');
+      const clearBtn = document.getElementById('bulk-clear-selection');
+
+      if (actions) actions.classList.toggle('active', count > 0);
+      if (countEl) countEl.textContent = `${count} selected`;
+      [prioritySelect, applyBtn, deleteBtn, clearBtn].forEach(el => {
+        if (el) el.disabled = count === 0;
+      });
+    }
+
+    function toggleTaskSelection(taskId, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      if (selectedTaskIds.has(taskId)) {
+        selectedTaskIds.delete(taskId);
+      } else {
+        selectedTaskIds.add(taskId);
+      }
+
+      const card = document.querySelector(`[data-id="${taskId}"]`);
+      if (card) {
+        card.classList.toggle('selected', selectedTaskIds.has(taskId));
+        const button = card.querySelector('.task-select-btn');
+        if (button) button.textContent = selectedTaskIds.has(taskId) ? '✓' : '';
+      }
+
+      updateBulkActions();
+    }
+
+    function clearTaskSelection() {
+      selectedTaskIds.clear();
+      document.querySelectorAll('.task-card.selected').forEach(card => {
+        card.classList.remove('selected');
+        const button = card.querySelector('.task-select-btn');
+        if (button) button.textContent = '';
+      });
+      updateBulkActions();
+    }
+
+    function selectVisibleTasks() {
+      document.querySelectorAll('.task-card:not(.filter-hidden)').forEach(card => {
+        const taskId = card.getAttribute('data-id');
+        if (taskId) selectedTaskIds.add(taskId);
+        card.classList.add('selected');
+        const button = card.querySelector('.task-select-btn');
+        if (button) button.textContent = '✓';
+      });
+      updateBulkActions();
+    }
+
+    async function saveTaskPriority(taskId, newPriority) {
+      const response = await apiFetch(`${API_BASE}/api/task/${taskId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ property: 'priority', value: newPriority })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Failed to update ${taskId}`);
+      }
+      return result;
+    }
+
+    async function bulkUpdatePriority() {
+      const taskIds = Array.from(selectedTaskIds);
+      const newPriority = document.getElementById('bulk-priority-select')?.value || 'P2-MEDIUM';
+      if (taskIds.length === 0) return;
+
+      showToast(`Updating ${taskIds.length} task priorities...`, 'info');
+      const failures = [];
+
+      for (const taskId of taskIds) {
+        try {
+          await saveTaskPriority(taskId, newPriority);
+        } catch (error) {
+          failures.push(`${taskId}: ${error.message}`);
+        }
+      }
+
+      if (failures.length > 0) {
+        console.error('Bulk priority failures:', failures);
+        showToast(`✗ ${failures.length} priority updates failed`, 'error');
+      } else {
+        showToast(`✓ Updated ${taskIds.length} tasks to ${newPriority}`, 'success');
+        clearTaskSelection();
+      }
+
+      setTimeout(() => renderKanban(), 500);
+    }
+
+    async function deleteTask(taskId) {
+      const response = await apiFetch(`${API_BASE}/api/task/${taskId}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Failed to delete ${taskId}`);
+      }
+      return result;
+    }
+
+    async function bulkDeleteSelected() {
+      const taskIds = Array.from(selectedTaskIds);
+      if (taskIds.length === 0) return;
+      if (!confirm(`Delete ${taskIds.length} selected task${taskIds.length === 1 ? '' : 's'} from MASTER_PLAN.md?`)) return;
+
+      showToast(`Deleting ${taskIds.length} task${taskIds.length === 1 ? '' : 's'}...`, 'info');
+      const failures = [];
+
+      for (const taskId of taskIds) {
+        try {
+          await deleteTask(taskId);
+        } catch (error) {
+          failures.push(`${taskId}: ${error.message}`);
+        }
+      }
+
+      if (failures.length > 0) {
+        console.error('Bulk delete failures:', failures);
+        showToast(`✗ ${failures.length} deletes failed`, 'error');
+      } else {
+        showToast(`✓ Deleted ${taskIds.length} task${taskIds.length === 1 ? '' : 's'}`, 'success');
+        clearTaskSelection();
+      }
+
+      setTimeout(() => renderKanban(), 500);
     }
 
     // Update task complexity from modal
@@ -3632,8 +3866,9 @@
           showToast(`✗ ${result.error || 'Failed to update priority'}`, 'error');
         }
       } catch (error) {
+        console.error('Error updating priority:', error);
         badge.textContent = originalText;
-        showToast('✗ Server not running. Start with: watchpost dashboard', 'error');
+        showToast(`✗ ${error.message || 'Server not running. Start with: watchpost dashboard'}`, 'error');
       }
     }
 
