@@ -177,11 +177,11 @@ TASK-003 shipped a single unbounded `data/heartbeats.jsonl`. With TASK-004's Ses
 
 | ID        | Title                                                                  | Priority | Status  | Dependencies |
 | --------- | ---------------------------------------------------------------------- | -------- | ------- | ------------ |
-| TASK-1772 | Flow: make active-instances per-lane sequence the default Flow view    | P2       | IN PROGRESS | -            |
+| TASK-1772 | Flow: make active-instances per-lane sequence the default Flow view    | P2       | DONE        | -            |
 
 ### TASK-1772: Flow: make active-instances per-lane sequence the default Flow view
 
-**Priority:** P2 | **Status:** IN PROGRESS
+**Priority:** P2 | **Status:** DONE (2026-05-09)
 
 #### Goal
 

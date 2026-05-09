@@ -1567,6 +1567,10 @@
         <span><span class="dot" style="background: var(--overdue-ring);"></span><span id="stat-overdue">0</span> overdue</span>
       </span>
       <span class="spacer"></span>
+      <span class="view-mode-group" role="tablist" aria-label="Flow view mode">
+        <button class="toolbar-toggle on" id="view-mode-lanes" data-view-mode="delivery" type="button" role="tab" aria-selected="true" title="Lane view (default) — per-instance status chains">Lanes</button>
+        <button class="toolbar-toggle" id="view-mode-graph" data-view-mode="streams" type="button" role="tab" aria-selected="false" title="Dependency graph (dagre layout)">Graph</button>
+      </span>
       <button class="toolbar-toggle on" id="toggle-rank-labels" title="Show column rank labels (Now, Next, Later)">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="3" y1="6" x2="21" y2="6"/>
@@ -1676,7 +1680,9 @@
   <script>
     /* ─── Constants ────────────────────────────────────────────────── */
     const API_BASE = window.location.origin;
-    const ID_PATTERN = /(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+/g;
+    // `T` (single letter) is botson's prefix; placed last so longer matches like
+    // TASK / ROAD win first via left-to-right alternation. Don't reorder.
+    const ID_PATTERN = /(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/g;
     const TOP_N_RECOMMENDED = 3;
 
     const STATUS_FILL = {
@@ -1708,6 +1714,10 @@
     let refreshTimer = null;
     let currentDeliveryLines = [];
     let selectedLineId = null;
+    // 'delivery' (lanes — the default) or 'streams' (dagre graph). Flipped by the
+    // toolbar Lanes/Graph toggle. Lanes is always the landing view; users can opt
+    // into Graph but it's no longer the auto-fallback when no delivery lines exist.
+    let userViewPreference = 'delivery';
     let currentProjectRoot = '';
     let currentProjectFilter = '';
     let activeLocks = [];
@@ -1734,7 +1744,7 @@
       const tasks = [];
       let current = null;
 
-      const headerRe = /^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/;
+      const headerRe = /^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/;
 
       // Section tracking: any `###` or `##` header that does NOT contain a task ID
       // is treated as a section/category boundary (e.g. "Recording Infrastructure",
@@ -1763,7 +1773,7 @@
           const sec = trimmed.match(sectionHeaderRe);
           if (sec) {
             const name = sec[1].replace(/~~/g, '').trim();
-            if (!/(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+/.test(name)) {
+            if (!/(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/.test(name)) {
               currentSection = name;
             }
           }
@@ -1785,14 +1795,17 @@
           if (!tableHeaders) continue;
 
           const idCol = tableHeaders.includes('id') ? tableHeaders.indexOf('id') : tableHeaders.indexOf('task');
-          const titleCol = tableHeaders.findIndex(h => /title|description|feature|task name/.test(h));
+          // `^task$` covers botson's table layout (`| ID | Phase | Task | Status | … |`)
+          // where the title column is literally "Task". `^deps?$` covers "Deps" used
+          // as a header instead of "Dependencies".
+          const titleCol = tableHeaders.findIndex(h => /title|description|feature|task name|^task$/.test(h));
           const priorityCol = tableHeaders.findIndex(h => /priority|prio/.test(h));
           const statusCol = tableHeaders.findIndex(h => /status|state/.test(h));
-          const depsCol = tableHeaders.findIndex(h => /depend|block/.test(h));
+          const depsCol = tableHeaders.findIndex(h => /depend|block|^deps?$/.test(h));
           if (idCol < 0 || priorityCol < 0 || statusCol < 0) continue;
 
           const id = cleanCell(rawCells[idCol]);
-          if (!/^(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+$/.test(id)) continue;
+          if (!/^(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+$/.test(id)) continue;
 
           const title = cleanCell(rawCells[titleCol >= 0 ? titleCol : 1]);
           const priority = cleanCell(rawCells[priorityCol]);
@@ -1821,7 +1834,7 @@
           if (current) tasks.push(current);
           const parenStatus = headerMatch[3] ? headerMatch[3].toUpperCase() : '';
           const titleText = (headerMatch[2] || '').toUpperCase();
-          const strikethrough = /~~(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+~~/.test(trimmed);
+          const strikethrough = /~~(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+~~/.test(trimmed);
           const id = headerMatch[1];
           current = {
             id,
@@ -2277,15 +2290,17 @@
       const edgeMap = extractEdges(tasks);
       const recommended = rankTasks(tasks, edgeMap);
 
-      // ── Delivery mode: prefer explicit Delivery Lines, fallback to legacy sprint framing.
-      const deliveryLines = parseDeliveryLines(rawMarkdown);
-      const sprints = parseSprintFraming(rawMarkdown);
-      const lines = deliveryLines.length > 0
-        ? deliveryLines
-        : sprints.length > 0
-          ? buildLegacyDeliveryLinesFromSprints(sprints)
-          : buildDerivedDeliveryLines(tasks);
-      if (lines.length > 0) {
+      // ── Delivery (Lanes) mode is the default. Streams mode (dagre graph) is
+      //    opt-in via the toolbar Lanes/Graph toggle. The empty-instances state
+      //    inside renderDeliveryView covers projects with no delivery lines.
+      if (userViewPreference !== 'streams') {
+        const deliveryLines = parseDeliveryLines(rawMarkdown);
+        const sprints = parseSprintFraming(rawMarkdown);
+        const lines = deliveryLines.length > 0
+          ? deliveryLines
+          : sprints.length > 0
+            ? buildLegacyDeliveryLinesFromSprints(sprints)
+            : buildDerivedDeliveryLines(tasks);
         setViewMode('delivery');
         renderDeliveryView(tasks, lines);
         return;
@@ -2547,7 +2562,7 @@
       while ((m = sprintRe.exec(markdown))) {
         const letter = m[1];
         const name = m[2].trim();
-        const ids = m[3].match(/(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+/g) || [];
+        const ids = m[3].match(/(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/g) || [];
         sprints.push({ letter, name, ids });
       }
       return sprints;
@@ -2725,7 +2740,11 @@
           owner,
           activity,
           runtime,
-          isLiveInstance: Boolean(lockOwner) || isRuntimeActive(runtime),
+          // Derived lines (auto-prioritized for projects with no explicit delivery
+          // lines or sprints) are treated as live by default — otherwise they get
+          // hidden in the collapsed "Other Planned Flows" section and the user sees
+          // an empty Active Instances panel.
+          isLiveInstance: Boolean(lockOwner) || isRuntimeActive(runtime) || line.source === 'derived-priority',
           supportTasks: line.supportTaskIds.map(id => taskById.get(id)).filter(task => task && task.status !== 'done'),
         };
       });
@@ -2790,6 +2809,140 @@
         '',
         'Supporting tasks:',
         support,
+      ].join('\n');
+    }
+
+    function buildLineAgentPrompt(lineState, taskById) {
+      const projectName = currentProjectFilter
+        || basenamePath(currentProjectRoot)
+        || 'this project';
+      const projectPath = currentProjectRoot || '(unknown)';
+      const truncate = (text, max) => {
+        const s = String(text || '').trim();
+        if (!s) return '';
+        return s.length > max ? s.slice(0, max).trimEnd() + '…' : s;
+      };
+      const summarizeTask = (task, includeBody) => {
+        if (!task) return '(missing)';
+        const meta = [
+          task.priority ? `priority=${task.priority}` : null,
+          task.status ? `status=${task.status}` : null,
+          task.dueDate ? `due=${task.dueDate.toISOString().slice(0, 10)}` : null,
+        ].filter(Boolean).join(', ');
+        const head = `${task.id} — ${task.title || '(no title)'}${meta ? ` [${meta}]` : ''}`;
+        if (!includeBody) return head;
+        const body = truncate(task.body, 900);
+        return body ? `${head}\n\n${body}` : head;
+      };
+
+      const sequenceTasks = (lineState.sequenceTaskIds || [])
+        .map(id => taskById.get(id))
+        .filter(Boolean);
+      const currentTask = lineState.currentTaskId ? taskById.get(lineState.currentTaskId) : null;
+      const startIdx = currentTask
+        ? Math.max(0, sequenceTasks.findIndex(t => t.id === currentTask.id))
+        : 0;
+      const upcoming = sequenceTasks.slice(startIdx);
+      const upcomingLines = upcoming.length > 0
+        ? upcoming.map((task, i) => `${i + 1}. ${summarizeTask(task, false)}`).join('\n')
+        : '(no remaining tasks)';
+
+      const supportLines = (lineState.supportTasks || [])
+        .map(task => `- ${summarizeTask(task, false)}`)
+        .join('\n') || '(none)';
+
+      const externalBlockers = (lineState.externalBlockerIds || [])
+        .map(id => taskById.get(id))
+        .filter(Boolean)
+        .map(task => `- ${summarizeTask(task, false)}`)
+        .join('\n');
+      const laneBlockers = (lineState.blockingLineIds || []).join(', ');
+      const blockerSection = externalBlockers
+        ? externalBlockers
+        : laneBlockers
+          ? `- Waiting on lane(s): ${laneBlockers}`
+          : '(none)';
+
+      const dependsOnIds = currentTask?.dependsOn || [];
+      const dependsOnLines = dependsOnIds.length > 0
+        ? dependsOnIds.map(id => {
+            const dep = taskById.get(id);
+            return dep ? `- ${summarizeTask(dep, false)}` : `- ${id} (not found)`;
+          }).join('\n')
+        : '(none)';
+
+      const owner = lineState.owner
+        ? `Instance ${lineState.owner.session_short}${lineState.owner.inferred ? ' (inferred from recent activity)' : ' (active lock)'}`
+        : 'No live instance';
+      const activity = lineActivityLabel(lineState);
+
+      // ── Live coordination signals (pulled from runtime state, not hardcoded) ──
+      // These are the data points that historically lived in static "go check X"
+      // instructions. Embedding the actual values keeps the prompt self-contained
+      // and removes the failure mode where the static text drifts from reality.
+      const otherLocks = (activeLocks || [])
+        .filter(l => l && l.task_id && l.task_id !== currentTask?.id)
+        .map(l => `- ${l.task_id} held by instance ${String(l.session_id || l.sid || '').slice(0, 8) || '?'}`);
+      const upcomingTaskIds = new Set(upcoming.map(t => t.id));
+      const recentTouchingUpcoming = [];
+      try {
+        if (activityByTask && activityByTask.size) {
+          for (const [taskId, entries] of activityByTask.entries()) {
+            if (!upcomingTaskIds.has(taskId)) continue;
+            const recent = (entries || []).slice(0, 1);
+            if (recent.length === 0) continue;
+            const e = recent[0];
+            const sid = String(e.sid || '').slice(0, 8);
+            recentTouchingUpcoming.push(`- ${taskId}: last touched by instance ${sid || '?'}${e.file ? ` in ${e.file}` : ''}`);
+          }
+        }
+      } catch { /* activity layer is best-effort context only */ }
+
+      const liveSignals = [];
+      if (otherLocks.length) {
+        liveSignals.push('Other active locks in this repo right now:');
+        liveSignals.push(...otherLocks);
+      }
+      if (recentTouchingUpcoming.length) {
+        if (liveSignals.length) liveSignals.push('');
+        liveSignals.push('Recent activity (last 30min) on tasks in your upcoming sequence:');
+        liveSignals.push(...recentTouchingUpcoming);
+      }
+      if (liveSignals.length === 0) {
+        liveSignals.push('(no other live activity in this repo right now)');
+      }
+
+      return [
+        `You are an AI coding agent picking up the "${lineState.name}" workstream in the "${projectName}" project.`,
+        `Repo path: ${projectPath}`,
+        `Lane state: ${lineStateLabel(lineState)} · ${owner} · ${activity}`,
+        '',
+        '── PRIMARY TASK ──',
+        currentTask ? summarizeTask(currentTask, true) : '(no current task — lane may be done or empty)',
+        '',
+        'Direct dependencies of the primary task:',
+        dependsOnLines,
+        '',
+        'External blockers (must finish before this lane can proceed):',
+        blockerSection,
+        '',
+        '── UPCOMING SEQUENCE (in order) ──',
+        upcomingLines,
+        '',
+        '── SUPPORTING TASKS ──',
+        supportLines,
+        '',
+        '── LIVE COORDINATION SIGNALS ──',
+        ...liveSignals,
+        '',
+        '── HARD RULES ──',
+        '1. Start with the PRIMARY TASK. Do not begin later sequence items until it is done or explicitly handed off.',
+        '2. If an external blocker is unfinished, stop and report rather than working around it.',
+        '3. Never `git push` or run a production deploy without an explicit go-ahead in the current conversation. Earlier `go`/`yes`/`continue` answers do not extend to push or deploy.',
+        '4. If you encounter uncommitted edits or recent activity in files outside the primary task\'s scope, treat them as another worker\'s WIP until proven otherwise. When in doubt, ask Watchpost (running at http://localhost:6010) — `/api/dirty-attribution?cwd=` returns per-file attribution and `/api/active-sessions?cwd=` lists live instances.',
+        '',
+        '── HOW TO FINISH ──',
+        'When the primary task is done, update its status using whatever this project\'s MASTER_PLAN already uses for closing tasks (existing skills, the Watchpost API, or a hand-edit if that\'s the established pattern). Pick the lightest path that\'s already in use — do not introduce a new convention. Then return to the UPCOMING SEQUENCE above.',
       ].join('\n');
     }
 
@@ -2873,6 +3026,7 @@
             </div>
             <div class="flow-row-actions">
               ${blockerChip}
+              <button class="flow-btn" type="button" data-action="copy-line-agent-prompt" data-line-id="${line.id}" title="Copy a context-rich prompt to hand this lane to an AI agent">Copy prompt</button>
               <button class="flow-btn primary" type="button" data-action="continue-line" data-line-id="${line.id}">Continue</button>
             </div>
           </div>
@@ -2934,15 +3088,35 @@
       set('stat-overdue', overdue);
     }
 
+    function scoreLineValue(line, taskById) {
+      const stateScore = line.owner ? 120
+        : line.state === 'in-progress' ? 100
+        : line.state === 'ready' ? 60
+        : line.state === 'blocked' ? 25
+        : line.state === 'locked' ? 5
+        : 0;
+      const currentTask = line.currentTaskId ? taskById.get(line.currentTaskId) : null;
+      const priorityScore = !currentTask ? 0
+        : currentTask.priority === 'high' ? 200
+        : currentTask.priority === 'medium' ? 100
+        : currentTask.priority === 'low' ? 15
+        : 60;
+      const liveBoost = line.isLiveInstance ? 30 : 0;
+      const runtimeTs = line.runtime?.ts ? new Date(line.runtime.ts).getTime() : 0;
+      const recencyBoost = runtimeTs ? Math.max(0, 20 - Math.min(20, (Date.now() - runtimeTs) / (60 * 60 * 1000))) : 0;
+      const dueTask = currentTask?.dueDate ? currentTask : null;
+      const dueBoost = dueTask ? Math.max(0, 40 - Math.min(40, Math.floor((dueTask.dueDate - new Date()) / (24 * 3600 * 1000)))) : 0;
+      return stateScore + priorityScore + liveBoost + recencyBoost + dueBoost;
+    }
+
     function renderDeliveryView(tasks, lines) {
       currentDeliveryLines = lines;
       const taskById = new Map(tasks.map(task => [task.id, task]));
       const lineStates = deriveLineStates(lines, taskById)
         .filter(line => !line.isDone)
+        .map(line => ({ ...line, valueScore: scoreLineValue(line, taskById) }))
         .sort((a, b) => {
-          const rank = line => line.owner ? 0 : line.state === 'in-progress' ? 1 : line.state === 'ready' ? 2 : line.state === 'blocked' ? 3 : 4;
-          const byRank = rank(a) - rank(b);
-          if (byRank !== 0) return byRank;
+          if (b.valueScore !== a.valueScore) return b.valueScore - a.valueScore;
           return a.name.localeCompare(b.name);
         });
       const activeFlows = lineStates.filter(line => line.isLiveInstance);
@@ -3567,6 +3741,22 @@
           }
         });
       });
+      root.querySelectorAll('[data-action="copy-line-agent-prompt"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const line = currentDeliveryLines.find(item => item.id === btn.dataset.lineId);
+          if (!line) return;
+          const taskById = new Map(allTasks.map(task => [task.id, task]));
+          const lineState = deriveLineStates([line], taskById)[0];
+          if (!lineState) return;
+          try {
+            await navigator.clipboard.writeText(buildLineAgentPrompt(lineState, taskById));
+            showToast(`Copied agent prompt for ${line.name}`, 'success');
+          } catch {
+            showToast('Clipboard copy failed', 'error');
+          }
+        });
+      });
       root.querySelectorAll('[data-action="copy-line-prompt"]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
@@ -3789,6 +3979,18 @@
         const el = document.getElementById(id);
         if (el) el.style.display = mode === 'streams' ? '' : 'none';
       });
+      // Reflect the active view on the Lanes/Graph toggle pair (always visible).
+      const isStreams = mode === 'streams';
+      const lanesBtn = document.getElementById('view-mode-lanes');
+      const graphBtn = document.getElementById('view-mode-graph');
+      if (lanesBtn) {
+        lanesBtn.classList.toggle('on', !isStreams);
+        lanesBtn.setAttribute('aria-selected', String(!isStreams));
+      }
+      if (graphBtn) {
+        graphBtn.classList.toggle('on', isStreams);
+        graphBtn.setAttribute('aria-selected', String(isStreams));
+      }
     }
 
     function renderStats(tasks) {
@@ -4220,6 +4422,16 @@
     /* ─── Wiring ─────────────────────────────────────────────────── */
     document.getElementById('refresh').addEventListener('click', () => fetchAndRender(true));
     document.getElementById('fit-view').addEventListener('click', fitView);
+    document.getElementById('view-mode-lanes').addEventListener('click', () => {
+      if (userViewPreference === 'delivery') return;
+      userViewPreference = 'delivery';
+      renderGraph();
+    });
+    document.getElementById('view-mode-graph').addEventListener('click', () => {
+      if (userViewPreference === 'streams') return;
+      userViewPreference = 'streams';
+      renderGraph();
+    });
     document.getElementById('zoom-in').addEventListener('click', () => {
       scale = Math.min(MAX_SCALE, scale * 1.2);
       applyTransform();

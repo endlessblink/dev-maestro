@@ -2538,11 +2538,13 @@
           // \s+              - At least one space
           // (?:~~)?          - Optional strikethrough start
           // (?:.*?)          - Non-greedy match for any chars (emojis like ✅, 🔴, text like "BUG:")
-          // ((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+) - CAPTURE GROUP 1: The ID itself
+          // ((?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+) - CAPTURE GROUP 1: The ID itself
+          //                                          (`T` is botson's prefix; placed
+          //                                          last so longer matches win first)
           // (?:~~)?          - Optional strikethrough end
-          if (currentSection === 'activeWork' && trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?/)) {
+          if (currentSection === 'activeWork' && trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+)(?:~~)?/)) {
             // Save previous task's subtasks before starting new one
-            if (currentItem && currentItem.id?.match(/^(?:TASK|BUG|ISSUE|FEATURE|ROAD)-/)) {
+            if (currentItem && currentItem.id?.match(/^(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-/)) {
               const taskIdx = data.activeWork.findIndex(t => t.id === currentItem.id);
               if (taskIdx >= 0) {
                 data.activeWork[taskIdx].subtasks = currentItem.subtasks || [];
@@ -2574,7 +2576,7 @@
               }
             }
 
-            const match = trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/);
+            const match = trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/);
             if (match) {
               // Check both parentheses status AND title for status indicators
               // Title might contain "✅ DONE" or similar without parentheses
@@ -2886,13 +2888,20 @@
                 } else {
                   data.activeWork.push(item);
                 }
+              } else if (/^T-\d+$/.test(id)) {
+                // Botson uses T-XXX (single-letter prefix); plans like this have all
+                // tasks in a summary table with no `### detail` headers, so the table
+                // row IS the source of truth.
+                if (!data.activeWork.find(t => t.id === id)) {
+                  data.activeWork.push(item);
+                }
               }
             }
           }
         }
 
         // Finalize last task's subtasks and progress
-        if (currentItem && currentItem.id?.match(/^(?:TASK|BUG|ISSUE)-/)) {
+        if (currentItem && currentItem.id?.match(/^(?:TASK|BUG|ISSUE|T)-/)) {
           const taskIdx = data.activeWork.findIndex(t => t.id === currentItem.id);
           if (taskIdx >= 0) {
             data.activeWork[taskIdx].subtasks = currentItem.subtasks || [];

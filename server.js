@@ -853,7 +853,7 @@ app.post('/api/task/:id', (req, res) => {
 
         const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const taskHeaderRegex = new RegExp(`^#{3,4}\\s+(?:~~)?(?:.*?)\\b${escapedId}\\b(?:~~)?(?=\\s|:|$|\\))`);
-        const anyTaskHeaderRegex = /^#{3,4}\s+(?:~~)?(?:.*?)(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+\b/;
+        const anyTaskHeaderRegex = /^#{3,4}\s+(?:~~)?(?:.*?)(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+\b/;
 
         for (let i = 0; i < lines.length; i++) {
             // Detect task start
@@ -953,7 +953,7 @@ app.delete('/api/task/:id', (req, res) => {
 
         const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const taskHeaderRegex = new RegExp(`^#{3,4}\\s+(?:~~)?(?:.*?)\\b${escapedId}\\b(?:~~)?(?=\\s|:|$|\\))`);
-        const anyTaskHeaderRegex = /^#{3,4}\s+(?:~~)?(?:.*?)(?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+\b/;
+        const anyTaskHeaderRegex = /^#{3,4}\s+(?:~~)?(?:.*?)(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+\b/;
 
         for (let i = 0; i < lines.length; i++) {
             if (!taskHeaderRegex.test(lines[i])) continue;
