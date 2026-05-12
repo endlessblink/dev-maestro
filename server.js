@@ -1265,19 +1265,66 @@ app.get('/api/health/report/json', async (req, res) => {
     });
 });
 
+function normalizeSkillName(name) {
+    return String(name || '')
+        .toLowerCase()
+        .replace(/^\//, '')
+        .trim();
+}
+
+function skillStateFile() {
+    return path.join(__dirname, 'data', 'skills-state.json');
+}
+
+function readSkillState() {
+    try {
+        const parsed = JSON.parse(fs.readFileSync(skillStateFile(), 'utf8'));
+        const triedSkills = Array.isArray(parsed?.triedSkills) ? parsed.triedSkills : [];
+        return {
+            triedSkills: triedSkills
+                .map(item => ({
+                    name: String(item?.name || '').trim(),
+                    key: normalizeSkillName(item?.key || item?.name),
+                    triedAt: item?.triedAt || null,
+                    source: item?.source || 'manual'
+                }))
+                .filter(item => item.name && item.key)
+        };
+    } catch {
+        return { triedSkills: [] };
+    }
+}
+
+function writeSkillState(state) {
+    const file = skillStateFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(state, null, 2));
+}
+
+function markSkillTried(rawName, source = 'manual') {
+    const name = String(rawName || '').trim();
+    const key = normalizeSkillName(name);
+    if (!name || !key) return null;
+
+    const state = readSkillState();
+    const next = state.triedSkills.filter(item => item.key !== key);
+    const item = { name, key, triedAt: new Date().toISOString(), source };
+    next.push(item);
+    next.sort((a, b) => a.name.localeCompare(b.name));
+    writeSkillState({ ...state, triedSkills: next });
+    return item;
+}
+
 // GET /api/skills - Dynamically scan .claude/skills/ directory
 app.get('/api/skills', (req, res) => {
     const masterPlanPath = process.env.MASTER_PLAN_PATH || '';
     const projectRoot = masterPlanPath ? getProjectRoot(masterPlanPath) : path.join(__dirname, '..');
-    const skillsDir = path.join(projectRoot, '.claude/skills');
 
     try {
-        if (!fs.existsSync(skillsDir)) {
-            return res.json({ nodes: [], links: [] });
-        }
-
         const nodes = [];
         const links = [];
+        const skillState = readSkillState();
+        const triedByKey = new Map(skillState.triedSkills.map(item => [item.key, item]));
         const categoryColors = {
             'debugging': '#ef4444',
             'architecture': '#3b82f6',
@@ -1288,14 +1335,37 @@ app.get('/api/skills', (req, res) => {
             'default': '#6b7280'
         };
 
-        const dirs = fs.readdirSync(skillsDir, { withFileTypes: true })
-            .filter(d => d.isDirectory());
+        const home = process.env.HOME || '/home/endlessblink';
+        const skillRoots = [
+            { source: 'codex', root: path.join(home, '.codex', 'skills') },
+            { source: 'claude', root: path.join(home, '.claude', 'skills') },
+            { source: 'agents', root: path.join(home, '.agents', 'skills') },
+            { source: 'opencode', root: path.join(home, '.config', 'opencode', 'skills') },
+            { source: 'project claude', root: path.join(projectRoot, '.claude', 'skills') },
+            { source: 'project codex', root: path.join(projectRoot, '.codex', 'skills') },
+            { source: 'project agents', root: path.join(projectRoot, '.agents', 'skills') }
+        ];
 
-        for (let i = 0; i < dirs.length; i++) {
-            const dir = dirs[i];
-            const skillPath = path.join(skillsDir, dir.name, 'SKILL.md');
+        const seenRoots = new Set();
+        const skillEntries = [];
+        for (const skillRoot of skillRoots) {
+            try {
+                if (!fs.existsSync(skillRoot.root)) continue;
+                const realRoot = fs.realpathSync.native(path.resolve(skillRoot.root));
+                if (seenRoots.has(realRoot)) continue;
+                seenRoots.add(realRoot);
+                const entries = fs.readdirSync(skillRoot.root, { withFileTypes: true }).filter(d => d.isDirectory());
+                for (const dir of entries) {
+                    const skillPath = path.join(skillRoot.root, dir.name, 'SKILL.md');
+                    if (fs.existsSync(skillPath)) skillEntries.push({ dir, skillPath, source: skillRoot.source });
+                }
+            } catch {
+                // Skip unreadable skill roots.
+            }
+        }
 
-            if (!fs.existsSync(skillPath)) continue;
+        for (let i = 0; i < skillEntries.length; i++) {
+            const { dir, skillPath, source } = skillEntries[i];
 
             try {
                 const content = fs.readFileSync(skillPath, 'utf8');
@@ -1327,24 +1397,33 @@ app.get('/api/skills', (req, res) => {
                 else if (nameLower.includes('research') || nameLower.includes('doc')) category = 'research';
                 else if (nameLower.includes('design') || nameLower.includes('ui')) category = 'design';
 
+                const tried = triedByKey.get(normalizeSkillName(dir.name));
+
                 nodes.push({
-                    id: `skill-${i}`,
+                    id: `skill:${source}:${dir.name}`,
+                    type: 'skill',
                     name: dir.name,
+                    folderName: dir.name,
                     title,
                     description,
                     category,
+                    source,
+                    path: skillPath,
+                    modifiedAt: fs.statSync(skillPath).mtime.toISOString(),
                     color: categoryColors[category] || categoryColors.default,
                     contentLength,
-                    usage: 0
+                    usage: 0,
+                    tried: Boolean(tried),
+                    triedAt: tried?.triedAt || null
                 });
 
                 // Find dependencies (skills that reference each other)
                 const refs = content.match(/skill[s]?[:\s]+["']?([a-z-]+)["']?/gi) || [];
                 for (const ref of refs) {
                     const targetName = ref.replace(/skill[s]?[:\s]+["']?/i, '').replace(/["']$/, '');
-                    const targetIdx = dirs.findIndex(d => d.name.toLowerCase().includes(targetName.toLowerCase()));
+                    const targetIdx = skillEntries.findIndex(entry => entry.dir.name.toLowerCase().includes(targetName.toLowerCase()));
                     if (targetIdx >= 0 && targetIdx !== i) {
-                        links.push({ source: `skill-${i}`, target: `skill-${targetIdx}` });
+                        links.push({ source: `skill:${source}:${dir.name}`, target: `skill:${skillEntries[targetIdx].source}:${skillEntries[targetIdx].dir.name}`, type: 'references', value: 3 });
                     }
                 }
             } catch (e) {
@@ -1356,13 +1435,72 @@ app.get('/api/skills', (req, res) => {
         const uniqueCategories = [...new Set(nodes.map(n => n.category))];
         const stats = {
             totalSkills: nodes.length,
-            categories: uniqueCategories
+            totalCommands: 0,
+            categories: uniqueCategories,
+            sources: [...new Set(nodes.map(node => node.source))].sort(),
+            consolidationCount: 0,
+            frameworkCopyGroups: 0,
+            usedSkills: nodes.filter(node => node.usage > 0).length,
+            unusedSkills: nodes.filter(node => node.usage === 0).length,
+            triedSkills: skillState.triedSkills.length,
+            untriedSkills: nodes.filter(node => !node.tried).length
         };
 
-        res.json({ nodes, links, stats });
+        const recommendedUnused = nodes
+            .filter(node => node.usage === 0 && !node.tried)
+            .map(node => ({
+                id: node.id,
+                name: node.name,
+                title: node.title,
+                description: node.description,
+                source: node.source,
+                category: node.category,
+                score: 70 + (node.description ? 10 : 0) + Math.min(Math.round((node.contentLength || 0) / 5000), 12),
+                reasons: ['No observed usage yet', 'Available in this project', node.description ? 'Has a description' : 'Worth reviewing'],
+                copyCount: 1,
+                hasCommand: false,
+                tried: false
+            }))
+            .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+            .slice(0, 18);
+
+        res.json({
+            nodes,
+            links,
+            stats,
+            insights: {
+                topUsed: [],
+                recommendedUnused,
+                unused: nodes.filter(node => node.usage === 0).slice(0, 20),
+                consolidation: [],
+                frameworkCopies: [],
+                triedSkills: skillState.triedSkills,
+                usageSource: 'Claude analytics plus Watchpost tried state',
+                usageScannedFiles: 0
+            },
+            triedSkills: skillState.triedSkills
+        });
     } catch (err) {
         res.json({ nodes: [], links: [], stats: { totalSkills: 0, categories: [] }, error: err.message });
     }
+});
+
+app.get('/api/skills/tried', (_req, res) => {
+    res.json(readSkillState());
+});
+
+app.post('/api/skills/tried', (req, res) => {
+    const item = markSkillTried(req.body?.name || req.body?.skillName, req.body?.source || 'manual');
+    if (!item) return res.status(400).json({ error: 'name required' });
+    res.json({ ok: true, triedSkill: item, state: readSkillState() });
+});
+
+app.delete('/api/skills/tried/:name', (req, res) => {
+    const key = normalizeSkillName(req.params.name);
+    const state = readSkillState();
+    const triedSkills = state.triedSkills.filter(item => item.key !== key);
+    writeSkillState({ ...state, triedSkills });
+    res.json({ ok: true, state: readSkillState() });
 });
 
 // GET /api/docs - Dynamically scan docs/ directory
