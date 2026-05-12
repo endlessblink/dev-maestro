@@ -1195,93 +1195,662 @@ app.get('/api/health/report/json', async (req, res) => {
     });
 });
 
-// GET /api/skills - Dynamically scan .claude/skills/ directory
-app.get('/api/skills', (req, res) => {
-    const skillsDir = path.join(getProjectRootForRequest(req), '.claude', 'skills');
+function parseSkillFrontmatter(content) {
+    const meta = {};
+    const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
+    if (!match) return meta;
 
+    for (const line of match[1].split('\n')) {
+        const item = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+        if (!item) continue;
+        meta[item[1].trim()] = item[2].trim().replace(/^['"]|['"]$/g, '');
+    }
+    return meta;
+}
+
+function inferSkillCategory(name, description, content) {
+    const haystack = `${name} ${description} ${content.slice(0, 1500)}`.toLowerCase();
+    const categories = [
+        ['memory', ['anytype', 'obsidian', 'vault', 'memory', 'pkm']],
+        ['integration', ['whatsapp', 'google', 'sheets', 'mcp', 'api', 'discord']],
+        ['media', ['hyperframes', 'video', 'audio', 'image', 'sprite', 'blender']],
+        ['review', ['review', 'audit', 'qa', 'tested', 'security', 'verdict']],
+        ['research', ['research', 'search', 'analyze', 'assess', 'learn']],
+        ['content', ['post', 'slides', 'hebrew', 'copy', 'markdown', 'docs', 'wiki']],
+        ['orchestration', ['agent', 'team', 'workflow', 'autopilot', 'ralph', 'ultrawork', 'omx']],
+        ['development', ['code', 'build', 'fix', 'debug', 'tdd', 'implement', 'refactor', 'electron', 'linux']],
+        ['design', ['design', 'frontend', 'ui', 'ux', 'visual', 'typography', 'animation', 'motion']]
+    ];
+
+    for (const [category, keywords] of categories) {
+        if (keywords.some(keyword => haystack.includes(keyword))) return category;
+    }
+    return 'other';
+}
+
+function skillKeywords(skill) {
+    const stop = new Set(['skill', 'skills', 'when', 'with', 'from', 'this', 'that', 'into', 'your', 'using', 'user', 'asks', 'workflow', 'imported', 'help', 'code', 'files', 'project']);
+    return new Set(`${skill.name} ${skill.description || ''}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 3 && !stop.has(word)));
+}
+
+function normalizeSkillName(name) {
+    return String(name || '')
+        .toLowerCase()
+        .replace(/^\//, '')
+        .split(':')
+        .filter(Boolean)
+        .pop()
+        ?.trim() || '';
+}
+
+function skillStateFile() {
+    return path.join(wpPaths.dataDir(), 'skills-state.json');
+}
+
+function readSkillState() {
     try {
-        if (!fs.existsSync(skillsDir)) {
-            return res.json({ nodes: [], links: [] });
-        }
-
-        const nodes = [];
-        const links = [];
-        const categoryColors = {
-            'debugging': '#ef4444',
-            'architecture': '#3b82f6',
-            'workflow': '#10b981',
-            'review': '#f59e0b',
-            'research': '#8b5cf6',
-            'design': '#ec4899',
-            'default': '#6b7280'
+        const parsed = JSON.parse(fs.readFileSync(skillStateFile(), 'utf8'));
+        const triedSkills = Array.isArray(parsed?.triedSkills) ? parsed.triedSkills : [];
+        return {
+            triedSkills: triedSkills
+                .map(item => ({
+                    name: String(item?.name || '').trim(),
+                    key: normalizeSkillName(item?.key || item?.name),
+                    triedAt: item?.triedAt || null,
+                    source: item?.source || 'manual'
+                }))
+                .filter(item => item.name && item.key)
         };
+    } catch {
+        return { triedSkills: [] };
+    }
+}
 
-        const dirs = fs.readdirSync(skillsDir, { withFileTypes: true })
-            .filter(d => d.isDirectory());
+function writeSkillState(state) {
+    const file = skillStateFile();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(state, null, 2));
+}
 
-        for (let i = 0; i < dirs.length; i++) {
-            const dir = dirs[i];
-            const skillPath = path.join(skillsDir, dir.name, 'SKILL.md');
+function markSkillTried(rawName, source = 'manual') {
+    const name = String(rawName || '').trim();
+    const key = normalizeSkillName(name);
+    if (!name || !key) return null;
 
-            if (!fs.existsSync(skillPath)) continue;
+    const state = readSkillState();
+    const next = state.triedSkills.filter(item => item.key !== key);
+    const item = { name, key, triedAt: new Date().toISOString(), source };
+    next.push(item);
+    next.sort((a, b) => a.name.localeCompare(b.name));
+    writeSkillState({ ...state, triedSkills: next });
+    return item;
+}
 
-            try {
-                const content = fs.readFileSync(skillPath, 'utf8');
-                const lines = content.split('\n');
+function sourceFamily(source) {
+    if (!source) return 'unknown';
+    if (source.startsWith('project:')) return source;
+    if (source.startsWith('project ')) return source;
+    return source;
+}
 
-                // Extract title from first # heading
-                const titleLine = lines.find(l => l.startsWith('# '));
-                const title = titleLine ? titleLine.replace('# ', '').trim() : dir.name;
+let skillsUsageCache = { expiresAt: 0, data: null };
 
-                // Extract description from first paragraph
-                const descStart = lines.findIndex(l => l.trim() && !l.startsWith('#'));
-                const description = descStart >= 0 ? lines[descStart].slice(0, 150) : '';
+const SKILL_USAGE_SCAN_LIMIT = Number(process.env.WATCHPOST_SKILL_USAGE_SCAN_LIMIT || 350);
+const SKILL_USAGE_MAX_FILE_BYTES = Number(process.env.WATCHPOST_SKILL_USAGE_MAX_FILE_BYTES || 2 * 1024 * 1024);
 
-                // Detect category from name or content
-                let category = 'default';
-                const nameLower = dir.name.toLowerCase();
-                if (nameLower.includes('debug') || nameLower.includes('fix')) category = 'debugging';
-                else if (nameLower.includes('arch') || nameLower.includes('plan')) category = 'architecture';
-                else if (nameLower.includes('workflow') || nameLower.includes('ops')) category = 'workflow';
-                else if (nameLower.includes('review')) category = 'review';
-                else if (nameLower.includes('research') || nameLower.includes('doc')) category = 'research';
-                else if (nameLower.includes('design') || nameLower.includes('ui')) category = 'design';
+function listFilesRecursive(root, predicate, limit = 6000) {
+    const files = [];
+    const stack = [root];
+    while (stack.length && files.length < limit) {
+        const current = stack.pop();
+        let entries = [];
+        try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+        for (const entry of entries) {
+            const fullPath = path.join(current, entry.name);
+            if (entry.isDirectory()) {
+                stack.push(fullPath);
+            } else if (predicate(fullPath)) {
+                files.push(fullPath);
+                if (files.length >= limit) break;
+            }
+        }
+    }
+    return files;
+}
 
-                nodes.push({
-                    id: `skill-${i}`,
-                    name: dir.name,
-                    title,
-                    description,
-                    category,
-                    color: categoryColors[category] || categoryColors.default,
-                    usage: 0
-                });
+function recordSkillUsage(usage, rawName, row) {
+    const names = new Set([rawName, normalizeSkillName(rawName)].filter(Boolean));
+    if (String(rawName || '').includes(':')) {
+        for (const part of String(rawName).split(':')) names.add(normalizeSkillName(part));
+    }
 
-                // Find dependencies (skills that reference each other)
-                const refs = content.match(/skill[s]?[:\s]+["']?([a-z-]+)["']?/gi) || [];
-                for (const ref of refs) {
-                    const targetName = ref.replace(/skill[s]?[:\s]+["']?/i, '').replace(/["']$/, '');
-                    const targetIdx = dirs.findIndex(d => d.name.toLowerCase().includes(targetName.toLowerCase()));
-                    if (targetIdx >= 0 && targetIdx !== i) {
-                        links.push({ source: `skill-${i}`, target: `skill-${targetIdx}` });
+    for (const name of names) {
+        if (!name) continue;
+        if (!usage.has(name)) {
+            usage.set(name, { count: 0, lastUsed: null, projects: new Set(), examples: [] });
+        }
+        const item = usage.get(name);
+        item.count += 1;
+        const timestamp = typeof row?.timestamp === 'string' ? row.timestamp : null;
+        if (timestamp && (!item.lastUsed || timestamp > item.lastUsed)) item.lastUsed = timestamp;
+        if (typeof row?.cwd === 'string' && row.cwd) item.projects.add(row.cwd);
+        if (item.examples.length < 3) {
+            item.examples.push({ timestamp, cwd: row?.cwd || null });
+        }
+    }
+}
+
+function collectSkillUsage() {
+    const now = Date.now();
+    if (skillsUsageCache.data && skillsUsageCache.expiresAt > now) return skillsUsageCache.data;
+
+    const usage = new Map();
+    const files = [];
+    for (const dir of wpPaths.claudeProjectsDirs()) {
+        files.push(...listFilesRecursive(dir, file => file.endsWith('.jsonl')));
+    }
+
+    const recentFiles = files
+        .map(file => {
+            try { return { file, mtimeMs: fs.statSync(file).mtimeMs }; }
+            catch { return null; }
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+        .slice(0, SKILL_USAGE_SCAN_LIMIT)
+        .map(item => item.file);
+
+    let scannedFiles = 0;
+    for (const file of recentFiles) {
+        let stat;
+        try { stat = fs.statSync(file); } catch { continue; }
+        if (stat.size > SKILL_USAGE_MAX_FILE_BYTES) continue;
+
+        let text;
+        try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+        scannedFiles += 1;
+
+        for (const line of text.split('\n')) {
+            if (!line.includes('"Skill"') && !line.includes('"attributionSkill"')) continue;
+            let row;
+            try { row = JSON.parse(line); } catch { continue; }
+
+            const content = row?.message?.content;
+            if (Array.isArray(content)) {
+                for (const part of content) {
+                    if (part?.type === 'tool_use' && part?.name === 'Skill' && typeof part?.input?.skill === 'string') {
+                        recordSkillUsage(usage, part.input.skill, row);
                     }
                 }
-            } catch (e) {
-                // Skip invalid skill files
+            }
+
+            if (typeof row?.attributionSkill === 'string') {
+                recordSkillUsage(usage, row.attributionSkill, row);
+            }
+        }
+    }
+
+    const data = { usage, scannedFiles };
+    skillsUsageCache = { expiresAt: now + 60_000, data };
+    return data;
+}
+
+function collectSkillDirs(projectRoot, includeAllProjects = false) {
+    const home = wpPaths.home();
+    const candidates = [
+        { source: 'codex', root: path.join(home, '.codex', 'skills') },
+        { source: 'claude', root: path.join(home, '.claude', 'skills') },
+        { source: 'agents', root: path.join(home, '.agents', 'skills') },
+        { source: 'opencode', root: path.join(home, '.config', 'opencode', 'skills') },
+        { source: 'project claude', root: path.join(projectRoot, '.claude', 'skills') },
+        { source: 'project codex', root: path.join(projectRoot, '.codex', 'skills') },
+        { source: 'project agents', root: path.join(projectRoot, '.agents', 'skills') }
+    ];
+
+    if (includeAllProjects) {
+        for (const project of getRegisteredProjects()) {
+            const root = wpPaths.mapPathToCurrentOS(project.root || project.path);
+            if (!root) continue;
+            const projectName = project.name || path.basename(root);
+            candidates.push(
+                { source: `project:${projectName}:claude`, root: path.join(root, '.claude', 'skills') },
+                { source: `project:${projectName}:codex`, root: path.join(root, '.codex', 'skills') },
+                { source: `project:${projectName}:agents`, root: path.join(root, '.agents', 'skills') }
+            );
+        }
+    }
+
+    const seen = new Set();
+    return candidates.filter(candidate => {
+        try {
+            if (!fs.existsSync(candidate.root)) return false;
+            const rootKey = fs.realpathSync.native(path.resolve(candidate.root));
+            if (seen.has(rootKey)) return false;
+            seen.add(rootKey);
+            return true;
+        } catch {
+            return false;
+        }
+    });
+}
+
+function collectCommandDirs() {
+    const home = wpPaths.home();
+    return [
+        { source: 'opencode commands', root: path.join(home, '.config', 'opencode', 'commands') },
+        { source: 'claude commands', root: path.join(home, '.claude', 'commands') }
+    ].filter(candidate => {
+        try { return fs.existsSync(candidate.root); } catch { return false; }
+    });
+}
+
+function readSkillInventory(projectRoot, includeAllProjects = false) {
+    const skills = [];
+    const skillDirs = collectSkillDirs(projectRoot, includeAllProjects);
+
+    for (const skillDir of skillDirs) {
+        let entries = [];
+        try { entries = fs.readdirSync(skillDir.root, { withFileTypes: true }); } catch { continue; }
+
+        for (const entry of entries.filter(item => item.isDirectory())) {
+            const file = path.join(skillDir.root, entry.name, 'SKILL.md');
+            if (!fs.existsSync(file)) continue;
+
+            try {
+                const content = fs.readFileSync(file, 'utf8');
+                const frontmatter = parseSkillFrontmatter(content);
+                const heading = content.split('\n').find(line => line.startsWith('# '));
+                const name = frontmatter.name || entry.name;
+                const description = frontmatter.description
+                    || content.split('\n').find(line => line.trim() && !line.startsWith('#') && !line.startsWith('---') && !line.includes(':'))
+                    || '';
+                const title = heading ? heading.replace(/^#\s+/, '').trim() : name;
+                const category = inferSkillCategory(name, description, content);
+                const stat = fs.statSync(file);
+
+                skills.push({
+                    id: `skill:${skillDir.source}:${entry.name}`,
+                    type: 'skill',
+                    name,
+                    folderName: entry.name,
+                    title,
+                    description: description.slice(0, 280),
+                    category,
+                    source: skillDir.source,
+                    path: file,
+                    modifiedAt: stat.mtime.toISOString(),
+                    content
+                });
+            } catch {
+                // Ignore unreadable skill files.
+            }
+        }
+    }
+    return skills;
+}
+
+function readCommandInventory() {
+    const commands = [];
+    for (const commandDir of collectCommandDirs()) {
+        let entries = [];
+        try { entries = fs.readdirSync(commandDir.root, { withFileTypes: true }); } catch { continue; }
+
+        for (const entry of entries.filter(item => item.isFile() && item.name.endsWith('.md'))) {
+            const file = path.join(commandDir.root, entry.name);
+            try {
+                const content = fs.readFileSync(file, 'utf8');
+                const frontmatter = parseSkillFrontmatter(content);
+                const name = entry.name.replace(/\.md$/, '');
+                commands.push({
+                    id: `command:${commandDir.source}:${name}`,
+                    type: 'command',
+                    name,
+                    title: `/${name}`,
+                    description: frontmatter.description || '',
+                    source: commandDir.source,
+                    path: file,
+                    content
+                });
+            } catch {
+                // Ignore unreadable command files.
+            }
+        }
+    }
+    return commands;
+}
+
+// GET /api/skills - inventory global skills, slash commands, and their relationships.
+app.get('/api/skills', (req, res) => {
+    try {
+        const projectRoot = getProjectRootForRequest(req);
+        const includeAllProjects = req.query.scope === 'all-projects';
+        const skills = readSkillInventory(projectRoot, includeAllProjects);
+        const commands = readCommandInventory();
+        const usageData = collectSkillUsage();
+        const skillState = readSkillState();
+        const triedByKey = new Map(skillState.triedSkills.map(item => [item.key, item]));
+        const nodes = [];
+        const links = [];
+        const linkKeys = new Set();
+        const skillByName = new Map();
+        const skillNames = new Map();
+        const nodeById = new Map();
+        const similarPairs = [];
+        const categories = [...new Set(skills.map(skill => skill.category))].sort();
+        const sources = [...new Set([...skills.map(skill => skill.source), ...commands.map(command => command.source)])].sort();
+
+        function addLink(source, target, type, value = 1) {
+            if (!source || !target || source === target) return;
+            const key = `${source}|${target}|${type}`;
+            if (linkKeys.has(key)) return;
+            linkKeys.add(key);
+            links.push({ source, target, type, value });
+        }
+
+        for (const category of categories) {
+            const node = { id: `category:${category}`, type: 'category', name: category, title: category, category };
+            nodes.push(node);
+            nodeById.set(node.id, node);
+        }
+
+        for (const source of sources) {
+            const node = { id: `source:${source}`, type: 'source', name: source, title: source, source };
+            nodes.push(node);
+            nodeById.set(node.id, node);
+        }
+
+        for (const skill of skills) {
+            const usage = usageData.usage.get(normalizeSkillName(skill.name))
+                || usageData.usage.get(normalizeSkillName(skill.folderName))
+                || { count: 0, lastUsed: null, projects: new Set(), examples: [] };
+            const tried = triedByKey.get(normalizeSkillName(skill.name)) || triedByKey.get(normalizeSkillName(skill.folderName)) || null;
+            const sameName = skills.filter(other => other.name === skill.name);
+            const duplicateCount = sameName.filter(other => sourceFamily(other.source) === sourceFamily(skill.source)).length;
+            const frameworkCopyCount = new Set(sameName.map(other => sourceFamily(other.source))).size;
+            const hasCommand = commands.some(command => {
+                const text = `${command.name} ${command.content}`.toLowerCase();
+                return command.name === skill.name || text.includes(`/${skill.name}`) || text.includes(`/${skill.folderName}`) || text.includes(skill.path.toLowerCase());
+            });
+            const issues = [];
+            if (!skill.description) issues.push('missing description');
+            if (duplicateCount > 1) issues.push('duplicate name');
+            if (!hasCommand) issues.push('no command wrapper');
+            if (usage.count === 0) issues.push('no observed usage');
+
+            const node = {
+                ...skill,
+                content: undefined,
+                issues,
+                commandCount: hasCommand ? 1 : 0,
+                usage: usage.count,
+                lastUsed: usage.lastUsed,
+                projectCount: usage.projects.size,
+                usageExamples: usage.examples,
+                tried: Boolean(tried),
+                triedAt: tried?.triedAt || null,
+                frameworkCopyCount
+            };
+            nodes.push(node);
+            nodeById.set(node.id, node);
+            addLink(node.id, `category:${skill.category}`, 'category', 2);
+            addLink(node.id, `source:${skill.source}`, 'source', 1);
+
+            if (!skillByName.has(skill.name)) skillByName.set(skill.name, []);
+            skillByName.get(skill.name).push(node);
+            skillNames.set(skill.folderName.toLowerCase(), node.id);
+            skillNames.set(skill.name.toLowerCase(), node.id);
+        }
+
+        for (const command of commands) {
+            const node = { ...command, content: undefined, category: 'command' };
+            nodes.push(node);
+            nodeById.set(node.id, node);
+            addLink(command.id, `source:${command.source}`, 'source', 1);
+
+            const commandText = `${command.name}\n${command.content}`.toLowerCase();
+            for (const skill of skills) {
+                const names = [skill.name, skill.folderName].map(item => item.toLowerCase());
+                if (names.some(name => command.name === name || commandText.includes(`/${name}/skill.md`) || commandText.includes(`skill ${name}`) || commandText.includes(`/${name}`))) {
+                    addLink(command.id, skill.id, 'invokes', 4);
+                }
             }
         }
 
-        // Compute stats for frontend
-        const uniqueCategories = [...new Set(nodes.map(n => n.category))];
-        const stats = {
-            totalSkills: nodes.length,
-            categories: uniqueCategories
-        };
+        for (const duplicateGroup of skillByName.values()) {
+            if (duplicateGroup.length < 2) continue;
+            const groupsByFamily = new Map();
+            for (const node of duplicateGroup) {
+                const family = sourceFamily(node.source);
+                if (!groupsByFamily.has(family)) groupsByFamily.set(family, []);
+                groupsByFamily.get(family).push(node);
+            }
 
-        res.json({ nodes, links, stats });
+            for (const sameFamilyGroup of groupsByFamily.values()) {
+                if (sameFamilyGroup.length < 2) continue;
+                for (let i = 0; i < sameFamilyGroup.length; i++) {
+                    for (let j = i + 1; j < sameFamilyGroup.length; j++) {
+                        addLink(sameFamilyGroup[i].id, sameFamilyGroup[j].id, 'duplicate', 5);
+                    }
+                }
+            }
+
+            for (let i = 0; i < duplicateGroup.length; i++) {
+                for (let j = i + 1; j < duplicateGroup.length; j++) {
+                    if (sourceFamily(duplicateGroup[i].source) !== sourceFamily(duplicateGroup[j].source)) {
+                        addLink(duplicateGroup[i].id, duplicateGroup[j].id, 'framework-copy', 2);
+                    }
+                }
+            }
+        }
+
+        for (const skill of skills) {
+            const content = skill.content.toLowerCase();
+            for (const [name, id] of skillNames.entries()) {
+                if (id !== skill.id && content.includes(name)) addLink(skill.id, id, 'references', 3);
+            }
+        }
+
+        const keywordCache = new Map(skills.map(skill => [skill.id, skillKeywords(skill)]));
+        for (let i = 0; i < skills.length; i++) {
+            for (let j = i + 1; j < skills.length; j++) {
+                if (skills[i].category !== skills[j].category) continue;
+                const a = keywordCache.get(skills[i].id);
+                const b = keywordCache.get(skills[j].id);
+                const shared = [...a].filter(word => b.has(word));
+                if (shared.length >= 3) {
+                    addLink(skills[i].id, skills[j].id, 'similar', Math.min(shared.length, 5));
+                    similarPairs.push({ source: skills[i].id, target: skills[j].id, shared, category: skills[i].category });
+                }
+            }
+        }
+
+        const skillNodes = nodes.filter(node => node.type === 'skill');
+        const logicalSkillGroups = new Map();
+        for (const node of skillNodes) {
+            if (!logicalSkillGroups.has(node.name)) logicalSkillGroups.set(node.name, []);
+            logicalSkillGroups.get(node.name).push(node);
+        }
+        const topUsed = [...logicalSkillGroups.values()]
+            .map(group => {
+                const canonical = [...group].sort((a, b) =>
+                    (b.usage || 0) - (a.usage || 0)
+                    || String(b.lastUsed || '').localeCompare(String(a.lastUsed || ''))
+                    || a.source.localeCompare(b.source)
+                )[0];
+                const projects = new Set(group.flatMap(node => (node.usageExamples || []).map(example => example.cwd).filter(Boolean)));
+                return {
+                    id: canonical.id,
+                    name: canonical.name,
+                    title: canonical.title,
+                    usage: canonical.usage,
+                    lastUsed: canonical.lastUsed,
+                    source: canonical.source,
+                    category: canonical.category,
+                    projectCount: Math.max(canonical.projectCount || 0, projects.size),
+                    copyCount: group.length
+                };
+            })
+            .filter(node => node.usage > 0)
+            .sort((a, b) => b.usage - a.usage || String(b.lastUsed || '').localeCompare(String(a.lastUsed || '')))
+            .slice(0, 12);
+        const usedCategoryCounts = new Map();
+        for (const group of logicalSkillGroups.values()) {
+            const used = group.some(node => node.usage > 0);
+            if (!used) continue;
+            const category = group[0]?.category || 'other';
+            usedCategoryCounts.set(category, (usedCategoryCounts.get(category) || 0) + 1);
+        }
+        const recommendedUnused = [...logicalSkillGroups.values()]
+            .map(group => {
+                const canonical = [...group].sort((a, b) =>
+                    (b.commandCount || 0) - (a.commandCount || 0)
+                    || Date.parse(b.modifiedAt || 0) - Date.parse(a.modifiedAt || 0)
+                    || a.source.localeCompare(b.source)
+                )[0];
+                if (!canonical || group.some(node => node.usage > 0 || node.tried)) return null;
+
+                const issues = new Set(group.flatMap(node => node.issues || []));
+                const modifiedTime = Math.max(...group.map(node => Date.parse(node.modifiedAt || 0)).filter(Number.isFinite), 0);
+                const ageDays = modifiedTime ? Math.max(0, Math.round((Date.now() - modifiedTime) / 86_400_000)) : null;
+                const categoryAffinity = usedCategoryCounts.get(canonical.category) || 0;
+                const hasCommand = group.some(node => node.commandCount > 0);
+                const isGlobal = group.some(node => !String(node.source || '').startsWith('project'));
+                const hasDescription = !issues.has('missing description');
+                const recentBoost = ageDays === null ? 0 : Math.max(0, 12 - Math.min(ageDays, 90) / 8);
+                const score = Math.round(
+                    35
+                    + Math.min(categoryAffinity * 10, 30)
+                    + (hasCommand ? 18 : 0)
+                    + (isGlobal ? 12 : 4)
+                    + (hasDescription ? 10 : 0)
+                    + (group.length > 1 ? 6 : 0)
+                    + recentBoost
+                );
+                const reasons = [];
+                if (categoryAffinity) reasons.push(`Matches your used ${canonical.category} skills`);
+                if (hasCommand) reasons.push('Has a slash-command wrapper');
+                if (isGlobal) reasons.push('Available globally');
+                if (group.length > 1) reasons.push(`${group.length} physical copies found`);
+                if (ageDays !== null && ageDays <= 30) reasons.push('Recently updated');
+                if (!reasons.length) reasons.push('Unused skill worth reviewing');
+
+                return {
+                    id: canonical.id,
+                    name: canonical.name,
+                    title: canonical.title,
+                    description: canonical.description,
+                    source: canonical.source,
+                    category: canonical.category,
+                    score,
+                    reasons,
+                    copyCount: group.length,
+                    hasCommand,
+                    ageDays,
+                    issues: [...issues]
+                };
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+            .slice(0, 18);
+        const unused = [...skillNodes]
+            .filter(node => node.usage === 0)
+            .sort((a, b) => a.source.localeCompare(b.source) || a.name.localeCompare(b.name))
+            .slice(0, 20)
+            .map(node => ({ id: node.id, name: node.name, title: node.title, source: node.source, category: node.category, issues: node.issues }));
+        const duplicateGroups = [...skillByName.values()]
+            .filter(group => group.length > 1)
+            .map(group => group.filter((node, _idx, all) => all.filter(other => sourceFamily(other.source) === sourceFamily(node.source)).length > 1))
+            .filter(group => group.length > 1)
+            .map(group => ({
+                reason: 'Duplicate skill name inside the same source',
+                score: 100 + group.length * 5,
+                skills: group.map(node => ({ id: node.id, name: node.name, title: node.title, source: node.source, usage: node.usage, lastUsed: node.lastUsed }))
+            }));
+        const frameworkCopies = [...skillByName.values()]
+            .filter(group => group.length > 1)
+            .filter(group => new Set(group.map(node => sourceFamily(node.source))).size > 1)
+            .map(group => ({
+                name: group[0].name,
+                count: group.length,
+                sources: [...new Set(group.map(node => node.source))].sort(),
+                skills: group.map(node => ({ id: node.id, name: node.name, title: node.title, source: node.source, usage: node.usage, lastUsed: node.lastUsed }))
+            }))
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+        const similarGroups = similarPairs
+            .map(pair => {
+                const a = nodeById.get(pair.source);
+                const b = nodeById.get(pair.target);
+                if (!a || !b) return null;
+                const usageGap = Math.abs((a.usage || 0) - (b.usage || 0));
+                return {
+                    reason: `Similar ${pair.category} purpose (${pair.shared.slice(0, 4).join(', ')})`,
+                    score: pair.shared.length * 10 + (a.usage === 0 || b.usage === 0 ? 15 : 0) - Math.min(usageGap, 20),
+                    shared: pair.shared.slice(0, 6),
+                    skills: [a, b].map(node => ({ id: node.id, name: node.name, title: node.title, source: node.source, usage: node.usage, lastUsed: node.lastUsed }))
+                };
+            })
+            .filter(Boolean)
+            .filter(group => group.score >= 25);
+        const consolidation = [...duplicateGroups, ...similarGroups]
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 16);
+        const issueCount = nodes.filter(node => node.type === 'skill' && node.issues?.length).length;
+        res.json({
+            nodes,
+            links,
+            insights: {
+                topUsed,
+                recommendedUnused,
+                unused,
+                consolidation,
+                frameworkCopies: frameworkCopies.slice(0, 24),
+                triedSkills: skillState.triedSkills,
+                usageSource: 'Claude transcript Skill tool calls plus Watchpost tried state',
+                usageScannedFiles: usageData.scannedFiles
+            },
+            stats: {
+                totalSkills: skills.length,
+                totalCommands: commands.length,
+                categories,
+                sources,
+                issueCount,
+                duplicateNames: duplicateGroups.length,
+                frameworkCopyGroups: frameworkCopies.length,
+                usedSkills: skillNodes.filter(node => node.usage > 0).length,
+                triedSkills: skillState.triedSkills.length,
+                untriedSkills: skillNodes.filter(node => node.usage === 0 && !node.tried).length,
+                unusedSkills: skillNodes.filter(node => node.usage === 0).length,
+                consolidationCount: consolidation.length,
+                usageScannedFiles: usageData.scannedFiles,
+                scope: includeAllProjects ? 'all-projects' : 'active-project'
+            }
+        });
     } catch (err) {
-        res.json({ nodes: [], links: [], stats: { totalSkills: 0, categories: [] }, error: err.message });
+        res.json({ nodes: [], links: [], insights: { topUsed: [], unused: [], consolidation: [] }, stats: { totalSkills: 0, totalCommands: 0, categories: [], sources: [], issueCount: 0, duplicateNames: 0 }, error: err.message });
     }
+});
+
+app.get('/api/skills/tried', (_req, res) => {
+    res.json(readSkillState());
+});
+
+app.post('/api/skills/tried', (req, res) => {
+    const name = req.body?.name || req.body?.skillName;
+    const item = markSkillTried(name, req.body?.source || 'manual');
+    if (!item) return res.status(400).json({ error: 'name required' });
+    res.json({ ok: true, triedSkill: item, state: readSkillState() });
+});
+
+app.delete('/api/skills/tried/:name', (req, res) => {
+    const key = normalizeSkillName(req.params.name);
+    const state = readSkillState();
+    const triedSkills = state.triedSkills.filter(item => item.key !== key);
+    writeSkillState({ ...state, triedSkills });
+    res.json({ ok: true, state: readSkillState() });
 });
 
 // GET /api/docs - Dynamically scan docs/ directory

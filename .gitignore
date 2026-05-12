@@ -15,6 +15,7 @@ data/covers/
 data/summaries/
 data/user-notes.json
 data/outlook.json
+data/skills-state.json
 data/happy-audit.jsonl
 data/orchestrations.json
 local/views.legacy/
