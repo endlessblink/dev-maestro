@@ -2235,10 +2235,36 @@ function bindCardEvents(container, rowSelector) {
             return;
         }
 
-        if (action === 'open' || !action) {
+        if (action === 'details') {
+            e.stopPropagation();
             openDetail(name);
+            return;
+        }
+
+        if (action === 'open' || !action) {
+            activateProject(name);
         }
     });
+}
+
+async function activateProject(name) {
+    try {
+        const res = await fetch('/api/projects/' + encodeURIComponent(name) + '/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showToast('Error: ' + (err.error || 'Failed to switch'), 'warning');
+            return;
+        }
+        showToast('Switched to ' + name, 'check');
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'activate-and-navigate', target: 'kanban' }, '*');
+        }
+    } catch (err) {
+        showToast('Network error switching project', 'warning');
+    }
 }
 
 // ── Context Menu ───────────────────────────────────────────────────────────
