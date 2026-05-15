@@ -1,0 +1,4496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watchpost — Feature Flow</title>
+  <script src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1.1.4/dist/dagre.min.js"></script>
+  <style>
+    :root {
+      --surface-primary: #000000;
+      --surface-secondary: #0d1117;
+      --surface-tertiary: #161b22;
+      --surface-hover: rgba(255, 255, 255, 0.05);
+      --text-primary: #e6edf3;
+      --text-secondary: #c9d1d9;
+      --text-muted: #8b949e;
+      --text-subtle: #6e7681;
+      --border-subtle: #1a1a1a;
+      --border-medium: #30363d;
+      --brand-primary: #4ECDC4;
+      --brand-hover: #5fd9d1;
+      --color-flow: #6366f1;
+
+      --status-in-progress: #f59e0b;
+      --status-review: #06b6d4;
+      --status-planned: #c9d1d9;
+      --status-done: rgba(34, 197, 94, 0.55);
+      --status-paused: #6e7681;
+      --status-unknown: #8b949e;
+
+      --edge-solid: rgba(200, 210, 225, 0.55);
+      --edge-dashed: rgba(139, 148, 158, 0.32);
+
+      --recommended-glow: #4ECDC4;
+      --overdue-ring: #ef4444;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%; width: 100%;
+      background: var(--surface-primary);
+      color: var(--text-secondary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #root {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      grid-template-rows: 48px 1fr;
+      grid-template-areas:
+        "toolbar toolbar"
+        "graph   side";
+      height: 100%;
+    }
+
+    .toolbar {
+      grid-area: toolbar;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0 1rem;
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .toolbar .title {
+      font-size: 0.85rem; font-weight: 600;
+      color: var(--text-primary); letter-spacing: 0.02em;
+    }
+    .toolbar .title-accent { color: var(--color-flow); }
+    .toolbar .spacer { flex: 1; }
+
+    .toolbar-btn, .toolbar-toggle {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.3rem 0.7rem;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      font-size: 0.75rem; font-weight: 500;
+      cursor: pointer;
+      transition: all 150ms ease;
+      user-select: none;
+    }
+    .toolbar-btn:hover, .toolbar-toggle:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+    .toolbar-toggle.on {
+      color: var(--color-flow);
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.08);
+    }
+
+    .toolbar-stats {
+      font-size: 0.72rem; color: var(--text-subtle);
+      display: flex; gap: 0.9rem;
+    }
+    .toolbar-stats span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .toolbar-stats .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+    .graph-pane {
+      grid-area: graph;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(99, 102, 241, 0.04), transparent 60%),
+        var(--surface-primary);
+    }
+    #graph {
+      width: 100%; height: 100%;
+      display: block;
+      cursor: grab;
+    }
+    #graph.dragging { cursor: grabbing; }
+
+    .rank-label {
+      fill: var(--text-subtle);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      pointer-events: none;
+      opacity: 0.5;
+    }
+
+    .node rect {
+      transition: stroke 150ms ease, filter 150ms ease;
+    }
+    .node:hover rect {
+      stroke: var(--color-flow) !important;
+    }
+    .node.selected rect {
+      stroke: var(--color-flow) !important;
+      stroke-width: 2 !important;
+    }
+    .node.recommended rect {
+      stroke: var(--recommended-glow) !important;
+      stroke-width: 1.6 !important;
+    }
+    .node.ready rect {
+      stroke: rgba(34, 197, 94, 0.55) !important;
+      stroke-width: 1.6 !important;
+    }
+    .node.blocked { opacity: 0.72; }
+    .node.overdue rect {
+      stroke: var(--overdue-ring) !important;
+    }
+    .node-id {
+      fill: var(--text-primary);
+      font-size: 10.5px;
+      font-weight: 600;
+      pointer-events: none;
+    }
+    .node-title {
+      fill: var(--text-muted);
+      font-size: 9.5px;
+      pointer-events: none;
+    }
+    /* HTML title inside <foreignObject> — proper pixel-perfect ellipsis */
+    .node-title-html {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 10px;
+      line-height: 1.35;
+      color: var(--text-secondary);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      padding: 0 10px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      overflow-wrap: break-word;
+      word-break: break-word;
+      pointer-events: none;
+      height: 100%;
+      box-sizing: border-box;
+    }
+    .node.overdue .node-title-html { color: var(--text-primary); }
+    .node.ready .node-title-html { color: var(--text-primary); }
+    /* Thin divider between header row and title row */
+    .node-rule {
+      stroke: rgba(255, 255, 255, 0.05);
+      stroke-width: 1;
+      pointer-events: none;
+    }
+    .node-priority {
+      font-size: 8.5px;
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    .edge {
+      fill: none;
+      stroke-width: 1.4;
+    }
+    .edge.inferred {
+      stroke-dasharray: 4 3;
+      stroke-width: 1;
+    }
+    .edge.highlight {
+      stroke: var(--color-flow) !important;
+      stroke-width: 2.2;
+      opacity: 1 !important;
+    }
+
+    .graph-empty {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 0.5rem; color: var(--text-subtle); font-size: 0.85rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 200ms ease;
+    }
+    .graph-empty.visible { opacity: 1; }
+    .graph-empty code {
+      background: var(--surface-secondary);
+      padding: 0.1rem 0.35rem; border-radius: 4px;
+      color: var(--color-flow); font-size: 0.75rem;
+    }
+
+    .legend {
+      position: absolute; left: 12px; bottom: 12px;
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 0.55rem 0.7rem;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      display: grid; grid-template-columns: auto auto;
+      gap: 0.2rem 0.8rem;
+      pointer-events: none; user-select: none;
+    }
+    .legend .row { display: flex; align-items: center; gap: 0.4rem; }
+    .legend .swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+    .legend .line { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+    .legend .line.dashed { border-top-style: dashed; }
+
+    .zoom-controls {
+      position: absolute; right: 12px; bottom: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .zoom-controls button {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(13, 17, 23, 0.85);
+      backdrop-filter: blur(8px);
+      color: var(--text-muted);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer;
+    }
+    .zoom-controls button:hover {
+      color: var(--color-flow);
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+
+    .side-pane {
+      grid-area: side;
+      background: var(--surface-secondary);
+      border-left: 1px solid var(--border-subtle);
+      overflow-y: auto;
+      padding: 1rem;
+    }
+    .side-empty {
+      color: var(--text-subtle);
+      font-size: 0.78rem; line-height: 1.5;
+      padding: 1rem 0.25rem; text-align: center;
+    }
+    .side-empty svg {
+      width: 28px; height: 28px; opacity: 0.35;
+      display: block; margin: 0 auto 0.5rem;
+    }
+
+    .task-detail h2 {
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--color-flow);
+      letter-spacing: 0.06em; text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+    .task-detail h3 {
+      font-size: 0.95rem; color: var(--text-primary);
+      font-weight: 600; line-height: 1.35;
+      margin-bottom: 0.75rem;
+    }
+    .task-detail .meta {
+      display: flex; flex-wrap: wrap; gap: 0.4rem;
+      margin-bottom: 0.85rem;
+    }
+    .task-detail .pill {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.18rem 0.5rem; border-radius: 999px;
+      font-size: 0.7rem; font-weight: 500;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+    }
+    .task-detail .pill.status-in-progress { color: var(--status-in-progress); border-color: rgba(245, 158, 11, 0.35); }
+    .task-detail .pill.status-review      { color: var(--status-review); border-color: rgba(6, 182, 212, 0.35); }
+    .task-detail .pill.status-done        { color: #22c55e; border-color: rgba(34, 197, 94, 0.35); }
+    .task-detail .pill.status-paused      { color: var(--status-paused); }
+    .task-detail .pill.priority-high      { color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+    .task-detail .pill.priority-medium    { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+    .task-detail .pill.priority-low       { color: var(--text-muted); }
+    .task-detail .pill.overdue            { color: var(--overdue-ring); border-color: rgba(239, 68, 68, 0.35); }
+    .task-detail .pill.rank               { color: var(--color-flow); border-color: rgba(99, 102, 241, 0.35); }
+
+    .task-detail .banner {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.45rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      margin-bottom: 0.85rem;
+    }
+    .task-detail .banner .dot {
+      width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+    }
+    .task-detail .banner.ready {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      color: #bbf7d0;
+    }
+    .task-detail .banner.blocked {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #fecaca;
+    }
+    .task-detail .banner.done {
+      background: rgba(110, 118, 129, 0.08);
+      border: 1px solid rgba(110, 118, 129, 0.25);
+      color: var(--text-muted);
+      padding: 0.4rem 0.6rem;
+    }
+    .task-detail .score-row {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.72rem; color: var(--text-muted);
+      margin-bottom: 0.85rem;
+    }
+    .task-detail .score-bar {
+      flex: 1; height: 4px; background: var(--surface-hover); border-radius: 2px; overflow: hidden;
+    }
+    .task-detail .score-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--color-flow), var(--recommended-glow));
+      transition: width 250ms ease;
+    }
+
+    .task-detail .dep-block { margin-top: 0.9rem; }
+    .task-detail .dep-block .label {
+      font-size: 0.68rem; color: var(--text-subtle);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 0.35rem;
+    }
+    .task-detail .dep-list {
+      display: flex; flex-wrap: wrap; gap: 0.35rem;
+    }
+    .task-detail .dep-chip {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+    .task-detail .dep-chip:hover {
+      color: var(--color-flow);
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .task-detail .dep-chip.done { text-decoration: line-through; opacity: 0.6; }
+    .task-detail .dep-chip.inferred { border-style: dashed; color: var(--text-muted); }
+
+    .task-detail .body-preview {
+      font-size: 0.78rem; color: var(--text-muted); line-height: 1.55;
+      max-height: 200px; overflow-y: auto;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 0.55rem 0.7rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      white-space: pre-wrap; word-break: break-word;
+      margin-top: 0.75rem;
+    }
+    .task-detail .actions {
+      display: flex; gap: 0.5rem; margin-top: 1rem;
+    }
+    .task-detail .actions button {
+      flex: 1;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.75rem; font-weight: 500;
+      color: var(--text-primary);
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+    .task-detail .actions button:hover {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: var(--color-flow);
+    }
+
+    .toast {
+      position: fixed;
+      right: 356px; bottom: 16px;
+      background: rgba(13, 17, 23, 0.95);
+      border: 1px solid var(--border-medium);
+      padding: 0.5rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.75rem; color: var(--text-primary);
+      opacity: 0; transform: translateY(8px);
+      transition: all 180ms ease;
+      pointer-events: none; z-index: 20;
+    }
+    .toast.visible { opacity: 1; transform: translateY(0); }
+    .toast.success { border-color: rgba(34, 197, 94, 0.45); }
+    .toast.error   { border-color: rgba(239, 68, 68, 0.45); }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 3px; }
+
+    /* ─── Sprint-focused view (active when MASTER_PLAN has `### Current sprint framing`) ── */
+    .sprint-layout {
+      position: absolute; inset: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: var(--surface-primary);
+    }
+    .sprint-layout[hidden] { display: none; }
+
+    .sprint-sidebar {
+      background: var(--surface-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 12px 16px;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .sprint-sidebar-header {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: var(--text-subtle);
+      padding: 0 0 10px;
+      text-transform: uppercase;
+    }
+    #sprint-list {
+      display: flex;
+      gap: 12px;
+      flex-wrap: nowrap;
+      min-width: max-content;
+      padding-bottom: 2px;
+      align-items: stretch;
+    }
+    .sprint-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 0 0 auto;
+    }
+    .sprint-connector {
+      width: 44px;
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      flex: 0 0 auto;
+      position: relative;
+      overflow: hidden;
+    }
+    .sprint-connector::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      transform-origin: left center;
+      transform: scaleX(0);
+      background: linear-gradient(90deg, #22c55e, var(--color-flow));
+    }
+    .sprint-connector.completed::after,
+    .sprint-connector.current::after {
+      transform: scaleX(1);
+    }
+    .sprint-item {
+      display: block;
+      width: 320px;
+      min-width: 320px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      text-align: left;
+      padding: 12px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+      font: inherit;
+    }
+    .sprint-item:hover {
+      background: var(--surface-hover);
+      color: var(--text-secondary);
+    }
+    .sprint-item:focus-visible {
+      outline: 2px solid var(--color-flow);
+      outline-offset: -2px;
+    }
+    .sprint-item.active {
+      background: rgba(99, 102, 241, 0.08);
+      border-color: var(--color-flow);
+      color: var(--text-primary);
+      box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25) inset;
+    }
+    .sprint-item.completed {
+      border-color: rgba(34, 197, 94, 0.3);
+      background: rgba(34, 197, 94, 0.06);
+      color: var(--text-secondary);
+    }
+    .sprint-item.locked {
+      opacity: 0.72;
+      cursor: not-allowed;
+    }
+    .sprint-item.locked:hover {
+      background: transparent;
+      color: var(--text-muted);
+      border-color: var(--border-subtle);
+    }
+    .sprint-item-letter {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: var(--color-flow);
+      opacity: 0.85;
+    }
+    .sprint-item-state {
+      margin-top: 10px;
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .sprint-item-state.current {
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .sprint-item-state.completed {
+      color: #86efac;
+      background: rgba(34, 197, 94, 0.1);
+      border-color: rgba(34, 197, 94, 0.25);
+    }
+    .sprint-item-state.locked {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
+    }
+    .sprint-item-name {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 3px 0 6px;
+      line-height: 1.25;
+    }
+    .sprint-item-progress {
+      height: 3px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .sprint-item-progress-fill {
+      height: 100%;
+      background: #22c55e;
+      transition: width 300ms ease-out;
+    }
+    .sprint-item-counts {
+      font-size: 10.5px;
+      color: var(--text-subtle);
+      margin-top: 5px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .sprint-item-counts .pill {
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .sprint-item-counts .pill.ready  { color: #22c55e; background: rgba(34,197,94,0.08); }
+    .sprint-item-counts .pill.active { color: #f59e0b; background: rgba(245,158,11,0.08); }
+    .sprint-item-copy {
+      margin-top: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-size: 10.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+    .sprint-item-copy:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+
+    .sprint-main {
+      padding: 28px 36px;
+      overflow-y: auto;
+    }
+    .flow-board {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .flow-section {
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      padding: 16px 18px;
+    }
+    .flow-section-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .flow-section-header h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .flow-section-header p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .flow-section-count {
+      color: var(--text-subtle);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .flow-section-count.primary {
+      color: #c7d2fe;
+    }
+    .flow-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .flow-row {
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 16px 18px 18px;
+      background: linear-gradient(180deg, rgba(18, 20, 28, 0.96), rgba(16, 18, 24, 0.92));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .flow-row.current {
+      border-color: rgba(99, 102, 241, 0.42);
+      box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.12), inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .flow-row.blocked {
+      border-color: rgba(239, 68, 68, 0.34);
+    }
+    .flow-row.upnext {
+      opacity: 0.94;
+      background: linear-gradient(180deg, rgba(22, 24, 30, 0.95), rgba(18, 20, 26, 0.9));
+    }
+    .flow-row-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .flow-row-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .flow-row-labels {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .flow-row-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+    .flow-row-owner,
+    .flow-row-state,
+    .flow-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .flow-row-owner {
+      color: #a5b4fc;
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .flow-row-owner.unclaimed {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
+    }
+    .flow-row-state.ready {
+      color: #86efac;
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.24);
+    }
+    .flow-row-state.in-progress {
+      color: #fcd34d;
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.24);
+    }
+    .flow-row-state.blocked {
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.24);
+    }
+    .flow-row-state.locked {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
+    }
+    .flow-row-hint {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .flow-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .flow-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 11px;
+      border-radius: 7px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .flow-btn:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+    .flow-btn.primary {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.28);
+      color: #c7d2fe;
+    }
+    .flow-sequence {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 4px 2px 2px;
+    }
+    .flow-arrow {
+      flex: 0 0 auto;
+      width: 42px;
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      position: relative;
+    }
+    .flow-arrow::after {
+      content: '';
+      position: absolute;
+      right: -1px;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      border-top: 2px solid rgba(255,255,255,0.2);
+      border-right: 2px solid rgba(255,255,255,0.2);
+      transform: translateY(-50%) rotate(45deg);
+    }
+    .flow-node {
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+      padding: 16px 18px;
+      min-width: 180px;
+      max-width: 220px;
+      min-height: 118px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+    .flow-node:hover {
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+    .flow-node.done {
+      border-color: rgba(34, 197, 94, 0.28);
+      background: linear-gradient(180deg, rgba(34,197,94,0.08), rgba(34,197,94,0.04));
+      opacity: 0.72;
+    }
+    .flow-node.current {
+      border-color: rgba(99, 102, 241, 0.42);
+      background: linear-gradient(180deg, rgba(99,102,241,0.16), rgba(99,102,241,0.08));
+      box-shadow: 0 10px 30px rgba(99,102,241,0.12), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .flow-node.next {
+      border-color: rgba(245, 158, 11, 0.34);
+      background: linear-gradient(180deg, rgba(245,158,11,0.1), rgba(245,158,11,0.04));
+    }
+    .flow-node.blocked {
+      border-color: rgba(239, 68, 68, 0.34);
+      background: linear-gradient(180deg, rgba(239,68,68,0.1), rgba(239,68,68,0.04));
+    }
+    .flow-node.locked {
+      opacity: 0.64;
+    }
+    .flow-node-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+      background: rgba(255,255,255,0.05);
+    }
+    .flow-node.current .flow-node-eyebrow {
+      color: #c7d2fe;
+      background: rgba(99,102,241,0.18);
+    }
+    .flow-node.next .flow-node-eyebrow {
+      color: #fcd34d;
+      background: rgba(245,158,11,0.14);
+    }
+    .flow-node.blocked .flow-node-eyebrow {
+      color: #fca5a5;
+      background: rgba(239,68,68,0.14);
+    }
+    .flow-node.done .flow-node-eyebrow {
+      color: #86efac;
+      background: rgba(34,197,94,0.14);
+    }
+    .flow-node-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .flow-node-title {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.45;
+      text-wrap: balance;
+    }
+    .flow-node-empty {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .flow-chip {
+      color: #fca5a5;
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.22);
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 10.5px;
+    }
+    .flow-chip.line {
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.22);
+      cursor: default;
+    }
+    .flow-backlog details {
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+    .flow-collapsed details {
+      border-top: 0;
+      padding-top: 0;
+      margin-top: 0;
+    }
+    .flow-backlog details:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+    .flow-backlog summary {
+      cursor: pointer;
+      color: var(--text-primary);
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+    .flow-empty {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+      padding: 4px 0;
+    }
+    .flow-backlog-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .flow-backlog-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+    }
+    .flow-backlog-item:hover {
+      background: var(--surface-hover);
+    }
+    .flow-backlog-empty {
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .sprint-main-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .sprint-main-header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 4px;
+    }
+    .sprint-main-header-copy {
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .sprint-main-header .sub {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+    .sprint-main-header .sub b.ready { color: #22c55e; }
+    .sprint-main-header .sub b.active { color: #f59e0b; }
+    .sprint-main-header .sub b.blocked { color: #ef4444; }
+
+    .delivery-spine {
+      margin-top: 22px;
+      padding: 16px 18px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(99, 102, 241, 0.05), rgba(255,255,255,0.015));
+    }
+    .delivery-spine-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .delivery-spine-title h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .delivery-spine-title span {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .delivery-spine-note {
+      margin: 0 0 14px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .delivery-lines-panel {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.015);
+    }
+    .delivery-lines-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .delivery-line-row {
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: var(--surface-secondary);
+    }
+    .delivery-line-row.current {
+      border-color: rgba(99, 102, 241, 0.4);
+      background: rgba(99, 102, 241, 0.06);
+    }
+    .delivery-line-row.locked {
+      opacity: 0.78;
+    }
+    .delivery-line-row-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .delivery-line-row-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .delivery-line-row-id {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-flow);
+    }
+    .delivery-line-row-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .delivery-line-row-state {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .delivery-line-row-state.current {
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.25);
+    }
+    .delivery-line-row-state.locked {
+      color: var(--text-subtle);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: var(--border-subtle);
+    }
+    .delivery-line-row-counts {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 10.5px;
+      color: var(--text-subtle);
+    }
+    .delivery-line-row-counts span {
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .delivery-line-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .delivery-line-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .delivery-line-btn:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+      border-color: var(--border-medium);
+    }
+    .delivery-line-btn.primary {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.25);
+      color: #c7d2fe;
+    }
+    .delivery-line-btn.primary:hover {
+      border-color: var(--color-flow);
+      color: var(--text-primary);
+    }
+    .delivery-line-steps {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding-top: 10px;
+    }
+    .delivery-line-step {
+      min-width: 148px;
+      max-width: 148px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 11px;
+    }
+    .delivery-line-step.done {
+      border-color: rgba(34, 197, 94, 0.25);
+      background: rgba(34, 197, 94, 0.06);
+    }
+    .delivery-line-step.current {
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.08);
+    }
+    .delivery-line-step.next {
+      border-color: rgba(99, 102, 241, 0.3);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .delivery-line-step.blocked {
+      border-color: rgba(239, 68, 68, 0.24);
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .delivery-line-step-top {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .delivery-line-step-order {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+    }
+    .delivery-line-step-id {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .delivery-line-step-state {
+      margin-left: auto;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+    }
+    .delivery-line-step-title {
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+    .delivery-line-step-arrow {
+      flex: 0 0 auto;
+      color: var(--text-subtle);
+      font-size: 14px;
+    }
+    .task-spine {
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .task-spine-step {
+      min-width: 220px;
+      max-width: 220px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--surface-secondary);
+      padding: 12px 14px;
+    }
+    .task-spine-step.done {
+      border-color: rgba(34, 197, 94, 0.28);
+      background: rgba(34, 197, 94, 0.06);
+    }
+    .task-spine-step.current {
+      border-color: rgba(245, 158, 11, 0.4);
+      background: rgba(245, 158, 11, 0.08);
+    }
+    .task-spine-step.next {
+      border-color: rgba(99, 102, 241, 0.38);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .task-spine-step.blocked {
+      border-color: rgba(239, 68, 68, 0.24);
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .task-spine-step.parked {
+      opacity: 0.86;
+    }
+    .task-spine-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .task-spine-order {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-subtle);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .task-spine-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .task-spine-state {
+      margin-left: auto;
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+    }
+    .task-spine-title {
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+    }
+    .task-spine-wait {
+      margin-top: 8px;
+      font-size: 10.5px;
+      color: #fca5a5;
+      line-height: 1.45;
+    }
+    .task-spine-connector {
+      width: 28px;
+      flex: 0 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-subtle);
+      font-size: 16px;
+    }
+
+    .bucket {
+      margin-top: 28px;
+    }
+    .bucket-note {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin: -2px 0 12px;
+    }
+    .bucket-title {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+      margin-bottom: 12px;
+    }
+    .bucket-title .accent { font-size: 14px; font-weight: 700; }
+    .bucket-title.in-progress .accent { color: #f59e0b; }
+    .bucket-title.ready .accent { color: #22c55e; }
+    .bucket-title.next .accent { color: #6366f1; }
+    .bucket-title.focus .accent { color: var(--color-flow); }
+    .bucket-title .count {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-secondary);
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 10px;
+      letter-spacing: 0;
+      font-size: 10px;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .task-card {
+      position: relative;
+      background: var(--surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-left-width: 3px;
+      border-radius: 8px;
+      padding: 12px 14px 14px;
+      cursor: pointer;
+      transition: border-color 120ms ease, transform 90ms ease, background 120ms ease;
+      min-height: 96px;
+    }
+    .task-card:hover {
+      background: var(--surface-tertiary);
+      border-color: var(--border-medium);
+    }
+    .task-card:focus-visible {
+      outline: 2px solid var(--color-flow);
+      outline-offset: 2px;
+    }
+    .task-card:active { transform: scale(0.98); }
+    .task-card.p0 { border-left-color: #ef4444; }
+    .task-card.p1 { border-left-color: #f59e0b; }
+    .task-card.p2 { border-left-color: #8b949e; }
+    .task-card.selected {
+      border-color: var(--color-flow);
+      box-shadow: 0 0 0 1px var(--color-flow) inset;
+    }
+    .task-card-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .task-card-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
+    }
+    .task-card-priority {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .task-card-priority.p0 { color: #ef4444; background: rgba(239,68,68,0.1); }
+    .task-card-priority.p1 { color: #f59e0b; background: rgba(245,158,11,0.1); }
+    .task-card-priority.p2 { color: #8b949e; background: rgba(139,148,158,0.1); }
+    .task-card-status {
+      margin-left: auto;
+      font-size: 9.5px;
+      font-weight: 600;
+      color: var(--text-subtle);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .task-card-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    .task-card-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .task-card-actions .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 5px;
+      background: rgba(99, 102, 241, 0.1);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      cursor: pointer;
+      transition: all 120ms ease;
+      font-family: inherit;
+    }
+    .task-card-actions .btn:hover {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: var(--color-flow);
+      color: var(--text-primary);
+    }
+    .task-card-actions .btn.secondary {
+      background: transparent;
+      border-color: var(--border-medium);
+      color: var(--text-muted);
+    }
+    .task-card-actions .btn.secondary:hover {
+      color: var(--text-primary);
+      background: var(--surface-hover);
+    }
+    .task-card-wait {
+      font-size: 10.5px;
+      color: #ef4444;
+      margin-top: 6px;
+    }
+
+    .next-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 8px;
+    }
+    .next-row {
+      display: grid;
+      grid-template-columns: 28px 110px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 120ms ease;
+      color: var(--text-secondary);
+      font-size: 12.5px;
+    }
+    .next-row:hover { background: var(--surface-hover); }
+    .next-row:focus-visible {
+      outline: 2px solid var(--color-flow);
+      outline-offset: -2px;
+    }
+    .next-row-num {
+      color: var(--text-subtle);
+      font-size: 10px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .next-row-id {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .next-row-title {
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .next-row-blocker {
+      color: #ef4444;
+      font-size: 10.5px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .sprint-empty {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed var(--border-medium);
+      border-radius: 8px;
+      padding: 22px;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .sprint-empty b { color: var(--text-primary); }
+    .sprint-empty .blocker-list {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .sprint-empty .blocker-list .blocker {
+      padding: 3px 8px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      color: #fca5a5;
+      font-size: 11px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .remaining-toggle {
+      margin-top: 24px;
+      background: transparent;
+      border: 1px dashed var(--border-medium);
+      color: var(--text-muted);
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      width: 100%;
+      text-align: left;
+    }
+    .remaining-toggle:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+    .remaining-table {
+      margin-top: 12px;
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .remaining-table th {
+      text-align: left;
+      padding: 6px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .remaining-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+    .remaining-table tr:hover td { background: var(--surface-hover); cursor: pointer; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sprint-item-progress-fill { transition: none; }
+      .task-card { transition: none; }
+      .task-card:active { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="toolbar">
+      <span class="title">Feature <span class="title-accent">Flow</span></span>
+        <span class="toolbar-stats" id="stats">
+        <span title="Tasks with no unfinished blockers"><span class="dot" style="background: #22c55e;"></span><span id="stat-ready">0</span> unblocked</span>
+        <span title="Tasks waiting on at least one unfinished blocker"><span class="dot" style="background: #ef4444;"></span><span id="stat-blocked">0</span> blocked</span>
+        <span><span class="dot" style="background: var(--status-in-progress);"></span><span id="stat-active">0</span> active</span>
+        <span><span class="dot" style="background: var(--status-review);"></span><span id="stat-review">0</span> review</span>
+        <span><span class="dot" style="background: var(--overdue-ring);"></span><span id="stat-overdue">0</span> overdue</span>
+      </span>
+      <span class="spacer"></span>
+      <span class="view-mode-group" role="tablist" aria-label="Flow view mode">
+        <button class="toolbar-toggle on" id="view-mode-lanes" data-view-mode="delivery" type="button" role="tab" aria-selected="true" title="Lane view (default) — per-instance status chains">Lanes</button>
+        <button class="toolbar-toggle" id="view-mode-graph" data-view-mode="streams" type="button" role="tab" aria-selected="false" title="Dependency graph (dagre layout)">Graph</button>
+      </span>
+      <button class="toolbar-toggle on" id="toggle-rank-labels" title="Show column rank labels (Now, Next, Later)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+        Stages
+      </button>
+      <button class="toolbar-toggle on" id="toggle-auto-infer" title="Auto-compute waves from body-text references (FEATURE→TASK and TASK→TASK mentions). Turn off to require explicit **Depends-on** lines.">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        Auto-infer
+      </button>
+      <button class="toolbar-toggle on" id="toggle-inferred" title="Show dashed edges for inferred dependencies (from body-text references)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h14" stroke-dasharray="3 3"/>
+        </svg>
+        Dashed edges
+      </button>
+      <button class="toolbar-toggle" id="toggle-done" title="Show or hide completed tasks">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Done
+      </button>
+      <button class="toolbar-btn" id="fit-view" title="Re-center and fit all nodes">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 14 4 20 10 20"/>
+          <polyline points="20 10 20 4 14 4"/>
+          <line x1="14" y1="10" x2="21" y2="3"/>
+          <line x1="3" y1="21" x2="10" y2="14"/>
+        </svg>
+        Fit
+      </button>
+      <button class="toolbar-btn" id="refresh" title="Manually re-fetch MASTER_PLAN.md">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    <div class="graph-pane">
+      <svg id="graph" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-solid" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="rgba(200, 210, 225, 0.65)"/>
+          </marker>
+          <marker id="arrow-dashed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="rgba(139, 148, 158, 0.4)"/>
+          </marker>
+          <marker id="arrow-highlight" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#6366f1"/>
+          </marker>
+        </defs>
+        <g id="viewport">
+          <g id="rank-labels-layer"></g>
+          <g id="edges-layer"></g>
+          <g id="nodes-layer"></g>
+        </g>
+      </svg>
+      <div class="graph-empty" id="empty-state">
+        <div>No tasks parsed from MASTER_PLAN.md.</div>
+        <div style="font-size: 0.75rem; opacity: 0.7;">Check that the active project exposes tasks via <code>/api/master-plan</code>.</div>
+      </div>
+      <div class="legend">
+        <div class="row"><span class="swatch" style="background: var(--status-in-progress);"></span> In Progress</div>
+        <div class="row"><span class="swatch" style="background: var(--status-review);"></span> Review</div>
+        <div class="row"><span class="swatch" style="background: var(--status-planned);"></span> Planned</div>
+        <div class="row"><span class="swatch" style="background: var(--status-done);"></span> Done</div>
+        <div class="row"><span class="swatch" style="background: #22c55e; border-radius: 50%;"></span> Ready (parallel)</div>
+        <div class="row"><span class="swatch" style="background: #ef4444;"></span> Blocked (sequential)</div>
+        <div class="row"><span class="line" style="border-color: var(--edge-solid);"></span> Depends-on / Blocks</div>
+        <div class="row"><span class="line dashed" style="border-color: var(--edge-dashed);"></span> Inferred (body ref)</div>
+      </div>
+      <div class="zoom-controls">
+        <button id="zoom-in" title="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out">−</button>
+      </div>
+
+      <!-- Delivery-focused view (shown when MASTER_PLAN exposes Delivery Lines or legacy sprint framing) -->
+      <div class="sprint-layout" id="sprint-layout" hidden>
+        <nav class="sprint-sidebar" aria-label="Sprints">
+          <div class="sprint-sidebar-header">Delivery Line</div>
+          <div id="sprint-list" role="list"></div>
+        </nav>
+        <main class="sprint-main" id="sprint-main" aria-labelledby="sprint-heading"></main>
+      </div>
+    </div>
+
+    <aside class="side-pane" id="side-pane">
+      <div class="side-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Click a task for details.<br>
+        In delivery mode, the main pane shows current flows, up-next lines, and backlog while this side pane holds task detail.
+      </div>
+    </aside>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    /* ─── Constants ────────────────────────────────────────────────── */
+    const API_BASE = window.location.origin;
+    // `T` (single letter) is botson's prefix; placed last so longer matches like
+    // TASK / ROAD win first via left-to-right alternation. Don't reorder.
+    const ID_PATTERN = /(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/g;
+    const TOP_N_RECOMMENDED = 3;
+
+    const STATUS_FILL = {
+      'in-progress': '#f59e0b',
+      'review':      '#06b6d4',
+      'planned':     '#c9d1d9',
+      'done':        'rgba(34, 197, 94, 0.55)',
+      'paused':      '#6e7681',
+      'unknown':     '#8b949e',
+    };
+    const STATUS_STROKE = {
+      'in-progress': 'rgba(245, 158, 11, 0.65)',
+      'review':      'rgba(6, 182, 212, 0.6)',
+      'planned':     'rgba(201, 209, 217, 0.35)',
+      'done':        'rgba(34, 197, 94, 0.45)',
+      'paused':      'rgba(110, 118, 129, 0.5)',
+      'unknown':     'rgba(139, 148, 158, 0.4)',
+    };
+    const NODE_W = 200;
+    const NODE_H = 76;
+
+    /* ─── State ─────────────────────────────────────────────────────── */
+    let allTasks = [];
+    let rawMarkdown = '';
+    let selectedId = null;
+    let eventSource = null;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    let refreshTimer = null;
+    let currentDeliveryLines = [];
+    let selectedLineId = null;
+    // 'delivery' (lanes — the default) or 'streams' (dagre graph). Flipped by the
+    // toolbar Lanes/Graph toggle. Lanes is always the landing view; users can opt
+    // into Graph but it's no longer the auto-fallback when no delivery lines exist.
+    let userViewPreference = 'delivery';
+    let currentProjectRoot = '';
+    let currentProjectFilter = '';
+    let activeLocks = [];
+    let activityByTask = new Map();
+    let activityEntries = [];
+    let liveRefreshTimer = null;
+    const ACTIVE_INSTANCE_WINDOW_MS = 90 * 60 * 1000;
+
+    let showInferred = true;         // render inferred edges (dashed)
+    let useInferredForWaves = true;  // inferred edges drive wave computation (auto-layer)
+    let showDone = false;
+    let showRankLabels = true;
+
+    // Pan/zoom
+    let scale = 1;
+    let translateX = 0;
+    let translateY = 0;
+    const MIN_SCALE = 0.25;
+    const MAX_SCALE = 3;
+
+    /* ─── Parsing ──────────────────────────────────────────────────── */
+    function parseMasterPlan(markdown) {
+      const lines = markdown.split('\n');
+      const tasks = [];
+      let current = null;
+
+      const headerRe = /^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/;
+
+      // Section tracking: any `###` or `##` header that does NOT contain a task ID
+      // is treated as a section/category boundary (e.g. "Recording Infrastructure",
+      // "Export Core", "AI"). Tasks appearing under it — whether as summary-table
+      // rows or detailed sub-sections — are grouped into this section's stream.
+      const sectionHeaderRe = /^#{2,3}\s+(.+?)\s*$/;
+      let currentSection = null;
+      let tableHeaders = null;
+
+      const cleanCell = value => String(value || '').replace(/[~*`]/g, '').trim();
+      const normalizeHeader = value => cleanCell(value).toLowerCase();
+      const priorityToRank = priority => {
+        const p = cleanCell(priority).toLowerCase();
+        return p.startsWith('p0') || p.startsWith('p1') || p.includes('high')
+          ? 'high'
+          : p.startsWith('p2') || p.includes('medium') ? 'medium' : 'low';
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        const headerMatch = trimmed.startsWith('#') ? trimmed.match(headerRe) : null;
+
+        // Section header (non-task) — remember as currentSection
+        if (!headerMatch && trimmed.startsWith('#')) {
+          const sec = trimmed.match(sectionHeaderRe);
+          if (sec) {
+            const name = sec[1].replace(/~~/g, '').trim();
+            if (!/(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/.test(name)) {
+              currentSection = name;
+            }
+          }
+        }
+
+        // Summary-table row → create a shallow task record (detailed section may
+        // add body/priority/etc later via dedup). Supports both 5-column tables
+        // with Dependencies and 4-column summary tables without dependencies.
+        if (!headerMatch && trimmed.startsWith('|')) {
+          const rawCells = trimmed.split('|').slice(1, -1);
+          const normalizedCells = rawCells.map(normalizeHeader);
+
+          if (normalizedCells.includes('id') || normalizedCells.includes('task')) {
+            tableHeaders = normalizedCells;
+            continue;
+          }
+
+          if (/^\|\s*-+/.test(trimmed)) continue;
+          if (!tableHeaders) continue;
+
+          const idCol = tableHeaders.includes('id') ? tableHeaders.indexOf('id') : tableHeaders.indexOf('task');
+          // `^task$` covers botson's table layout (`| ID | Phase | Task | Status | … |`)
+          // where the title column is literally "Task". `^deps?$` covers "Deps" used
+          // as a header instead of "Dependencies".
+          const titleCol = tableHeaders.findIndex(h => /title|description|feature|task name|^task$/.test(h));
+          const priorityCol = tableHeaders.findIndex(h => /priority|prio/.test(h));
+          const statusCol = tableHeaders.findIndex(h => /status|state/.test(h));
+          const depsCol = tableHeaders.findIndex(h => /depend|block|^deps?$/.test(h));
+          if (idCol < 0 || priorityCol < 0 || statusCol < 0) continue;
+
+          const id = cleanCell(rawCells[idCol]);
+          if (!/^(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+$/.test(id)) continue;
+
+          const title = cleanCell(rawCells[titleCol >= 0 ? titleCol : 1]);
+          const priority = cleanCell(rawCells[priorityCol]);
+          const status = cleanCell(rawCells[statusCol]);
+          const depsRaw = depsCol >= 0 ? rawCells[depsCol] : '';
+          const depsIds = (depsRaw.match(ID_PATTERN) || []);
+          const statusParsed = parseStatus(status.toUpperCase(), '', /~~/.test(line));
+          // Don't treat table row as a "currently accumulating" task — push directly
+          tasks.push({
+            id,
+            title,
+            status: statusParsed,
+            priority: priorityToRank(priority),
+            dueDate: null,
+            dependsOn: depsIds,
+            blocks: [],
+            body: '',
+            streamParent: currentSection,
+          });
+          continue;
+        } else if (!trimmed.startsWith('|')) {
+          tableHeaders = null;
+        }
+
+        if (headerMatch) {
+          if (current) tasks.push(current);
+          const parenStatus = headerMatch[3] ? headerMatch[3].toUpperCase() : '';
+          const titleText = (headerMatch[2] || '').toUpperCase();
+          const strikethrough = /~~(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+~~/.test(trimmed);
+          const id = headerMatch[1];
+          current = {
+            id,
+            title: (headerMatch[2] || '').trim(),
+            status: parseStatus(parenStatus, titleText, strikethrough),
+            priority: '',
+            dueDate: null,
+            dependsOn: [],
+            blocks: [],
+            body: '',
+            streamParent: currentSection,
+          };
+        } else if (current) {
+          current.body += line + '\n';
+
+          const prMatch = trimmed.match(/\*\*Priority\*\*:\s*([^|]+)/i) || trimmed.match(/^[-*]\s*\*\*Priority\*\*:\s*(.+?)\s*$/i);
+          if (prMatch) {
+            const p = prMatch[1].toLowerCase();
+            current.priority = p.startsWith('p0') || p.startsWith('p1') || p.includes('high') ? 'high'
+              : p.startsWith('p2') || p.startsWith('med') ? 'medium'
+              : p.startsWith('p3') || p.startsWith('low') ? 'low'
+              : current.priority;
+          }
+          const statusMatch = trimmed.match(/\*\*Status\*\*:\s*([^|]+)/i) || trimmed.match(/^[-*]?\s*\*\*Status\*\*:\s*(.+?)\s*$/i);
+          if (statusMatch) {
+            const parsed = parseStatus(statusMatch[1].toUpperCase(), '', false);
+            if (parsed !== 'unknown') current.status = parsed;
+          }
+          const depMatch = trimmed.match(/^[-*]\s*\*\*Depends[- ]on\*\*:\s*(.+?)\s*$/i);
+          if (depMatch) {
+            const ids = depMatch[1].match(ID_PATTERN) || [];
+            current.dependsOn.push(...ids);
+          }
+          const blkMatch = trimmed.match(/^[-*]\s*\*\*Blocks\*\*:\s*(.+?)\s*$/i);
+          if (blkMatch) {
+            const ids = blkMatch[1].match(ID_PATTERN) || [];
+            current.blocks.push(...ids);
+          }
+          const dueMatch = trimmed.match(/^[-*]\s*\*\*Due\*\*:\s*(\d{4}-\d{2}-\d{2})/i);
+          if (dueMatch) {
+            const d = new Date(dueMatch[1]);
+            if (!isNaN(d.getTime())) current.dueDate = d;
+          }
+        }
+      }
+      if (current) tasks.push(current);
+
+      // Dedup by ID: MASTER_PLAN.md has each task in both a summary table row and a detailed
+      // section. Keep entry with richer body; merge dep signals; prefer concrete status/priority.
+      const byId = new Map();
+      for (const t of tasks) {
+        const existing = byId.get(t.id);
+        if (!existing) { byId.set(t.id, t); continue; }
+        const winner = t.body.length >= existing.body.length ? t : existing;
+        const loser  = winner === t ? existing : t;
+        winner.dependsOn = [...new Set([...(winner.dependsOn || []), ...(loser.dependsOn || [])])];
+        winner.blocks    = [...new Set([...(winner.blocks || []),    ...(loser.blocks || [])])];
+        if (winner.status === 'unknown' && loser.status !== 'unknown') winner.status = loser.status;
+        if (!winner.priority && loser.priority) winner.priority = loser.priority;
+        if (!winner.dueDate && loser.dueDate) winner.dueDate = loser.dueDate;
+        if (!winner.title && loser.title) winner.title = loser.title;
+        if (!winner.streamParent && loser.streamParent) winner.streamParent = loser.streamParent;
+        byId.set(t.id, winner);
+      }
+      return [...byId.values()];
+    }
+
+    function parseStatus(parenStatus, titleText, strikethrough) {
+      const src = parenStatus || titleText || '';
+      if (strikethrough) return 'done';
+      if (src.includes('DONE') || src.includes('✅')) return 'done';
+      if (src.includes('SUPERSEDED') || src.includes('CANCELLED') || src.includes('CANCELED') || src.includes('EXTERNAL')) return 'done';
+      if (src.includes('IN PROGRESS') || src.includes('IN-PROGRESS') || src.includes('🔄')) return 'in-progress';
+      if (src.includes('REVIEW') || src.includes('👀')) return 'review';
+      if (src.includes('PAUSED') || src.includes('BLOCKED') || src.includes('DEFERRED') || src.includes('⏸')) return 'paused';
+      if (src.includes('PLANNED') || src.includes('📋')) return 'planned';
+      if (src.includes('TODO') || src.includes('TO DO') || src.includes('TBD')) return 'planned';
+      return 'unknown';
+    }
+
+    /* ─── Edge extraction ──────────────────────────────────────────── */
+    // Edges come from three signals, in order of trust:
+    //   1. Explicit **Depends-on:** / **Blocks:** lines → solid
+    //   2. FEATURE-/ROAD- parent → TASK/BUG referenced in its body → inferred-strong
+    //      (features define work that tasks implement, so feature precedes children)
+    //   3. Body-text cross-references: TASK-X mentions TASK-Y → inferred
+    //      direction: referenced task came first (regression refs, "extends", "follows")
+    function extractEdges(tasks) {
+      const byId = new Map(tasks.map(t => [t.id, t]));
+      const edgeMap = new Map();
+      const INFERRED_EDGE_FANOUT_LIMIT = 8;
+      const inferredFanout = new Map();
+      const inferredBlocklistRe = /\b(?:supersedes?|superseded|supersede notes?|replaces?|replaced by|see also|related|reference|references|context|background|history)\b/i;
+
+      function getInferenceBody(task) {
+        return String(task.body || '')
+          .split('\n')
+          .filter(line => {
+            const trimmed = line.trim();
+            if (!trimmed) return false;
+            if (inferredBlocklistRe.test(trimmed)) return false;
+            return true;
+          })
+          .join('\n');
+      }
+
+      function addEdge(src, tgt, type) {
+        if (!src || !tgt || src === tgt) return;
+        if (!byId.has(src) || !byId.has(tgt)) return;
+        const key = `${src}→${tgt}`;
+        const existing = edgeMap.get(key);
+        // Solid > inferred (stronger signal wins)
+        if (!existing || (existing.type === 'inferred' && type === 'solid')) {
+          if (type === 'inferred') {
+            const count = inferredFanout.get(src) || 0;
+            if (count >= INFERRED_EDGE_FANOUT_LIMIT) return;
+            inferredFanout.set(src, count + 1);
+          }
+          edgeMap.set(key, { source: src, target: tgt, type });
+        }
+      }
+
+      // Signal 1: explicit Depends-on / Blocks
+      for (const t of tasks) {
+        for (const dep of t.dependsOn) addEdge(dep, t.id, 'solid');
+        for (const blk of t.blocks)    addEdge(t.id, blk, 'solid');
+      }
+
+      // Signal 2 + 3: body references with cycle-safe direction heuristic
+      //   Direction rule (in priority order):
+      //     a. FEATURE/ROAD parent mentioning a child TASK → parent precedes child
+      //     b. Otherwise: edge goes from lower-numbered ID to higher-numbered ID.
+      //        Rationale: tasks are created in order; when TASK-1762 mentions TASK-1760,
+      //        TASK-1760 pre-existed, so it's the natural prerequisite.
+      //        This constraint guarantees an acyclic inferred graph.
+      const idNum = id => { const m = id.match(/(\d+)$/); return m ? parseInt(m[1], 10) : null; };
+
+      for (const t of tasks) {
+        const explicit = new Set([...t.dependsOn, ...t.blocks]);
+        const refs = getInferenceBody(t).match(ID_PATTERN) || [];
+        const isParent = /^(FEATURE|ROAD)-/.test(t.id);
+        for (const ref of refs) {
+          if (ref === t.id || explicit.has(ref)) continue;
+          if (isParent && /^(TASK|BUG|ISSUE)-/.test(ref)) {
+            addEdge(t.id, ref, 'inferred');           // parent → child
+            continue;
+          }
+          // Numeric direction: always lower → higher
+          const myNum = idNum(t.id), refNum = idNum(ref);
+          if (myNum != null && refNum != null) {
+            if (refNum < myNum)      addEdge(ref, t.id, 'inferred'); // ref pre-dates → ref blocks this
+            else if (refNum > myNum) addEdge(t.id, ref, 'inferred'); // this pre-dates → blocks ref
+            // equal (same ID) handled by src===tgt guard in addEdge
+          } else {
+            addEdge(ref, t.id, 'inferred');
+          }
+        }
+      }
+      return edgeMap;
+    }
+
+    /* ─── Ranking + readiness ───────────────────────────────────────
+       Annotates each task with:
+         t.score            numeric rank (higher = work on sooner)
+         t.blockerIds       solid-edge blockers
+         t.unfinishedBlockerIds   blockers that are not DONE
+         t.isReady          no unfinished blockers → can start in parallel
+         t.isBlocked        has unfinished blocker → must wait
+         t.unblocks         tasks that depend on this one (fan-out)
+    ─────────────────────────────────────────────────────────────── */
+    function rankTasks(tasks, edgeMap) {
+      const now = new Date();
+      const STATUS_WEIGHT = { 'in-progress': 40, review: 30, planned: 10, paused: 0, done: 0, unknown: 5 };
+      const PRIORITY_WEIGHT = { high: 30, medium: 15, low: 5, '': 8 };
+
+      const blockers = new Map();
+      const dependents = new Map();
+      for (const edge of edgeMap.values()) {
+        if (edge.type !== 'solid') continue;
+        if (!blockers.has(edge.target)) blockers.set(edge.target, []);
+        blockers.get(edge.target).push(edge.source);
+        if (!dependents.has(edge.source)) dependents.set(edge.source, []);
+        dependents.get(edge.source).push(edge.target);
+      }
+      const taskById = new Map(tasks.map(t => [t.id, t]));
+
+      for (const t of tasks) {
+        const blockerIds = blockers.get(t.id) || [];
+        const unfinished = blockerIds.filter(id => {
+          const b = taskById.get(id);
+          return b && b.status !== 'done';
+        });
+        t.blockerIds = blockerIds;
+        t.unfinishedBlockerIds = unfinished;
+        t.unblocks = dependents.get(t.id) || [];
+        t.isBlocked = t.status !== 'done' && unfinished.length > 0;
+        t.isReady = t.status !== 'done' && unfinished.length === 0;
+
+        if (t.status === 'done') { t.score = 0; continue; }
+        let score = 0;
+        score += STATUS_WEIGHT[t.status] ?? 0;
+        score += PRIORITY_WEIGHT[t.priority] ?? 8;
+        if (t.isReady) score += 20;
+        // Fan-out bonus: unblocking more downstream work is worth more
+        score += Math.min(15, t.unblocks.length * 5);
+        if (t.dueDate) {
+          const msPerDay = 86400000;
+          const days = (t.dueDate.getTime() - now.getTime()) / msPerDay;
+          if (days < 0) score += 25;
+          else if (days <= 3) score += 15;
+          else if (days <= 7) score += 5;
+        }
+        t.score = score;
+      }
+      const recommended = tasks
+        .filter(t => t.status !== 'done')
+        .sort((a, b) => b.score - a.score)
+        .slice(0, TOP_N_RECOMMENDED)
+        .map(t => t.id);
+      return new Set(recommended);
+    }
+
+    /* ─── Development-wave layout ───────────────────────────────────
+       Columns = dependency waves, computed from explicit **Depends-on**
+       edges (inferred edges NEVER affect wave structure):
+         Wave 0  = already DONE (past work, shown only if toggle on)
+         Wave 1  = parallel-safe "do now" — no unfinished blockers
+         Wave N  = unblocked only after Wave N-1 items finish
+       Within a wave, tasks stack top-down by score desc.
+    ─────────────────────────────────────────────────────────────── */
+    const COL_GAP = 60;
+    const ROW_GAP = 14;
+    const COL_PAD_TOP = 56;   // larger header room for wave label + subtitle
+    const COL_PAD_BOTTOM = 20;
+    const MAX_WAVE_ITER = 30; // safety for pathological cycles
+
+    function computeWaveMap(tasks, edgeMap) {
+      // Blockers: solid edges always count; inferred edges count only when the toggle is on
+      // (Defaulting ON so waves form automatically from body-text cross-references and FEATURE→TASK
+      //  relationships without requiring manual **Depends-on** annotation.)
+      const blockersOf = new Map();
+      for (const edge of edgeMap.values()) {
+        if (edge.type === 'inferred' && !useInferredForWaves) continue;
+        if (!blockersOf.has(edge.target)) blockersOf.set(edge.target, []);
+        blockersOf.get(edge.target).push(edge.source);
+      }
+      const solidBlockers = blockersOf;
+      const taskById = new Map(tasks.map(t => [t.id, t]));
+      const wave = new Map();
+      const inflight = new Set();
+
+      function resolve(id, depth) {
+        if (wave.has(id)) return wave.get(id);
+        if (depth > MAX_WAVE_ITER || inflight.has(id)) {
+          wave.set(id, Math.max(1, depth));
+          return wave.get(id);
+        }
+        const t = taskById.get(id);
+        if (!t) return 0;
+        if (t.status === 'done') { wave.set(id, 0); return 0; }
+        inflight.add(id);
+        const blockers = solidBlockers.get(id) || [];
+        const unfinished = blockers.filter(b => {
+          const bt = taskById.get(b);
+          return bt && bt.status !== 'done';
+        });
+        let w;
+        if (unfinished.length === 0) {
+          w = 1;
+        } else {
+          w = Math.max(...unfinished.map(b => resolve(b, depth + 1))) + 1;
+        }
+        wave.set(id, w);
+        inflight.delete(id);
+        return w;
+      }
+      for (const t of tasks) resolve(t.id, 0);
+      return wave;
+    }
+
+    function waveLabel(n, isOnly) {
+      if (n === 0) return { title: 'Completed', subtitle: 'already done' };
+      if (n === 1) return { title: 'Wave 1', subtitle: isOnly ? 'all tasks — do now' : 'do now · parallel' };
+      return { title: `Wave ${n}`, subtitle: `after Wave ${n - 1}` };
+    }
+
+    /* computeLayout builds horizontal STREAMS:
+         - One stream per FEATURE/ROAD parent (stream head + its child tasks inline)
+         - One "Standalone" stream for BUGs/TASKs with no positional parent
+         Each stream is a row. X-position within a row encodes sequence
+         (numeric ID → earlier left, later right). Parallelism across rows.
+       Explicit **Depends-on** edges can cross streams and appear as curved arrows.
+    */
+    function computeLayout(tasks, edgeMap, recommended) {
+      const waveMap = computeWaveMap(tasks, edgeMap);
+      const visibleTasks = tasks.filter(t => showDone || t.status !== 'done');
+      for (const t of visibleTasks) t.wave = waveMap.get(t.id) ?? 1;
+
+      const idNum = id => { const m = id.match(/(\d+)$/); return m ? parseInt(m[1], 10) : 0; };
+      const byId = new Map(visibleTasks.map(t => [t.id, t]));
+
+      // Bucket visible tasks into streams based on their section (streamParent is now
+      // a section name like "Recording Infrastructure", not a FEATURE/ROAD ID)
+      const streams = new Map();
+      function getStream(sectionName) {
+        const key = sectionName || '__standalone__';
+        if (!streams.has(key)) {
+          streams.set(key, {
+            id: key,
+            section: sectionName,
+            label: sectionName || 'Uncategorized',
+            tasks: [],
+          });
+        }
+        return streams.get(key);
+      }
+      for (const t of visibleTasks) {
+        getStream(t.streamParent).tasks.push(t);
+      }
+
+      // Sort tasks within each stream by numeric ID ascending (proxy for creation order)
+      for (const s of streams.values()) {
+        s.tasks.sort((a, b) => idNum(a.id) - idNum(b.id) || a.id.localeCompare(b.id));
+      }
+
+      // Preferred ordering of sections: use the order they first appeared in the markdown
+      // (which we capture as taskOrder). Fallback to alphabetical for unseen.
+      const firstIdx = new Map();
+      visibleTasks.forEach((t, i) => {
+        const key = t.streamParent || '__standalone__';
+        if (!firstIdx.has(key)) firstIdx.set(key, i);
+      });
+      const streamList = [...streams.values()].sort((a, b) => {
+        if (a.id === '__standalone__') return 1;
+        if (b.id === '__standalone__') return -1;
+        return (firstIdx.get(a.id) ?? 9e9) - (firstIdx.get(b.id) ?? 9e9);
+      });
+
+      // Assign coordinates: each stream is one horizontal row
+      const STREAM_HEADER_W = 170;  // left gutter for stream label
+      const ROW_H = NODE_H + 22;    // row height per stream
+      const positions = new Map();
+      const columns = streamList.map((s, rowIdx) => {
+        const y = COL_PAD_TOP + rowIdx * ROW_H;
+        let x = 30 + STREAM_HEADER_W;
+        s.tasks.forEach((t, idx) => {
+          positions.set(t.id, {
+            x, y,
+            stream: s,
+            task: t,
+            indexInStream: idx,
+            recommended: recommended.has(t.id),
+          });
+          x += NODE_W + 14;
+        });
+        return { ...s, rowY: y, labelX: 30, firstTaskX: 30 + STREAM_HEADER_W, lastX: x - 14 };
+      });
+
+      // ── Second-pass readiness: override isReady / isBlocked using stream sequence +
+      //    inferred edges (when toggle is on). Stream position is the authoritative
+      //    "step N" within its lane, so task at index i is blocked by task at index i-1.
+      const taskById = new Map(visibleTasks.map(t => [t.id, t]));
+      for (const stream of columns) {
+        stream.tasks.forEach((t, idx) => {
+          const effectiveBlockers = [];
+          // Stream predecessor (implicit "step N-1 → step N")
+          if (idx > 0) {
+            const prev = stream.tasks[idx - 1];
+            if (prev.status !== 'done') effectiveBlockers.push(prev.id);
+          }
+          // Explicit solid blockers
+          for (const bId of (t.blockerIds || [])) {
+            const b = taskById.get(bId);
+            if (b && b.status !== 'done' && !effectiveBlockers.includes(bId)) {
+              effectiveBlockers.push(bId);
+            }
+          }
+          // Inferred edges (when toggle on) — look at edgeMap for edges pointing into t
+          if (useInferredForWaves) {
+            for (const edge of edgeMap.values()) {
+              if (edge.target !== t.id || edge.type !== 'inferred') continue;
+              const b = taskById.get(edge.source);
+              if (b && b.status !== 'done' && !effectiveBlockers.includes(edge.source)) {
+                effectiveBlockers.push(edge.source);
+              }
+            }
+          }
+          t.effectiveBlockers = effectiveBlockers;
+          t.isReady   = t.status !== 'done' && effectiveBlockers.length === 0;
+          t.isBlocked = t.status !== 'done' && effectiveBlockers.length > 0;
+        });
+      }
+
+      // Compute filtered edges and overall dimensions
+      const visibleIds = new Set(visibleTasks.map(t => t.id));
+      const edges = [];
+      for (const edge of edgeMap.values()) {
+        if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
+        if (!showInferred && edge.type === 'inferred') continue;
+        const src = positions.get(edge.source);
+        const tgt = positions.get(edge.target);
+        if (!src || !tgt) continue;
+        // Skip if this edge exactly matches the within-stream sequence link (avoids double arrows)
+        if (src.stream === tgt.stream && Math.abs(src.indexInStream - tgt.indexInStream) === 1) {
+          continue;
+        }
+        edges.push({ source: edge.source, target: edge.target, type: edge.type, srcPos: src, tgtPos: tgt });
+      }
+
+      const maxRow = columns.length ? columns[columns.length - 1].rowY + NODE_H : COL_PAD_TOP + NODE_H;
+      const maxX = Math.max(0, ...columns.map(c => c.lastX));
+      const width = maxX + 30;
+      const height = maxRow + COL_PAD_BOTTOM;
+
+      return { columns, positions, edges, width, height };
+    }
+
+    /* Cubic Bezier path between two node centers, entering/exiting horizontally */
+    function edgePath(srcPos, tgtPos) {
+      const x1 = srcPos.x + NODE_W;            // right edge of source
+      const y1 = srcPos.y + NODE_H / 2;
+      const x2 = tgtPos.x;                     // left edge of target
+      const y2 = tgtPos.y + NODE_H / 2;
+      if (tgtPos.x > srcPos.x) {
+        // Rightward edge: curve from right of src to left of tgt
+        const dx = Math.max(20, (x2 - x1) * 0.5);
+        return `M ${x1},${y1} C ${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+      } else if (tgtPos.x < srcPos.x) {
+        // Backward edge (rare — dep going right to left): loop below columns
+        const xL = srcPos.x;
+        const xR = tgtPos.x + NODE_W;
+        const loopY = Math.max(srcPos.y + NODE_H, tgtPos.y + NODE_H) + 30;
+        const leftX = srcPos.x - 10;
+        const rightX = tgtPos.x + NODE_W + 10;
+        return `M ${x1},${y1} L ${leftX},${y1} L ${leftX},${loopY} L ${rightX},${loopY} L ${rightX},${y2} L ${x2},${y2}`;
+      } else {
+        // Same column: curve to the right and back
+        const loopX = srcPos.x + NODE_W + 20;
+        return `M ${x1},${y1} C ${loopX},${y1} ${loopX},${y2} ${x2 + NODE_W},${y2} L ${x2 + NODE_W},${y2}`;
+      }
+    }
+
+    /* ─── Render SVG ───────────────────────────────────────────────── */
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const svgEl = (tag, attrs = {}) => {
+      const e = document.createElementNS(SVG_NS, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    };
+
+    function renderGraph() {
+      const tasks = allTasks;
+      const edgeMap = extractEdges(tasks);
+      const recommended = rankTasks(tasks, edgeMap);
+
+      // ── Delivery (Lanes) mode is the default. Streams mode (dagre graph) is
+      //    opt-in via the toolbar Lanes/Graph toggle. The empty-instances state
+      //    inside renderDeliveryView covers projects with no delivery lines.
+      if (userViewPreference !== 'streams') {
+        const deliveryLines = parseDeliveryLines(rawMarkdown);
+        const sprints = parseSprintFraming(rawMarkdown);
+        const lines = deliveryLines.length > 0
+          ? deliveryLines
+          : sprints.length > 0
+            ? buildLegacyDeliveryLinesFromSprints(sprints)
+            : buildDerivedDeliveryLines(tasks);
+        setViewMode('delivery');
+        renderDeliveryView(tasks, lines);
+        return;
+      }
+      currentDeliveryLines = [];
+      selectedLineId = null;
+      setViewMode('streams');
+
+      const visibleTasks = tasks.filter(t => showDone || t.status !== 'done');
+      const isEmpty = visibleTasks.length === 0;
+      document.getElementById('empty-state').classList.toggle('visible', isEmpty);
+
+      const nodesLayer = document.getElementById('nodes-layer');
+      const edgesLayer = document.getElementById('edges-layer');
+      const rankLabelsLayer = document.getElementById('rank-labels-layer');
+      nodesLayer.innerHTML = '';
+      edgesLayer.innerHTML = '';
+      rankLabelsLayer.innerHTML = '';
+
+      renderStats(tasks);
+      if (isEmpty) return;
+
+      const layout = computeLayout(tasks, edgeMap, recommended);
+      const { columns, positions, edges, height } = layout;
+
+      // ── Stream row backgrounds + left-gutter labels
+      columns.forEach((stream, rowIdx) => {
+        const band = svgEl('rect', {
+          x: 20,
+          y: stream.rowY - 14,
+          width: Math.max(stream.lastX, stream.firstTaskX + NODE_W) - 20 + 20,
+          height: NODE_H + 28,
+          rx: 10,
+          fill: rowIdx % 2 === 0 ? 'rgba(255, 255, 255, 0.015)' : 'rgba(255, 255, 255, 0.008)',
+          stroke: 'rgba(255, 255, 255, 0.04)',
+          'stroke-width': '1',
+        });
+        rankLabelsLayer.appendChild(band);
+
+        if (showRankLabels) {
+          const isStandalone = !stream.section;
+          const accent = isStandalone ? '#8b949e' : '#6366f1';
+
+          const kindLabel = svgEl('text', {
+            x: 34, y: stream.rowY + 8, 'text-anchor': 'start',
+          });
+          kindLabel.textContent = isStandalone ? 'UNCATEGORIZED' : 'SECTION';
+          kindLabel.style.fill = accent;
+          kindLabel.style.fontSize = '9px';
+          kindLabel.style.fontWeight = '700';
+          kindLabel.style.letterSpacing = '0.14em';
+          rankLabelsLayer.appendChild(kindLabel);
+
+          const name = svgEl('text', {
+            x: 34, y: stream.rowY + 24, 'text-anchor': 'start',
+          });
+          name.textContent = truncate(stream.label || '', 24);
+          name.style.fill = 'var(--text-primary)';
+          name.style.fontSize = '11.5px';
+          name.style.fontWeight = '600';
+          rankLabelsLayer.appendChild(name);
+
+          const readyInStream = stream.tasks.filter(t => t.isReady).length;
+          const cnt = svgEl('text', {
+            x: 34, y: stream.rowY + 40, 'text-anchor': 'start',
+          });
+          cnt.textContent = `${stream.tasks.length} step${stream.tasks.length === 1 ? '' : 's'} · ${readyInStream} ready now`;
+          cnt.style.fill = 'var(--text-subtle)';
+          cnt.style.fontSize = '9.5px';
+          cnt.style.fontWeight = '500';
+          rankLabelsLayer.appendChild(cnt);
+        }
+      });
+
+      // ── Within-stream sequence arrows (horizontal, between consecutive tasks in a row)
+      //    These are the "do this, then this" progression inside a single stream.
+      for (const stream of columns) {
+        for (let i = 0; i < stream.tasks.length - 1; i++) {
+          const a = positions.get(stream.tasks[i].id);
+          const b = positions.get(stream.tasks[i + 1].id);
+          if (!a || !b) continue;
+          const x1 = a.x + NODE_W;
+          const x2 = b.x;
+          const y = a.y + NODE_H / 2;
+          const line = svgEl('path', {
+            d: `M ${x1} ${y} L ${x2} ${y}`,
+            fill: 'none',
+            stroke: 'rgba(200, 210, 225, 0.5)',
+            'stroke-width': '1.5',
+            'marker-end': 'url(#arrow-solid)',
+          });
+          edgesLayer.appendChild(line);
+        }
+      }
+
+      // ── Dependency edges (explicit + inferred)
+      for (const edge of edges) {
+        const path = svgEl('path', {
+          class: `edge ${edge.type === 'inferred' ? 'inferred' : 'solid'}`,
+          d: edgePath(edge.srcPos, edge.tgtPos),
+          stroke: edge.type === 'inferred' ? 'rgba(139, 148, 158, 0.4)' : 'rgba(200, 210, 225, 0.75)',
+          'marker-end': edge.type === 'inferred' ? 'url(#arrow-dashed)' : 'url(#arrow-solid)',
+        });
+        path.dataset.source = edge.source;
+        path.dataset.target = edge.target;
+        edgesLayer.appendChild(path);
+      }
+
+      // ── Nodes
+      for (const col of columns) {
+        col.tasks.forEach((t, idx) => {
+          const pos = positions.get(t.id);
+          const isOverdue = t.dueDate && t.dueDate < new Date() && t.status !== 'done';
+
+          const group = svgEl('g', {
+            class: `node${pos.recommended ? ' recommended' : ''}${t.isReady ? ' ready' : ''}${t.isBlocked ? ' blocked' : ''}${isOverdue ? ' overdue' : ''}${t.id === selectedId ? ' selected' : ''}`,
+            transform: `translate(${pos.x}, ${pos.y})`,
+          });
+          group.dataset.id = t.id;
+          group.style.cursor = 'pointer';
+
+          // Card background
+          const rect = svgEl('rect', {
+            width: NODE_W,
+            height: NODE_H,
+            rx: 7,
+            fill: t.status === 'done' ? 'rgba(13, 17, 23, 0.6)' : 'rgba(22, 27, 34, 0.98)',
+            stroke: STATUS_STROKE[t.status] || STATUS_STROKE.unknown,
+            'stroke-width': 1.2,
+          });
+          group.appendChild(rect);
+
+          // Status bar on left (same color as column accent)
+          const bar = svgEl('rect', {
+            x: 0, y: 0, width: 3, height: NODE_H, rx: 0,
+            fill: STATUS_FILL[t.status] || STATUS_FILL.unknown,
+          });
+          group.appendChild(bar);
+
+          // Sequence number (1, 2, 3… within column) — a small pill top-left
+          const seqBg = svgEl('rect', {
+            x: 9, y: 6, width: 18, height: 14, rx: 7,
+            fill: pos.recommended ? 'rgba(78, 205, 196, 0.18)' : 'rgba(255, 255, 255, 0.06)',
+            stroke: pos.recommended ? 'rgba(78, 205, 196, 0.5)' : 'rgba(255, 255, 255, 0.12)',
+            'stroke-width': '0.8',
+          });
+          group.appendChild(seqBg);
+          const seqText = svgEl('text', {
+            x: 18, y: 16,
+            'text-anchor': 'middle',
+          });
+          seqText.textContent = String(idx + 1);
+          seqText.style.fill = pos.recommended ? '#4ECDC4' : 'var(--text-muted)';
+          seqText.style.fontSize = '9.5px';
+          seqText.style.fontWeight = '700';
+          group.appendChild(seqText);
+
+          // ID (right of sequence number)
+          const idText = svgEl('text', { class: 'node-id', x: 34, y: 16 });
+          idText.textContent = t.id;
+          group.appendChild(idText);
+
+          // Priority chip (right side)
+          if (t.priority) {
+            const prColor = t.priority === 'high' ? '#ef4444' : t.priority === 'medium' ? '#f59e0b' : '#8b949e';
+            const prText = svgEl('text', {
+              class: 'node-priority',
+              x: NODE_W - 8, y: 16,
+              'text-anchor': 'end',
+              fill: prColor,
+            });
+            prText.textContent = t.priority.charAt(0).toUpperCase() + t.priority.slice(1);
+            group.appendChild(prText);
+          }
+
+          // Thin divider between header row (ID/priority) and title row
+          const rule = svgEl('line', {
+            class: 'node-rule',
+            x1: 6, y1: 26, x2: NODE_W - 6, y2: 26,
+          });
+          group.appendChild(rule);
+
+          // Title — rendered via <foreignObject> + HTML for pixel-perfect ellipsis
+          // (SVG <text> has no native text-overflow, so long titles used to collide
+          //  with the right-side badge. Using HTML in a clipped foreignObject makes
+          //  the text clamp to 2 lines with a visible ellipsis at any title length.)
+          const titleFO = svgEl('foreignObject', {
+            x: 0, y: 30, width: NODE_W, height: 30,
+          });
+          const titleDiv = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+          titleDiv.setAttribute('class', 'node-title-html');
+          titleDiv.textContent = t.title || '';
+          titleFO.appendChild(titleDiv);
+          group.appendChild(titleFO);
+
+          // Ready / Blocked badge — bottom row, on its own line so it can't collide
+          const badgeY = NODE_H - 8;
+          const badgeX = 10;
+          if (t.isReady) {
+            const txt = svgEl('text', {
+              x: badgeX, y: badgeY, 'text-anchor': 'start',
+            });
+            txt.textContent = t.unblocks.length > 0
+              ? `▶ START · unblocks ${t.unblocks.length}`
+              : '▶ START NOW';
+            txt.style.fill = '#22c55e';
+            txt.style.fontSize = '9.5px';
+            txt.style.fontWeight = '700';
+            txt.style.letterSpacing = '0.04em';
+            group.appendChild(txt);
+          } else if (t.isBlocked) {
+            const firstBlocker = (t.effectiveBlockers || [])[0] || '?';
+            const txt = svgEl('text', {
+              x: badgeX, y: badgeY, 'text-anchor': 'start',
+            });
+            txt.textContent = t.effectiveBlockers.length > 1
+              ? `waits for ${firstBlocker} +${t.effectiveBlockers.length - 1}`
+              : `waits for ${firstBlocker}`;
+            txt.style.fill = '#ef4444';
+            txt.style.fontSize = '9px';
+            txt.style.fontWeight = '600';
+            group.appendChild(txt);
+          }
+
+          // Tooltip
+          const tip = svgEl('title');
+          tip.textContent = `${t.id}: ${t.title}\n${statusLabel(t.status)}${t.priority ? ' · ' + t.priority : ''}${t.dueDate ? ' · due ' + t.dueDate.toISOString().slice(0, 10) : ''}${t.score ? '\nNext-up score: ' + t.score : ''}${pos.recommended ? '\n★ Top-3 recommended' : ''}`;
+          group.appendChild(tip);
+
+          group.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            selectNode(t.id);
+          });
+
+          nodesLayer.appendChild(group);
+        });
+      }
+
+      applyTransform();
+      highlightEdges(selectedId);
+      renderSidePanel(selectedId ? allTasks.find(t => t.id === selectedId) : null);
+    }
+
+    function truncate(str, n) {
+      if (!str) return '';
+      return str.length > n ? str.slice(0, n - 1) + '…' : str;
+    }
+
+    /* ─── Sprint framing parser ─────────────────────────────────────
+       Returns [] if the MASTER_PLAN has no `### Current sprint framing` block.
+       Otherwise returns:
+         [{ letter: 'A', name: 'Recording Infrastructure', ids: ['TASK-013', 'TASK-086', ...] }, ...]
+    ─────────────────────────────────────────────────────────────── */
+    function parseSprintFraming(markdown) {
+      if (!markdown || !/###\s+Current\s+sprint\s+framing/i.test(markdown)) return [];
+      const sprintRe = /^\s*\d+\.\s*\*\*Sprint\s+([A-Z])\s*[-–—]+\s*(.+?)\*\*:\s*(.+)$/gm;
+      const sprints = [];
+      let m;
+      while ((m = sprintRe.exec(markdown))) {
+        const letter = m[1];
+        const name = m[2].trim();
+        const ids = m[3].match(/(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/g) || [];
+        sprints.push({ letter, name, ids });
+      }
+      return sprints;
+    }
+
+    function normalizeLineId(raw, fallbackIndex) {
+      const value = String(raw || '').trim().replace(/\s+/g, ' ');
+      return value || `LINE ${fallbackIndex + 1}`;
+    }
+
+    function parseDeliveryLines(markdown) {
+      if (!markdown || !/###\s+Delivery\s+Lines/i.test(markdown)) return [];
+      const lines = markdown.split('\n');
+      const results = [];
+      let inBlock = false;
+      let current = null;
+
+      function flush() {
+        if (!current) return;
+        current.dependsOnLineIds = [...new Set(current.dependsOnLineIds)];
+        current.sequenceTaskIds = [...new Set(current.sequenceTaskIds)];
+        current.supportTaskIds = [...new Set(current.supportTaskIds)].filter(id => !current.sequenceTaskIds.includes(id));
+        if (current.sequenceTaskIds.length > 0) results.push(current);
+      }
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!inBlock) {
+          if (/^###\s+Delivery\s+Lines/i.test(trimmed)) {
+            inBlock = true;
+          }
+          continue;
+        }
+
+        if (/^###\s+/.test(trimmed) && !/^###\s+Delivery\s+Lines/i.test(trimmed)) {
+          break;
+        }
+
+        const headerMatch = trimmed.match(/^\d+\.\s*\*\*(.+?)\*\*:?\s*$/);
+        if (headerMatch) {
+          flush();
+          const headerText = headerMatch[1].trim();
+          const namedMatch = headerText.match(/^(LINE\s+[A-Z0-9-]+)\s*[-–—]\s*(.+)$/i);
+          current = {
+            id: normalizeLineId(namedMatch ? namedMatch[1].toUpperCase() : '', results.length),
+            name: namedMatch ? namedMatch[2].trim() : headerText,
+            dependsOnLineIds: [],
+            sequenceTaskIds: [],
+            supportTaskIds: [],
+            source: 'delivery-lines',
+          };
+          continue;
+        }
+
+        if (!current || !trimmed) continue;
+
+        const dependsMatch = trimmed.match(/^Depends-on:\s*(.+)$/i);
+        if (dependsMatch) {
+          const ids = dependsMatch[1].match(/LINE\s+[A-Z0-9-]+/gi) || [];
+          current.dependsOnLineIds.push(...ids.map((id, index) => normalizeLineId(id.toUpperCase(), index)));
+          continue;
+        }
+
+        const sequenceMatch = trimmed.match(/^Sequence:\s*(.+)$/i);
+        if (sequenceMatch) {
+          current.sequenceTaskIds.push(...(sequenceMatch[1].match(ID_PATTERN) || []));
+          continue;
+        }
+
+        const supportsMatch = trimmed.match(/^Supports:\s*(.+)$/i);
+        if (supportsMatch) {
+          current.supportTaskIds.push(...(supportsMatch[1].match(ID_PATTERN) || []));
+        }
+      }
+
+      flush();
+      return results;
+    }
+
+    function buildLegacyDeliveryLinesFromSprints(sprints) {
+      return sprints.map((sprint, index) => ({
+        id: normalizeLineId(`LINE ${String.fromCharCode(65 + index)}`, index),
+        name: sprint.name,
+        dependsOnLineIds: index === 0 ? [] : [normalizeLineId(`LINE ${String.fromCharCode(64 + index)}`, index - 1)],
+        sequenceTaskIds: [...sprint.ids],
+        supportTaskIds: [],
+        source: 'legacy-sprint',
+        legacyLetter: sprint.letter,
+      }));
+    }
+
+    function buildDerivedDeliveryLines(tasks) {
+      const STATUS_ORDER = { 'in-progress': 0, review: 1, planned: 2, paused: 3, unknown: 4 };
+      const PRIORITY_ORDER = { high: 0, medium: 1, low: 2, '': 3 };
+      const activeTasks = tasks
+        .filter(task => task.status !== 'done')
+        .sort((a, b) => {
+          const statusDelta = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+          if (statusDelta !== 0) return statusDelta;
+          const priorityDelta = (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9);
+          if (priorityDelta !== 0) return priorityDelta;
+          const aNum = Number((a.id.match(/(\d+)$/) || [0, 0])[1]);
+          const bNum = Number((b.id.match(/(\d+)$/) || [0, 0])[1]);
+          return aNum - bNum;
+        });
+
+      if (activeTasks.length === 0) return [];
+
+      return [{
+        id: normalizeLineId('LINE AUTO', 0),
+        name: 'Auto-prioritized active work',
+        dependsOnLineIds: [],
+        sequenceTaskIds: activeTasks.map(task => task.id),
+        supportTaskIds: [],
+        source: 'derived-priority',
+      }];
+    }
+
+    function getLineOwner(lineState) {
+      if (!lineState.currentTaskId) return null;
+      return activeLocks.find(lock => lock.task_id === lineState.currentTaskId) || null;
+    }
+
+    function deriveLineStates(lines, taskById) {
+      const runtimeByLine = buildLineRuntimeMap(lines);
+      const lineTaskToLineId = new Map();
+      lines.forEach(line => {
+        [...line.sequenceTaskIds, ...line.supportTaskIds].forEach(taskId => {
+          if (!lineTaskToLineId.has(taskId)) lineTaskToLineId.set(taskId, line.id);
+        });
+      });
+
+      const doneByLineId = new Map();
+      lines.forEach(line => {
+        const sequenceTasks = line.sequenceTaskIds.map(id => taskById.get(id)).filter(Boolean);
+        const isDone = sequenceTasks.length > 0 && sequenceTasks.every(task => task.status === 'done');
+        doneByLineId.set(line.id, isDone);
+      });
+
+      return lines.map(line => {
+        const sequenceTasks = line.sequenceTaskIds.map(id => taskById.get(id)).filter(Boolean);
+        const currentTask = sequenceTasks.find(task => task.status !== 'done') || null;
+        const nextTask = currentTask
+          ? sequenceTasks.slice(sequenceTasks.indexOf(currentTask) + 1).find(task => task.status !== 'done') || null
+          : null;
+        const externalBlockerIds = currentTask
+          ? (currentTask.unfinishedBlockerIds || []).filter(id => lineTaskToLineId.get(id) !== line.id)
+          : [];
+        const blockingLineIds = (line.dependsOnLineIds || []).filter(depId => !doneByLineId.get(depId));
+        const runtime = runtimeByLine.get(line.id) || null;
+        const lockOwner = getLineOwner({ currentTaskId: currentTask?.id || null });
+        const owner = lockOwner || (isRuntimeActive(runtime) && runtime?.sid
+          ? {
+              session_short: String(runtime.sid).slice(0, 8),
+              session_id: runtime.sid,
+              task_id: currentTask?.id || '',
+              inferred: true,
+            }
+          : null);
+        const activity = activityByTask.get(currentTask?.id || '') || null;
+
+        let state = 'ready';
+        if (blockingLineIds.length > 0) state = 'locked';
+        else if (currentTask?.status === 'in-progress') state = 'in-progress';
+        else if (externalBlockerIds.length > 0) state = 'blocked';
+
+        return {
+          ...line,
+          currentTaskId: currentTask?.id || null,
+          nextTaskId: nextTask?.id || null,
+          isDone: doneByLineId.get(line.id) === true,
+          state,
+          blockingLineIds,
+          externalBlockerIds,
+          owner,
+          activity,
+          runtime,
+          // Derived lines (auto-prioritized for projects with no explicit delivery
+          // lines or sprints) are treated as live by default — otherwise they get
+          // hidden in the collapsed "Other Planned Flows" section and the user sees
+          // an empty Active Instances panel.
+          isLiveInstance: Boolean(lockOwner) || isRuntimeActive(runtime) || line.source === 'derived-priority',
+          supportTasks: line.supportTaskIds.map(id => taskById.get(id)).filter(task => task && task.status !== 'done'),
+        };
+      });
+    }
+
+    function buildBacklogGroups(lineStates, taskById) {
+      const assignedIds = new Set();
+      lineStates.forEach(line => {
+        line.sequenceTaskIds.forEach(id => assignedIds.add(id));
+        line.supportTaskIds.forEach(id => assignedIds.add(id));
+      });
+
+      const groups = lineStates
+        .map(line => ({ id: line.id, title: line.name, tasks: line.supportTasks || [] }))
+        .filter(group => group.tasks.length > 0);
+
+      const unassigned = [...taskById.values()]
+        .filter(task => task.status !== 'done' && !assignedIds.has(task.id));
+
+      if (unassigned.length > 0) {
+        groups.push({ id: '__unassigned__', title: 'Other tasks', tasks: unassigned });
+      }
+
+      return groups;
+    }
+
+    function lineStateLabel(line) {
+      if (line.state === 'in-progress') return 'In Progress';
+      if (line.state === 'blocked') return 'Blocked';
+      if (line.state === 'locked') return 'Locked';
+      return 'Ready';
+    }
+
+    function lineActivityLabel(line) {
+      if (line.owner) return `Instance ${line.owner.session_short}`;
+      if (line.runtime?.ts) return `Recent activity ${formatRelativeTime(line.runtime.ts)}`;
+      if (line.activity?.ts) return `Updated ${formatRelativeTime(line.activity.ts)}`;
+      return 'No active instance';
+    }
+
+    function buildLinePrompt(lineState, taskById) {
+      const sequence = lineState.sequenceTaskIds
+        .map(id => taskById.get(id))
+        .filter(Boolean)
+        .map(task => `- ${task.id}: ${task.title}`)
+        .join('\n');
+      const support = (lineState.supportTasks || []).map(task => `- ${task.id}: ${task.title}`).join('\n') || '(none)';
+      const blockers = lineState.externalBlockerIds.length > 0
+        ? lineState.externalBlockerIds.join(', ')
+        : lineState.blockingLineIds.length > 0
+          ? lineState.blockingLineIds.join(', ')
+          : 'none';
+      return [
+        `Kick off ${lineState.name}.`,
+        '',
+        `Current: ${lineState.currentTaskId || 'none'}`,
+        `Next: ${lineState.nextTaskId || 'none'}`,
+        `Blocked by: ${blockers}`,
+        '',
+        'Critical path:',
+        sequence || '(none)',
+        '',
+        'Supporting tasks:',
+        support,
+      ].join('\n');
+    }
+
+    function buildLineAgentPrompt(lineState, taskById) {
+      const projectName = currentProjectFilter
+        || basenamePath(currentProjectRoot)
+        || 'this project';
+      const projectPath = currentProjectRoot || '(unknown)';
+      const truncate = (text, max) => {
+        const s = String(text || '').trim();
+        if (!s) return '';
+        return s.length > max ? s.slice(0, max).trimEnd() + '…' : s;
+      };
+      const summarizeTask = (task, includeBody) => {
+        if (!task) return '(missing)';
+        const meta = [
+          task.priority ? `priority=${task.priority}` : null,
+          task.status ? `status=${task.status}` : null,
+          task.dueDate ? `due=${task.dueDate.toISOString().slice(0, 10)}` : null,
+        ].filter(Boolean).join(', ');
+        const head = `${task.id} — ${task.title || '(no title)'}${meta ? ` [${meta}]` : ''}`;
+        if (!includeBody) return head;
+        const body = truncate(task.body, 900);
+        return body ? `${head}\n\n${body}` : head;
+      };
+
+      const sequenceTasks = (lineState.sequenceTaskIds || [])
+        .map(id => taskById.get(id))
+        .filter(Boolean);
+      const currentTask = lineState.currentTaskId ? taskById.get(lineState.currentTaskId) : null;
+      const startIdx = currentTask
+        ? Math.max(0, sequenceTasks.findIndex(t => t.id === currentTask.id))
+        : 0;
+      const upcoming = sequenceTasks.slice(startIdx);
+      const upcomingLines = upcoming.length > 0
+        ? upcoming.map((task, i) => `${i + 1}. ${summarizeTask(task, false)}`).join('\n')
+        : '(no remaining tasks)';
+
+      const supportLines = (lineState.supportTasks || [])
+        .map(task => `- ${summarizeTask(task, false)}`)
+        .join('\n') || '(none)';
+
+      const externalBlockers = (lineState.externalBlockerIds || [])
+        .map(id => taskById.get(id))
+        .filter(Boolean)
+        .map(task => `- ${summarizeTask(task, false)}`)
+        .join('\n');
+      const laneBlockers = (lineState.blockingLineIds || []).join(', ');
+      const blockerSection = externalBlockers
+        ? externalBlockers
+        : laneBlockers
+          ? `- Waiting on lane(s): ${laneBlockers}`
+          : '(none)';
+
+      const dependsOnIds = currentTask?.dependsOn || [];
+      const dependsOnLines = dependsOnIds.length > 0
+        ? dependsOnIds.map(id => {
+            const dep = taskById.get(id);
+            return dep ? `- ${summarizeTask(dep, false)}` : `- ${id} (not found)`;
+          }).join('\n')
+        : '(none)';
+
+      const owner = lineState.owner
+        ? `Instance ${lineState.owner.session_short}${lineState.owner.inferred ? ' (inferred from recent activity)' : ' (active lock)'}`
+        : 'No live instance';
+      const activity = lineActivityLabel(lineState);
+
+      // ── Live coordination signals (pulled from runtime state, not hardcoded) ──
+      // These are the data points that historically lived in static "go check X"
+      // instructions. Embedding the actual values keeps the prompt self-contained
+      // and removes the failure mode where the static text drifts from reality.
+      const otherLocks = (activeLocks || [])
+        .filter(l => l && l.task_id && l.task_id !== currentTask?.id)
+        .map(l => `- ${l.task_id} held by instance ${String(l.session_id || l.sid || '').slice(0, 8) || '?'}`);
+      const upcomingTaskIds = new Set(upcoming.map(t => t.id));
+      const recentTouchingUpcoming = [];
+      try {
+        if (activityByTask && activityByTask.size) {
+          for (const [taskId, entries] of activityByTask.entries()) {
+            if (!upcomingTaskIds.has(taskId)) continue;
+            const recent = (entries || []).slice(0, 1);
+            if (recent.length === 0) continue;
+            const e = recent[0];
+            const sid = String(e.sid || '').slice(0, 8);
+            recentTouchingUpcoming.push(`- ${taskId}: last touched by instance ${sid || '?'}${e.file ? ` in ${e.file}` : ''}`);
+          }
+        }
+      } catch { /* activity layer is best-effort context only */ }
+
+      const liveSignals = [];
+      if (otherLocks.length) {
+        liveSignals.push('Other active locks in this repo right now:');
+        liveSignals.push(...otherLocks);
+      }
+      if (recentTouchingUpcoming.length) {
+        if (liveSignals.length) liveSignals.push('');
+        liveSignals.push('Recent activity (last 30min) on tasks in your upcoming sequence:');
+        liveSignals.push(...recentTouchingUpcoming);
+      }
+      if (liveSignals.length === 0) {
+        liveSignals.push('(no other live activity in this repo right now)');
+      }
+
+      return [
+        `You are an AI coding agent picking up the "${lineState.name}" workstream in the "${projectName}" project.`,
+        `Repo path: ${projectPath}`,
+        `Lane state: ${lineStateLabel(lineState)} · ${owner} · ${activity}`,
+        '',
+        '── PRIMARY TASK ──',
+        currentTask ? summarizeTask(currentTask, true) : '(no current task — lane may be done or empty)',
+        '',
+        'Direct dependencies of the primary task:',
+        dependsOnLines,
+        '',
+        'External blockers (must finish before this lane can proceed):',
+        blockerSection,
+        '',
+        '── UPCOMING SEQUENCE (in order) ──',
+        upcomingLines,
+        '',
+        '── SUPPORTING TASKS ──',
+        supportLines,
+        '',
+        '── LIVE COORDINATION SIGNALS ──',
+        ...liveSignals,
+        '',
+        '── HARD RULES ──',
+        '1. Start with the PRIMARY TASK. Do not begin later sequence items until it is done or explicitly handed off.',
+        '2. If an external blocker is unfinished, stop and report rather than working around it.',
+        '3. Never `git push` or run a production deploy without an explicit go-ahead in the current conversation. Earlier `go`/`yes`/`continue` answers do not extend to push or deploy.',
+        '4. If you encounter uncommitted edits or recent activity in files outside the primary task\'s scope, treat them as another worker\'s WIP until proven otherwise. When in doubt, ask Watchpost (running at http://localhost:6010) — `/api/dirty-attribution?cwd=` returns per-file attribution and `/api/active-sessions?cwd=` lists live instances.',
+        '',
+        '── HOW TO FINISH ──',
+        'When the primary task is done, update its status using whatever this project\'s MASTER_PLAN already uses for closing tasks (existing skills, the Watchpost API, or a hand-edit if that\'s the established pattern). Pick the lightest path that\'s already in use — do not introduce a new convention. Then return to the UPCOMING SEQUENCE above.',
+      ].join('\n');
+    }
+
+    function getNodeDisplayState(rawState) {
+      if (rawState === 'in-progress') return { cls: 'current', label: 'Current' };
+      if (rawState === 'planned') return { cls: 'next', label: 'Next' };
+      if (rawState === 'upcoming') return { cls: 'next', label: 'Then' };
+      if (rawState === 'done') return { cls: 'done', label: 'Done' };
+      if (rawState === 'blocked') return { cls: 'blocked', label: 'Blocked' };
+      if (rawState === 'locked') return { cls: 'locked', label: 'Locked' };
+      return { cls: 'next', label: 'Next' };
+    }
+
+    function renderFlowNode(task, rawState, fallbackText = '') {
+      const { cls, label } = getNodeDisplayState(rawState);
+      if (!task) {
+        return `
+          <div class="flow-node ${cls}" aria-disabled="true">
+            <span class="flow-node-eyebrow">${label}</span>
+            <div class="flow-node-empty">${escapeHtml(fallbackText || 'No step')}</div>
+          </div>`;
+      }
+      return `
+        <div class="flow-node ${cls}" data-id="${task.id}" role="button" tabindex="0">
+          <span class="flow-node-eyebrow">${label}</span>
+          <div class="flow-node-id">${task.id}</div>
+          <div class="flow-node-title">${escapeHtml(task.title || '')}</div>
+        </div>`;
+    }
+
+    function renderFlowSequence(items) {
+      return `<div class="flow-sequence">${items.map((item, index) => {
+        const node = renderFlowNode(item.task, item.state, item.fallbackText || '');
+        if (index === items.length - 1) return node;
+        return `${node}<div class="flow-arrow" aria-hidden="true"></div>`;
+      }).join('')}</div>`;
+    }
+
+    function renderCurrentFlowRow(line, taskById) {
+      // Render the full declared Sequence from the current step onward, so users
+      // see the whole queued flow — not just current+next. Horizontal scroll
+      // (.flow-sequence has overflow-x:auto) handles very long sequences.
+      const sequenceTasks = (line.sequenceTaskIds || [])
+        .map(id => taskById.get(id))
+        .filter(Boolean);
+      const currentTask = line.currentTaskId ? taskById.get(line.currentTaskId) : null;
+      const startIdx = currentTask
+        ? Math.max(0, sequenceTasks.findIndex(t => t.id === currentTask.id))
+        : 0;
+      const upcoming = sequenceTasks.slice(startIdx);
+      const blockerTask = line.externalBlockerIds[0] ? taskById.get(line.externalBlockerIds[0]) : null;
+      const blockerChip = blockerTask
+        ? `<button class="flow-chip" type="button" data-id="${blockerTask.id}">Needs ${blockerTask.id}</button>`
+        : '';
+      const sequence = upcoming.map((task, i) => {
+        if (i === 0) {
+          return {
+            task,
+            state: line.state === 'blocked'
+              ? 'blocked'
+              : (task.status === 'in-progress' ? 'in-progress' : 'planned'),
+          };
+        }
+        return {
+          task,
+          state: i === 1 ? 'planned' : 'upcoming',
+        };
+      });
+      const nextTask = upcoming[1] || null;
+
+      return `
+        <article class="flow-row current ${line.state === 'blocked' ? 'blocked' : ''}">
+          <div class="flow-row-top">
+            <div class="flow-row-meta">
+              <div class="flow-row-labels">
+                <span class="flow-row-name">${escapeHtml(line.name)}</span>
+                <span class="flow-row-state ${line.state}">${lineStateLabel(line)}</span>
+                <span class="flow-row-owner ${line.owner ? '' : 'unclaimed'}">${line.owner ? `Instance ${line.owner.session_short}` : 'Instance open'}</span>
+              </div>
+              <div class="flow-row-hint">${escapeHtml(lineActivityLabel(line))}${nextTask ? '' : ' · Final visible step'}</div>
+            </div>
+            <div class="flow-row-actions">
+              ${blockerChip}
+              <button class="flow-btn" type="button" data-action="copy-line-agent-prompt" data-line-id="${line.id}" title="Copy a context-rich prompt to hand this lane to an AI agent">Copy prompt</button>
+              <button class="flow-btn primary" type="button" data-action="continue-line" data-line-id="${line.id}">Continue</button>
+            </div>
+          </div>
+          ${renderFlowSequence(sequence)}
+        </article>`;
+    }
+
+    function renderBacklog(groups) {
+      if (groups.length === 0) {
+        return '<div class="flow-backlog-empty">No deferred or supporting tasks outside the active path.</div>';
+      }
+
+      return `<div class="flow-backlog">${groups.map(group => `
+        <details>
+          <summary>${escapeHtml(group.title)} (${group.tasks.length})</summary>
+          <div class="flow-backlog-list">
+            ${group.tasks.map(task => `
+              <div class="flow-backlog-item" data-id="${task.id}" role="button" tabindex="0">
+                <div>
+                  <div class="flow-mini-id">${task.id}</div>
+                  <div class="flow-mini-title">${escapeHtml(task.title || '')}</div>
+                </div>
+                <div class="flow-row-hint">${statusLabel(task.status)}</div>
+              </div>`).join('')}
+          </div>
+        </details>`).join('')}</div>`;
+    }
+
+    function renderCollapsedFlows(lines, taskById) {
+      if (lines.length === 0) return '';
+      return `
+        <section class="flow-section flow-collapsed">
+          <div class="flow-section-header">
+            <div>
+              <h2>Other Planned Flows</h2>
+              <p>Hidden by default so you can focus on the active instance.</p>
+            </div>
+          </div>
+          <details>
+            <summary>${lines.length} hidden flow${lines.length === 1 ? '' : 's'}</summary>
+            <div class="flow-list" style="margin-top:12px;">
+              ${lines.map(line => renderCurrentFlowRow(line, taskById)).join('')}
+            </div>
+          </details>
+        </section>`;
+    }
+
+    function renderDeliveryStats(lineStates, backlogGroups, taskById) {
+      const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+      const current = lineStates.filter(line => !line.isDone && line.blockingLineIds.length === 0);
+      const blocked = current.filter(line => line.state === 'blocked').length;
+      const inProgress = current.filter(line => line.state === 'in-progress').length;
+      const ready = current.filter(line => line.state === 'ready').length;
+      const overdue = [...taskById.values()].filter(task => task.status !== 'done' && task.dueDate && task.dueDate < new Date()).length;
+      set('stat-ready', ready);
+      set('stat-blocked', blocked);
+      set('stat-active', inProgress);
+      set('stat-review', lineStates.filter(line => line.blockingLineIds.length > 0 && !line.isDone).length);
+      set('stat-overdue', overdue);
+    }
+
+    function scoreLineValue(line, taskById) {
+      const stateScore = line.owner ? 120
+        : line.state === 'in-progress' ? 100
+        : line.state === 'ready' ? 60
+        : line.state === 'blocked' ? 25
+        : line.state === 'locked' ? 5
+        : 0;
+      const currentTask = line.currentTaskId ? taskById.get(line.currentTaskId) : null;
+      const priorityScore = !currentTask ? 0
+        : currentTask.priority === 'high' ? 200
+        : currentTask.priority === 'medium' ? 100
+        : currentTask.priority === 'low' ? 15
+        : 60;
+      const liveBoost = line.isLiveInstance ? 30 : 0;
+      const runtimeTs = line.runtime?.ts ? new Date(line.runtime.ts).getTime() : 0;
+      const recencyBoost = runtimeTs ? Math.max(0, 20 - Math.min(20, (Date.now() - runtimeTs) / (60 * 60 * 1000))) : 0;
+      const dueTask = currentTask?.dueDate ? currentTask : null;
+      const dueBoost = dueTask ? Math.max(0, 40 - Math.min(40, Math.floor((dueTask.dueDate - new Date()) / (24 * 3600 * 1000)))) : 0;
+      return stateScore + priorityScore + liveBoost + recencyBoost + dueBoost;
+    }
+
+    function renderDeliveryView(tasks, lines) {
+      currentDeliveryLines = lines;
+      const taskById = new Map(tasks.map(task => [task.id, task]));
+      const lineStates = deriveLineStates(lines, taskById)
+        .filter(line => !line.isDone)
+        .map(line => ({ ...line, valueScore: scoreLineValue(line, taskById) }))
+        .sort((a, b) => {
+          if (b.valueScore !== a.valueScore) return b.valueScore - a.valueScore;
+          return a.name.localeCompare(b.name);
+        });
+      const activeFlows = lineStates.filter(line => line.isLiveInstance);
+      const availableFlows = lineStates.filter(line => !line.isLiveInstance);
+      const backlogGroups = buildBacklogGroups(lineStates, taskById);
+
+      const lineStatesById = new Map(lineStates.map(line => [line.id, line]));
+      if (!selectedLineId || !lineStatesById.has(selectedLineId)) {
+        selectedLineId = activeFlows[0]?.id || availableFlows[0]?.id || null;
+      }
+      const focusTaskId = selectedId && taskById.has(selectedId)
+        ? selectedId
+        : (lineStatesById.get(selectedLineId)?.currentTaskId || activeFlows[0]?.currentTaskId || availableFlows[0]?.currentTaskId || null);
+      if (focusTaskId) selectedId = focusTaskId;
+
+      renderDeliveryStats(lineStates, backlogGroups, taskById);
+
+      const main = document.getElementById('sprint-main');
+      main.innerHTML = `
+        <div class="flow-board">
+          <section class="flow-section">
+            <div class="flow-section-header">
+              <div>
+                <h2>Active Instances</h2>
+                <p>These lanes are backed by live rough-cut context from recent logs or active locks.</p>
+              </div>
+              <span class="flow-section-count primary">${activeFlows.length}</span>
+            </div>
+            <div class="flow-list">
+              ${activeFlows.length > 0 ? activeFlows.map(line => renderCurrentFlowRow(line, taskById)).join('') : '<div class="flow-empty">No active instances from current rough-cut logs or locks.</div>'}
+            </div>
+          </section>
+          ${renderCollapsedFlows(availableFlows, taskById)}
+          <section class="flow-section">
+            <div class="flow-section-header">
+              <div>
+                <h2>Backlog</h2>
+                <p>Supporting work and non-critical tasks stay out of the main path.</p>
+              </div>
+            </div>
+            ${renderBacklog(backlogGroups)}
+          </section>
+        </div>`;
+
+      wireCardClicks(main, taskById);
+      renderSidePanel(focusTaskId ? taskById.get(focusTaskId) : null);
+    }
+
+    /* ─── Sprint-focused renderer ────────────────────────────────── */
+    let selectedSprintLetter = null;
+    let showRemaining = false;
+
+    function classifySprintTasks(sprint, taskById) {
+      const buckets = { inProgress: [], ready: [], blocked: [], done: [], unknown: [] };
+      for (const id of sprint.ids) {
+        const t = taskById.get(id);
+        if (!t) { buckets.unknown.push({ id }); continue; }
+        if (t.status === 'done') { buckets.done.push(t); continue; }
+        if (t.status === 'in-progress') { buckets.inProgress.push(t); continue; }
+        const unfinished = (t.dependsOn || []).filter(d => {
+          const b = taskById.get(d);
+          return b && b.status !== 'done';
+        });
+        if (unfinished.length === 0) buckets.ready.push(t);
+        else buckets.blocked.push({ ...t, unfinishedBlockerIds: unfinished });
+      }
+      return buckets;
+    }
+
+    function getActiveSprintIndex(sprints, taskById) {
+      for (let i = 0; i < sprints.length; i++) {
+        const b = classifySprintTasks(sprints[i], taskById);
+        if (b.inProgress.length || b.ready.length || b.blocked.length) return i;
+      }
+      return Math.max(0, sprints.length - 1);
+    }
+
+    function getSprintState(sprint, sprintIndex, activeSprintIndex, taskById) {
+      const b = classifySprintTasks(sprint, taskById);
+      const isDone = b.inProgress.length === 0 && b.ready.length === 0 && b.blocked.length === 0 && b.done.length > 0;
+      if (isDone) return 'completed';
+      if (sprintIndex === activeSprintIndex) return 'current';
+      if (sprintIndex > activeSprintIndex) return 'locked';
+      return 'completed';
+    }
+
+    function getVisibleSprintEntries(sprints, taskById) {
+      const activeSprintIndex = getActiveSprintIndex(sprints, taskById);
+      const visibleSprintEntries = sprints
+        .map((sp, i) => ({ sprint: sp, index: i, state: getSprintState(sp, i, activeSprintIndex, taskById) }))
+        .filter(entry => entry.state !== 'completed');
+      return visibleSprintEntries.length > 0
+        ? visibleSprintEntries
+        : sprints
+            .map((sp, i) => ({ sprint: sp, index: i, state: getSprintState(sp, i, activeSprintIndex, taskById) }))
+            .slice(-1);
+    }
+
+    function renderSprintSidebar(sprints, taskById) {
+      const list = document.getElementById('sprint-list');
+      list.innerHTML = '';
+      const sprintEntries = getVisibleSprintEntries(sprints, taskById);
+
+      sprintEntries.forEach((entry, visibleIndex) => {
+        const sp = entry.sprint;
+        const i = entry.index;
+        const b = classifySprintTasks(sp, taskById);
+        const total = sp.ids.length;
+        const done = b.done.length;
+        const pct = total ? Math.round((done / total) * 100) : 0;
+        const state = entry.state;
+
+        const shell = document.createElement('div');
+        shell.className = 'sprint-step';
+
+        const btn = document.createElement('button');
+        btn.className = `sprint-item ${state}` + (sp.letter === selectedSprintLetter ? ' active' : '');
+        btn.type = 'button';
+        btn.setAttribute('role', 'listitem');
+        btn.setAttribute('aria-current', sp.letter === selectedSprintLetter ? 'page' : 'false');
+        btn.setAttribute('aria-disabled', state === 'locked' ? 'true' : 'false');
+        btn.dataset.letter = sp.letter;
+        btn.dataset.index = String(i);
+
+        const countsBits = [];
+        if (b.inProgress.length) countsBits.push(`<span class="pill active">${b.inProgress.length} active</span>`);
+        if (b.ready.length)      countsBits.push(`<span class="pill ready">${b.ready.length} ready</span>`);
+
+        const stateLabel = state === 'completed'
+          ? 'Complete'
+          : state === 'current'
+            ? 'Open now'
+            : 'Locked';
+
+        btn.innerHTML = `
+          <div class="sprint-item-letter">SPRINT ${sp.letter}</div>
+          <div class="sprint-item-name">${escapeHtml(sp.name)}</div>
+          <div class="sprint-item-progress"><div class="sprint-item-progress-fill" style="width:${pct}%"></div></div>
+          <div class="sprint-item-counts">
+            <span class="pill">${done}/${total} done</span>
+            ${countsBits.join('')}
+          </div>
+          <div class="sprint-item-state ${state}">${stateLabel}</div>
+          <button class="sprint-item-copy" type="button" data-action="copy-sprint-prompt" data-letter="${sp.letter}" aria-label="Copy kickoff prompt for Sprint ${sp.letter}">Copy prompt</button>
+        `;
+        btn.addEventListener('click', () => selectSprint(sp.letter));
+        const copyBtn = btn.querySelector('[data-action="copy-sprint-prompt"]');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await copySprintPrompt(sp.letter);
+          });
+        }
+        btn.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const dir = e.key === 'ArrowDown' ? 1 : -1;
+            const next = sprints[i + dir];
+            if (next) {
+              selectSprint(next.letter);
+              requestAnimationFrame(() => {
+                const el = document.querySelector(`.sprint-item[data-letter="${next.letter}"]`);
+                if (el) el.focus();
+              });
+            }
+          }
+        });
+        shell.appendChild(btn);
+        if (visibleIndex < sprintEntries.length - 1) {
+          const connector = document.createElement('div');
+          const connectorState = state === 'completed' ? 'completed' : state === 'current' ? 'current' : 'locked';
+          connector.className = `sprint-connector ${connectorState}`;
+          connector.setAttribute('aria-hidden', 'true');
+          shell.appendChild(connector);
+        }
+        list.appendChild(shell);
+      });
+    }
+
+    function getSprintTaskState(task, sprint, taskById, primaryActive, recommendedNext) {
+      const buckets = classifySprintTasks(sprint, taskById);
+      const activeIds = new Set((buckets.inProgress || []).map(t => t.id));
+      const readyIds = new Set((buckets.ready || []).map(t => t.id));
+      const blockedById = new Map((buckets.blocked || []).map(t => [t.id, t]));
+      if (!task) return { state: 'blocked', label: 'Missing', wait: '' };
+      if (task.status === 'done') return { state: 'done', label: 'Done', wait: '' };
+      if (primaryActive && task.id === primaryActive.id) return { state: 'current', label: 'Current', wait: '' };
+      if (activeIds.has(task.id)) return { state: 'current', label: 'Active', wait: '' };
+      if (recommendedNext && task.id === recommendedNext.id) return { state: 'next', label: 'Next', wait: '' };
+      if (blockedById.has(task.id)) {
+        const blockerIds = blockedById.get(task.id).unfinishedBlockerIds || [];
+        return { state: 'blocked', label: 'Blocked', wait: blockerIds.join(', ') };
+      }
+      if (readyIds.has(task.id)) return { state: 'parked', label: 'Ready', wait: '' };
+      return { state: 'parked', label: 'Parked', wait: '' };
+    }
+
+    function renderDeliveryLinesOverview(sprints, taskById) {
+      const entries = getVisibleSprintEntries(sprints, taskById);
+      const rows = entries.map(entry => {
+        const sprint = entry.sprint;
+        const buckets = classifySprintTasks(sprint, taskById);
+        const orderedInProgress = orderSprintBucket(sprint, buckets.inProgress);
+        const orderedReady = orderSprintBucket(sprint, buckets.ready);
+        const primaryActive = orderedInProgress[0] || null;
+        const recommendedNext = orderedReady[0] || null;
+        const stateLabel = entry.state === 'current' ? 'Open now' : 'Locked';
+        const steps = sprint.ids.map((id, index) => {
+          const task = taskById.get(id);
+          const taskState = getSprintTaskState(task, sprint, taskById, primaryActive, recommendedNext);
+          const title = task ? escapeHtml(task.title || '') : 'Task not found in MASTER_PLAN';
+          return `
+            <div class="delivery-line-step ${taskState.state}" data-id="${task ? task.id : ''}">
+              <div class="delivery-line-step-top">
+                <span class="delivery-line-step-order">${index + 1}</span>
+                <span class="delivery-line-step-id">${id}</span>
+                <span class="delivery-line-step-state">${taskState.label}</span>
+              </div>
+              <div class="delivery-line-step-title">${title}</div>
+            </div>`;
+        }).join('<div class="delivery-line-step-arrow" aria-hidden="true">→</div>');
+
+        return `
+          <section class="delivery-line-row ${entry.state}" data-letter="${sprint.letter}">
+            <div class="delivery-line-row-top">
+              <div>
+                <div class="delivery-line-row-meta">
+                  <span class="delivery-line-row-id">Sprint ${sprint.letter}</span>
+                  <span class="delivery-line-row-name">${escapeHtml(sprint.name)}</span>
+                  <span class="delivery-line-row-state ${entry.state}">${stateLabel}</span>
+                </div>
+                <div class="delivery-line-row-counts">
+                  <span>${buckets.done.length}/${sprint.ids.length} done</span>
+                  <span>${buckets.inProgress.length} active</span>
+                  <span>${buckets.ready.length} ready</span>
+                  <span>${buckets.blocked.length} blocked</span>
+                </div>
+              </div>
+              <div class="delivery-line-row-actions">
+                <button class="delivery-line-btn primary" type="button" data-action="focus-line" data-letter="${sprint.letter}">${entry.state === 'current' ? 'Follow line' : 'Preview line'}</button>
+                <button class="delivery-line-btn" type="button" data-action="copy-line-prompt" data-letter="${sprint.letter}">Copy kickoff prompt</button>
+              </div>
+            </div>
+            <div class="delivery-line-steps">${steps}</div>
+          </section>`;
+      }).join('');
+
+      return `
+        <section class="delivery-lines-panel" aria-labelledby="delivery-lines-heading">
+          <div class="delivery-spine-title">
+            <h2 id="delivery-lines-heading">Delivery lines</h2>
+            <span>separate followable kickoff paths</span>
+          </div>
+          <p class="delivery-spine-note">
+            Each workstream is shown as its own line. Start with the open line, then follow its ordered steps until the next locked line unlocks.
+          </p>
+          <div class="delivery-lines-list">${rows}</div>
+        </section>`;
+    }
+
+    function renderTaskSpine(sprint, taskById, primaryActive, recommendedNext) {
+      const parts = [];
+      sprint.ids.forEach((id, index) => {
+        const task = taskById.get(id);
+        let body = '';
+        if (!task) {
+          body = `
+            <div class="task-spine-step blocked">
+              <div class="task-spine-top">
+                <span class="task-spine-order">Step ${index + 1}</span>
+                <span class="task-spine-id">${id}</span>
+                <span class="task-spine-state">Missing</span>
+              </div>
+              <div class="task-spine-title">Task is referenced in sprint framing but was not parsed from MASTER_PLAN.</div>
+            </div>`;
+        } else {
+          const taskState = getSprintTaskState(task, sprint, taskById, primaryActive, recommendedNext);
+          const waitLine = taskState.wait ? `<div class="task-spine-wait">waits for ${taskState.wait}</div>` : '';
+
+          body = `
+            <div class="task-spine-step ${taskState.state}" data-id="${task.id}">
+              <div class="task-spine-top">
+                <span class="task-spine-order">Step ${index + 1}</span>
+                <span class="task-spine-id">${task.id}</span>
+                <span class="task-spine-state">${taskState.label}</span>
+              </div>
+              <div class="task-spine-title">${escapeHtml(task.title || '')}</div>
+              ${waitLine}
+            </div>`;
+        }
+
+        parts.push(body);
+        if (index < sprint.ids.length - 1) {
+          parts.push('<div class="task-spine-connector" aria-hidden="true">→</div>');
+        }
+      });
+
+      return `
+        <section class="delivery-spine" aria-labelledby="delivery-spine-heading">
+          <div class="delivery-spine-title">
+            <h2 id="delivery-spine-heading">Execution line</h2>
+            <span>one direction from finished work to the next unlock</span>
+          </div>
+          <p class="delivery-spine-note">
+            This sprint is shown as an ordered line. Finish the current step, then the next visible step opens; later work stays parked or blocked until its predecessors clear.
+          </p>
+          <div class="task-spine">${parts.join('')}</div>
+        </section>`;
+    }
+
+    function renderSprintMain(sprint, taskById) {
+      const main = document.getElementById('sprint-main');
+      if (!sprint) {
+        main.innerHTML = '<div class="sprint-empty">No sprint selected.</div>';
+        return;
+      }
+      const b = classifySprintTasks(sprint, taskById);
+      const activeTotal = b.inProgress.length + b.ready.length + b.blocked.length;
+      const orderedInProgress = orderSprintBucket(sprint, b.inProgress);
+      const orderedReady = orderSprintBucket(sprint, b.ready);
+      const primaryActive = orderedInProgress[0] || null;
+      const recommendedNext = orderedReady[0] || null;
+      const deliveryLinesHTML = renderDeliveryLinesOverview(currentSprints, taskById);
+      const spineHTML = renderTaskSpine(sprint, taskById, primaryActive, recommendedNext);
+
+      // Fully done?
+      if (activeTotal === 0 && b.done.length > 0) {
+        main.innerHTML = `
+          ${deliveryLinesHTML}
+          <div class="sprint-main-header">
+            <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
+            <div class="sub"><b>🎉 Complete</b> — ${b.done.length} task${b.done.length === 1 ? '' : 's'} shipped.</div>
+          </div>
+          ${spineHTML}
+          <div class="sprint-empty" style="margin-top:24px;">
+            All tasks in this sprint are done. Use the sidebar to switch to the next sprint.
+          </div>
+        `;
+        wireCardClicks(main, taskById);
+        focusSprintHeading();
+        return;
+      }
+
+      // Fully blocked (nothing ready or in-progress)?
+      if (b.inProgress.length === 0 && b.ready.length === 0 && b.blocked.length > 0) {
+        // Find cross-sprint blockers (blockers that are outside this sprint's id list)
+        const sprintIds = new Set(sprint.ids);
+        const crossBlockers = new Set();
+        for (const t of b.blocked) {
+          for (const bid of t.unfinishedBlockerIds || []) {
+            if (!sprintIds.has(bid)) crossBlockers.add(bid);
+          }
+        }
+        const chips = [...crossBlockers]
+          .map(id => `<span class="blocker" data-id="${id}">${id}</span>`)
+          .join('') || '<span style="color:var(--text-subtle)">(all blockers inside this sprint)</span>';
+        main.innerHTML = `
+          ${deliveryLinesHTML}
+          <div class="sprint-main-header">
+            <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
+            <div class="sub">${b.done.length} done · <b class="blocked">${b.blocked.length} blocked</b> · 0 unblocked</div>
+          </div>
+          ${spineHTML}
+          <div class="sprint-empty" style="margin-top:24px;">
+            <b>Sprint ${sprint.letter} is fully blocked.</b><br>
+            Finish these prerequisite tasks first (they live outside this sprint):
+            <div class="blocker-list">${chips}</div>
+          </div>
+        `;
+        wireCardClicks(main, taskById);
+        wireBlockerChips(main, taskById);
+        focusSprintHeading();
+        return;
+      }
+
+      const orderedBlocked = orderSprintBucket(sprint, b.blocked);
+      const extraActive = orderedInProgress.slice(1);
+      const parkedReady = orderedReady.slice(1);
+
+      // Normal render
+      const headerHTML = `
+        <div class="sprint-main-header">
+          <div>
+            <h1 id="sprint-heading">Sprint ${sprint.letter} — ${escapeHtml(sprint.name)}</h1>
+            <div class="sub">
+              ${b.done.length} done ·
+              <b class="active">${b.inProgress.length} in progress</b> ·
+              <b class="ready">${b.ready.length} unblocked</b> ·
+              <b class="blocked">${b.blocked.length} blocked</b>
+            </div>
+          </div>
+          <button class="toolbar-btn sprint-main-header-copy" type="button" data-action="copy-current-sprint-prompt">Copy kickoff prompt</button>
+        </div>
+      `;
+
+      const focusHTML = primaryActive
+        ? `<section class="bucket" aria-labelledby="bucket-focus">
+             <div class="bucket-title focus" id="bucket-focus">
+               <span class="accent">▶ Current focus</span>
+               <span class="count">1${extraActive.length ? ` + ${extraActive.length} active` : ''}</span>
+             </div>
+             <div class="bucket-note">
+                This is the authoritative task already in motion for this sprint.${extraActive.length ? ` ${extraActive.length} additional active task${extraActive.length === 1 ? ' is' : 's are'} listed below for coordination.` : ''}
+              </div>
+              <div class="cards-grid">${cardHTML(primaryActive, { action: 'kanban', status: 'CURRENT' })}</div>
+            </section>`
+        : recommendedNext
+          ? `<section class="bucket" aria-labelledby="bucket-focus">
+               <div class="bucket-title focus" id="bucket-focus">
+                 <span class="accent">▶ Start here</span>
+                 <span class="count">1</span>
+               </div>
+               <div class="bucket-note">
+                 This is the single recommended next step for the sprint. Other unblocked tasks stay parked until you intentionally switch.
+               </div>
+               <div class="cards-grid">${cardHTML(recommendedNext, { action: 'start', status: 'NEXT' })}</div>
+             </section>`
+          : '';
+
+      const alsoActiveHTML = extraActive.length
+        ? `<section class="bucket" aria-labelledby="bucket-active-elsewhere">
+             <div class="bucket-title in-progress" id="bucket-active-elsewhere">
+               <span class="accent">▶ Also active</span>
+               <span class="count">${extraActive.length}</span>
+             </div>
+             <div class="bucket-note">
+               These tasks are already in progress elsewhere. They are shown for coordination, not as new starts.
+             </div>
+             <div class="cards-grid">${extraActive.map(t => cardHTML(t, { action: 'kanban', status: 'ACTIVE' })).join('')}</div>
+           </section>`
+        : '';
+
+      const nextHTML = primaryActive && recommendedNext
+        ? `<section class="bucket" aria-labelledby="bucket-next-single">
+             <div class="bucket-title next" id="bucket-next-single">
+               <span class="accent">⋯ Next after current</span>
+               <span class="count">1${parkedReady.length ? ` + ${parkedReady.length} parked` : ''}</span>
+             </div>
+             <div class="bucket-note">
+               When the current task is finished, this is the next task to pull. Other unblocked tasks are kept as backlog context, not equal choices.
+             </div>
+             <div class="cards-grid">${cardHTML(recommendedNext, { action: 'start', status: 'NEXT' })}</div>
+           </section>`
+        : (!primaryActive && !recommendedNext
+          ? `<section class="bucket">
+               <div class="bucket-title ready">
+                 <span class="accent">✓ Unblocked now</span>
+                 <span class="count">0</span>
+               </div>
+               <div class="sprint-empty">All active tasks in this sprint are either blocked or already complete.</div>
+             </section>`
+          : '');
+
+      const upNextRows = orderedBlocked.slice(0, 3);
+      const upNextHTML = upNextRows.length
+        ? `<section class="bucket" aria-labelledby="bucket-next">
+             <div class="bucket-title next" id="bucket-next">
+               <span class="accent">⋯ Blocked queue</span>
+               <span class="count">${upNextRows.length}</span>
+             </div>
+             <div class="bucket-note">
+               These are the next blocked steps in sprint order. Each one names the blocker that must finish first.
+             </div>
+             <div class="next-list" role="list">
+                ${upNextRows.map((t, i) => nextRowHTML(t, i + 1)).join('')}
+             </div>
+           </section>`
+        : '';
+
+      const hiddenTasks = [
+        ...parkedReady,
+        ...orderedBlocked.slice(3),
+        ...b.done,
+      ];
+      const remainingCount = hiddenTasks.length;
+      const remainingHTML = remainingCount > 0
+        ? `<button class="remaining-toggle" id="toggle-remaining" aria-expanded="${showRemaining}">
+              ${showRemaining ? '▾' : '▸'} Show remaining ${remainingCount} task${remainingCount === 1 ? '' : 's'}
+            </button>
+            ${showRemaining ? remainingTableHTML(hiddenTasks) : ''}`
+        : '';
+
+      main.innerHTML = deliveryLinesHTML + headerHTML + spineHTML + focusHTML + alsoActiveHTML + nextHTML + upNextHTML + remainingHTML;
+      wireCardClicks(main, taskById);
+      focusSprintHeading();
+    }
+
+    function orderSprintBucket(sprint, tasks) {
+      const order = new Map(sprint.ids.map((id, index) => [id, index]));
+      return [...tasks].sort((a, b) => {
+        const bySprintOrder = (order.get(a.id) ?? 1e9) - (order.get(b.id) ?? 1e9);
+        if (bySprintOrder !== 0) return bySprintOrder;
+        const byScore = (b.score || 0) - (a.score || 0);
+        if (byScore !== 0) return byScore;
+        return a.id.localeCompare(b.id);
+      });
+    }
+
+    function cardHTML(t, opts = {}) {
+      const pclass = t.priority === 'high' ? 'p0' : t.priority === 'medium' ? 'p1' : t.priority === 'low' ? 'p2' : '';
+      const plabel = t.priority === 'high' ? 'P0' : t.priority === 'medium' ? 'P1' : t.priority === 'low' ? 'P2' : '';
+      const statusLabel = opts.status || '';
+      const waitLine = opts.wait && opts.wait.length
+        ? `<div class="task-card-wait">waits for ${opts.wait[0]}${opts.wait.length > 1 ? ` +${opts.wait.length - 1}` : ''}</div>`
+        : '';
+      const primary = opts.action === 'start'
+        ? `<button class="btn" data-action="start" data-id="${t.id}" aria-label="Copy kickoff prompt for ${t.id}">▶ Copy kickoff prompt</button>`
+        : opts.action === 'kanban'
+          ? `<button class="btn" data-action="kanban" data-id="${t.id}" aria-label="Open ${t.id} in Kanban">▶ Continue</button>`
+          : opts.action === 'soon'
+            ? `<button class="btn secondary" data-action="details" data-id="${t.id}" aria-label="See details for ${t.id}">See blocker</button>`
+            : '';
+      return `
+        <article class="task-card ${pclass}" data-id="${t.id}" tabindex="0" role="button" aria-label="${t.id}: ${escapeAttr(t.title)}">
+          <div class="task-card-top">
+            <span class="task-card-id">${t.id}</span>
+            ${plabel ? `<span class="task-card-priority ${pclass}">${plabel}</span>` : ''}
+            ${statusLabel ? `<span class="task-card-status">${statusLabel}</span>` : ''}
+          </div>
+          <div class="task-card-title">${escapeHtml(t.title || '')}</div>
+          ${waitLine}
+          <div class="task-card-actions">${primary}</div>
+        </article>
+      `;
+    }
+
+    function nextRowHTML(t, n) {
+      const blocker = (t.unfinishedBlockerIds || [])[0];
+      const more = (t.unfinishedBlockerIds || []).length - 1;
+      return `
+        <div class="next-row" data-id="${t.id}" tabindex="0" role="listitem">
+          <span class="next-row-num">${n}.</span>
+          <span class="next-row-id">${t.id}</span>
+          <span class="next-row-title">${escapeHtml(t.title || '')}</span>
+          <span class="next-row-blocker">← waits for ${blocker || '?'}${more > 0 ? ` +${more}` : ''}</span>
+        </div>
+      `;
+    }
+
+    function remainingTableHTML(tasks) {
+      const rows = tasks.map(t => {
+        const st = statusLabel(t.status);
+        const pr = t.priority === 'high' ? 'P0' : t.priority === 'medium' ? 'P1' : t.priority === 'low' ? 'P2' : '';
+        const blockers = (t.unfinishedBlockerIds || []).join(', ') || (t.dependsOn || []).join(', ') || '—';
+        return `<tr data-id="${t.id}">
+          <td><b>${t.id}</b></td>
+          <td>${escapeHtml(t.title || '')}</td>
+          <td>${st}</td>
+          <td>${pr}</td>
+          <td style="color:var(--text-subtle)">${blockers}</td>
+        </tr>`;
+      }).join('');
+      return `<table class="remaining-table">
+        <thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Pri</th><th>Deps</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    }
+
+    function wireCardClicks(root, taskById) {
+      const copySprintBtn = root.querySelector('[data-action="copy-current-sprint-prompt"]');
+      if (copySprintBtn && selectedSprintLetter) {
+        copySprintBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await copySprintPrompt(selectedSprintLetter);
+        });
+      }
+      root.querySelectorAll('.task-card').forEach(card => {
+        const id = card.dataset.id;
+        card.addEventListener('click', (e) => {
+          const actionEl = e.target.closest('[data-action]');
+          if (actionEl) {
+            const action = actionEl.dataset.action;
+            if (action === 'start') {
+              copySprintPrompt(selectedSprintLetter);
+            } else if (action === 'kanban') {
+              window.parent.postMessage({ type: 'activate-and-navigate', target: 'kanban', taskId: id }, '*');
+            } else {
+              openTaskDetail(id);
+            }
+            e.stopPropagation();
+            return;
+          }
+          openTaskDetail(id);
+        });
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openTaskDetail(id);
+          }
+        });
+      });
+      root.querySelectorAll('.task-spine-step[data-id]').forEach(step => {
+        step.setAttribute('tabindex', '0');
+        step.setAttribute('role', 'button');
+        step.addEventListener('click', () => openTaskDetail(step.dataset.id));
+        step.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openTaskDetail(step.dataset.id);
+          }
+        });
+      });
+      root.querySelectorAll('[data-action="focus-line"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectSprint(btn.dataset.letter);
+        });
+      });
+      root.querySelectorAll('[data-action="continue-line"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const line = currentDeliveryLines.find(item => item.id === btn.dataset.lineId);
+          if (!line) return;
+          const taskById = new Map(allTasks.map(task => [task.id, task]));
+          const lineState = deriveLineStates([line], taskById)[0];
+          if (lineState?.currentTaskId) openTaskDetail(lineState.currentTaskId);
+          try {
+            await navigator.clipboard.writeText(buildLinePrompt(lineState, taskById));
+            showToast(`Copied kickoff prompt for ${line.name}`, 'success');
+          } catch {
+            showToast('Clipboard copy failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-action="copy-line-agent-prompt"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const line = currentDeliveryLines.find(item => item.id === btn.dataset.lineId);
+          if (!line) return;
+          const taskById = new Map(allTasks.map(task => [task.id, task]));
+          const lineState = deriveLineStates([line], taskById)[0];
+          if (!lineState) return;
+          try {
+            await navigator.clipboard.writeText(buildLineAgentPrompt(lineState, taskById));
+            showToast(`Copied agent prompt for ${line.name}`, 'success');
+          } catch {
+            showToast('Clipboard copy failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('[data-action="copy-line-prompt"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const line = currentDeliveryLines.find(item => item.id === btn.dataset.lineId);
+          if (!line) return;
+          const taskById = new Map(allTasks.map(task => [task.id, task]));
+          const lineState = deriveLineStates([line], taskById)[0];
+          try {
+            await navigator.clipboard.writeText(buildLinePrompt(lineState, taskById));
+            showToast(`Copied kickoff prompt for ${line.name}`, 'success');
+          } catch {
+            showToast('Clipboard copy failed', 'error');
+          }
+        });
+      });
+      root.querySelectorAll('.delivery-line-step[data-id]').forEach(step => {
+        if (!step.dataset.id) return;
+        step.setAttribute('tabindex', '0');
+        step.setAttribute('role', 'button');
+        step.addEventListener('click', () => openTaskDetail(step.dataset.id));
+        step.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openTaskDetail(step.dataset.id);
+          }
+        });
+      });
+      root.querySelectorAll('.flow-node[data-id], .flow-backlog-item[data-id], .flow-chip[data-id]').forEach(el => {
+        el.addEventListener('click', () => openTaskDetail(el.dataset.id));
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openTaskDetail(el.dataset.id);
+          }
+        });
+      });
+      root.querySelectorAll('.next-row').forEach(row => {
+        const id = row.dataset.id;
+        row.addEventListener('click', () => openTaskDetail(id));
+        row.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskDetail(id); }
+        });
+      });
+      root.querySelectorAll('.remaining-table tr[data-id]').forEach(row => {
+        row.addEventListener('click', () => openTaskDetail(row.dataset.id));
+      });
+      const toggleBtn = root.querySelector('#toggle-remaining');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+          showRemaining = !showRemaining;
+          const sprint = currentSprints.find(s => s.letter === selectedSprintLetter);
+          if (sprint) renderSprintMain(sprint, new Map(allTasks.map(t => [t.id, t])));
+        });
+      }
+    }
+
+    function wireBlockerChips(root, taskById) {
+      root.querySelectorAll('.blocker[data-id]').forEach(chip => {
+        chip.addEventListener('click', () => openTaskDetail(chip.dataset.id));
+      });
+    }
+
+    function openTaskDetail(id) {
+      selectedId = id;
+      const t = allTasks.find(x => x.id === id);
+      if (t) {
+        // Ensure computed fields exist for the side panel (blockers, unblocks)
+        if (!t.blockerIds || !t.unfinishedBlockerIds) {
+          const taskById = new Map(allTasks.map(x => [x.id, x]));
+          const blockers = t.dependsOn || [];
+          t.blockerIds = blockers;
+          t.unfinishedBlockerIds = blockers.filter(b => {
+            const bt = taskById.get(b);
+            return bt && bt.status !== 'done';
+          });
+          t.unblocks = t.unblocks || [];
+          t.isReady = t.status !== 'done' && t.unfinishedBlockerIds.length === 0;
+          t.isBlocked = t.status !== 'done' && t.unfinishedBlockerIds.length > 0;
+        }
+      }
+      renderSidePanel(t || null);
+      // Reflect selection on the card
+      document.querySelectorAll('.task-card').forEach(c => {
+        c.classList.toggle('selected', c.dataset.id === id);
+      });
+    }
+
+    function focusSprintHeading() {
+      // Non-destructive focus: only moves focus if user hasn't focused something else
+      // (i.e., avoid stealing focus mid-interaction). Skip focus if active element is inside main.
+      const active = document.activeElement;
+      if (active && (active.closest('.sprint-main') || active.closest('.sprint-sidebar'))) return;
+      const h = document.getElementById('sprint-heading');
+      if (h) {
+        h.setAttribute('tabindex', '-1');
+        h.focus({ preventScroll: true });
+      }
+    }
+
+    let currentSprints = [];
+
+    function selectSprint(letter) {
+      const taskById = new Map(allTasks.map(t => [t.id, t]));
+      const activeSprintIndex = getActiveSprintIndex(currentSprints, taskById);
+      const targetIndex = currentSprints.findIndex(s => s.letter === letter);
+      if (targetIndex === -1) return;
+      if (targetIndex > activeSprintIndex) {
+        const gate = currentSprints[activeSprintIndex];
+        showToast(`Sprint ${letter} stays locked until Sprint ${gate?.letter || '?'} is finished`, 'error');
+        return;
+      }
+      if (letter === selectedSprintLetter) return;
+      selectedSprintLetter = letter;
+      showRemaining = false;
+      const sprint = currentSprints.find(s => s.letter === letter);
+      renderSprintSidebar(currentSprints, taskById);
+      renderSprintMain(sprint, taskById);
+    }
+
+    function renderSprintView(tasks, sprints) {
+      currentSprints = sprints;
+      const taskById = new Map(tasks.map(t => [t.id, t]));
+
+      // Always bias toward the earliest incomplete sprint in delivery order.
+      // If the currently selected sprint is done, auto-advance to the next one.
+      const earliestOpenLetter = getDefaultSprintLetter(sprints, taskById);
+      const currentSprint = sprints.find(s => s.letter === selectedSprintLetter);
+      const currentBuckets = currentSprint ? classifySprintTasks(currentSprint, taskById) : null;
+      const currentStillOpen = currentBuckets && (currentBuckets.inProgress.length || currentBuckets.ready.length || currentBuckets.blocked.length);
+      let letter = currentStillOpen ? selectedSprintLetter : earliestOpenLetter;
+      if (!sprints.find(s => s.letter === letter)) letter = sprints[0]?.letter;
+      selectedSprintLetter = letter;
+
+      // Toolbar stats (reuse existing spots but show sprint-scoped numbers)
+      updateSprintStats(sprints, taskById);
+
+      renderSprintSidebar(sprints, taskById);
+      const sprint = sprints.find(s => s.letter === letter);
+      renderSprintMain(sprint, taskById);
+    }
+
+    function updateSprintStats(sprints, taskById) {
+      const sprint = sprints.find(s => s.letter === selectedSprintLetter) || sprints[0];
+      if (!sprint) return;
+      const b = classifySprintTasks(sprint, taskById);
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('stat-ready',   b.ready.length);
+      set('stat-blocked', b.blocked.length);
+      set('stat-active',  b.inProgress.length);
+      set('stat-review',  0);
+      set('stat-overdue', 0);
+    }
+
+    function getDefaultSprintLetter(sprints, taskById) {
+      return sprints[getActiveSprintIndex(sprints, taskById)]?.letter || sprints[0]?.letter;
+    }
+
+    function buildSprintPrompt(letter) {
+      const sprint = currentSprints.find(s => s.letter === letter);
+      if (!sprint) return '';
+      const taskById = new Map(allTasks.map(t => [t.id, t]));
+      const buckets = classifySprintTasks(sprint, taskById);
+      const sprintTasks = sprint.ids.map(id => taskById.get(id)).filter(Boolean);
+      const taskLines = sprintTasks.map(t => `- ${t.id}: ${t.title}`).join('\n');
+      const activeLine = buckets.inProgress.length ? buckets.inProgress.map(t => t.id).join(', ') : 'none';
+      const readyLine = buckets.ready.length ? buckets.ready.map(t => t.id).join(', ') : 'none';
+      const blockedLine = buckets.blocked.length
+        ? buckets.blocked.map(t => `${t.id} waits for ${(t.unfinishedBlockerIds || []).join(', ')}`).join('; ')
+        : 'none';
+      return [
+        `Kick off Rough Cut Sprint ${sprint.letter} — ${sprint.name}.`,
+        '',
+        'Work only on this sprint unless a declared dependency forces a small adjacent change.',
+        '',
+        'Tasks in scope:',
+        taskLines,
+        '',
+        `Currently active: ${activeLine}`,
+        `Currently unblocked: ${readyLine}`,
+        `Currently blocked: ${blockedLine}`,
+        '',
+        'Finish this sprint cleanly so the next sprint in the recording-readiness flow can unlock.',
+      ].join('\n');
+    }
+
+    async function copySprintPrompt(letter) {
+      const prompt = buildSprintPrompt(letter);
+      if (!prompt) {
+        showToast('Could not build sprint prompt', 'error');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(prompt);
+        showToast(`Copied kickoff prompt for Sprint ${letter}`, 'success');
+      } catch (err) {
+        showToast('Clipboard copy failed', 'error');
+      }
+    }
+
+    function setViewMode(mode) {
+      const rootEl = document.getElementById('root');
+      const graphPane = document.getElementById('graph');
+      const emptyEl = document.getElementById('empty-state');
+      const legendEl = document.querySelector('.legend');
+      const zoomEl = document.querySelector('.zoom-controls');
+      const layoutEl = document.getElementById('sprint-layout');
+      const sidePane = document.getElementById('side-pane');
+      const sidebar = document.querySelector('.sprint-sidebar');
+      const isDelivery = mode === 'delivery';
+      if (rootEl) rootEl.style.gridTemplateColumns = mode === 'streams' ? '1fr 340px' : '1fr 340px';
+      if (graphPane) graphPane.style.display = mode === 'streams' ? '' : 'none';
+      if (emptyEl) emptyEl.style.display = mode === 'streams' ? '' : 'none';
+      if (legendEl) legendEl.style.display = mode === 'streams' ? '' : 'none';
+      if (zoomEl) zoomEl.style.display = mode === 'streams' ? '' : 'none';
+      if (layoutEl) layoutEl.hidden = mode === 'streams';
+      if (sidebar) sidebar.style.display = isDelivery ? 'none' : '';
+      if (sidePane) sidePane.style.display = '';
+      // Toolbar toggles that only apply to streams view
+      ['toggle-rank-labels', 'toggle-auto-infer', 'toggle-inferred', 'fit-view'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = mode === 'streams' ? '' : 'none';
+      });
+      // Reflect the active view on the Lanes/Graph toggle pair (always visible).
+      const isStreams = mode === 'streams';
+      const lanesBtn = document.getElementById('view-mode-lanes');
+      const graphBtn = document.getElementById('view-mode-graph');
+      if (lanesBtn) {
+        lanesBtn.classList.toggle('on', !isStreams);
+        lanesBtn.setAttribute('aria-selected', String(!isStreams));
+      }
+      if (graphBtn) {
+        graphBtn.classList.toggle('on', isStreams);
+        graphBtn.setAttribute('aria-selected', String(isStreams));
+      }
+    }
+
+    function renderStats(tasks) {
+      const active = tasks.filter(t => t.status !== 'done');
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      set('stat-ready',   active.filter(t => t.isReady).length);
+      set('stat-blocked', active.filter(t => t.isBlocked).length);
+      set('stat-active',  active.filter(t => t.status === 'in-progress').length);
+      set('stat-review',  active.filter(t => t.status === 'review').length);
+      set('stat-overdue', active.filter(t => t.dueDate && t.dueDate < new Date()).length);
+    }
+
+    /* ─── Selection + edge highlighting ────────────────────────────── */
+    function selectNode(id) {
+      selectedId = id;
+      document.querySelectorAll('.node').forEach(n => n.classList.toggle('selected', n.dataset.id === id));
+      highlightEdges(id);
+      renderSidePanel(allTasks.find(t => t.id === id));
+    }
+
+    function highlightEdges(id) {
+      document.querySelectorAll('.edge').forEach(e => {
+        const src = e.dataset.source;
+        const tgt = e.dataset.target;
+        const touches = id && (src === id || tgt === id);
+        e.classList.toggle('highlight', !!touches);
+        if (touches) e.setAttribute('marker-end', 'url(#arrow-highlight)');
+        else e.setAttribute('marker-end', e.classList.contains('inferred') ? 'url(#arrow-dashed)' : 'url(#arrow-solid)');
+      });
+    }
+
+    /* ─── Side panel ───────────────────────────────────────────────── */
+    function renderSidePanel(task) {
+      const pane = document.getElementById('side-pane');
+      if (!task) {
+        pane.innerHTML = `
+          <div class="side-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            Click a task for details.<br>
+            Left columns are earlier in the flow; right columns depend on them. Top-3 recommended tasks glow teal.
+          </div>`;
+        return;
+      }
+
+      const taskById = new Map(allTasks.map(t => [t.id, t]));
+      const mkChip = (id, extraClass = '') => {
+        const t = taskById.get(id);
+        const cls = `dep-chip ${extraClass} ${t && t.status === 'done' ? 'done' : ''}`;
+        return `<span class="${cls}" data-id="${id}" title="${escapeAttr(t?.title || 'unknown')}">${id}</span>`;
+      };
+      const dependsChips = task.dependsOn.map(id => mkChip(id)).join('');
+      const blocksChips = task.blocks.map(id => mkChip(id)).join('');
+      const inferredIds = (task.body.match(ID_PATTERN) || [])
+        .filter((id, idx, arr) => arr.indexOf(id) === idx)
+        .filter(id => id !== task.id)
+        .filter(id => !task.dependsOn.includes(id))
+        .filter(id => !task.blocks.includes(id))
+        .filter(id => taskById.has(id));
+      const inferredChips = inferredIds.map(id => mkChip(id, 'inferred')).join('');
+
+      const scorePct = Math.min(100, Math.round(((task.score || 0) / 120) * 100));
+      const overdue = task.dueDate && task.dueDate < new Date() && task.status !== 'done';
+      const dueStr = task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null;
+
+      // Readiness banner — the headline answer to "can I start this in parallel?"
+      let readinessBanner = '';
+      if (task.status === 'done') {
+        readinessBanner = `<div class="banner done">Already done.</div>`;
+      } else if (task.isReady) {
+        readinessBanner = `
+          <div class="banner ready">
+            <span class="dot" style="background: #22c55e;"></span>
+            <span><b>Unblocked.</b> No unfinished blockers are currently stopping this task.</span>
+          </div>`;
+      } else if (task.isBlocked) {
+        readinessBanner = `
+          <div class="banner blocked">
+            <span class="dot" style="background: #ef4444;"></span>
+            <span><b>Blocked.</b> Waiting on ${task.unfinishedBlockerIds.length} task${task.unfinishedBlockerIds.length === 1 ? '' : 's'}.</span>
+          </div>`;
+      }
+
+      // Unfinished blockers only
+      const unfinishedBlockerChips = task.unfinishedBlockerIds.map(id => mkChip(id)).join('');
+      const unblocksChips = task.unblocks.map(id => mkChip(id)).join('');
+
+      pane.innerHTML = `
+        <div class="task-detail">
+          <h2>${task.id}</h2>
+          <h3>${escapeHtml(task.title)}</h3>
+          <div class="meta">
+            <span class="pill status-${task.status}">${statusLabel(task.status)}</span>
+            ${task.priority ? `<span class="pill priority-${task.priority}">${task.priority}</span>` : ''}
+            ${dueStr ? `<span class="pill ${overdue ? 'overdue' : ''}">due ${dueStr}</span>` : ''}
+          </div>
+          ${readinessBanner}
+          <div class="score-row">
+            <span>Next-up score</span>
+            <div class="score-bar"><div class="score-fill" style="width: ${scorePct}%"></div></div>
+            <span>${task.score || 0}</span>
+          </div>
+          ${unfinishedBlockerChips ? `<div class="dep-block"><div class="label">⏸ Must finish first</div><div class="dep-list">${unfinishedBlockerChips}</div></div>` : ''}
+          ${unblocksChips ? `<div class="dep-block"><div class="label">↪ Completing this unblocks</div><div class="dep-list">${unblocksChips}</div></div>` : ''}
+          ${dependsChips ? `<div class="dep-block"><div class="label">Declared depends-on</div><div class="dep-list">${dependsChips}</div></div>` : ''}
+          ${blocksChips ? `<div class="dep-block"><div class="label">Declared blocks</div><div class="dep-list">${blocksChips}</div></div>` : ''}
+          ${inferredChips ? `<div class="dep-block"><div class="label">Mentioned in body</div><div class="dep-list">${inferredChips}</div></div>` : ''}
+          ${task.body.trim() ? `<div class="body-preview">${escapeHtml(task.body.trim().slice(0, 800))}${task.body.trim().length > 800 ? '…' : ''}</div>` : ''}
+          <div class="actions">
+            <button id="jump-kanban">Open in Kanban</button>
+          </div>
+        </div>
+      `;
+
+      pane.querySelectorAll('.dep-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const id = chip.dataset.id;
+          if (!taskById.has(id)) return;
+          selectNode(id);
+          centerOnNode(id);
+        });
+      });
+      const jumpBtn = document.getElementById('jump-kanban');
+      if (jumpBtn) {
+        jumpBtn.addEventListener('click', () => {
+          window.parent.postMessage({ type: 'activate-and-navigate', target: 'kanban', taskId: task.id }, '*');
+        });
+      }
+    }
+
+    function statusLabel(s) {
+      return ({
+        'in-progress': 'In Progress',
+        review: 'Review', planned: 'Planned', done: 'Done',
+        paused: 'Paused', unknown: 'Unknown',
+      })[s] || s;
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+    function escapeAttr(s) { return escapeHtml(s); }
+
+    function basenamePath(value) {
+      if (!value) return '';
+      const parts = String(value).split(/[\\/]/).filter(Boolean);
+      return parts[parts.length - 1] || '';
+    }
+
+    function deriveProjectFilter(status) {
+      if (!status) return '';
+      if (status.projectName) return status.projectName;
+      const base = basenamePath(status.project);
+      if (base && base !== 'docs') return base;
+      const parts = String(status.project || '').split(/[\\/]/).filter(Boolean);
+      if (parts.length >= 2 && parts[parts.length - 1] === 'docs') {
+        return parts[parts.length - 2] || '';
+      }
+      return base;
+    }
+
+    async function fetchJson(url) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    async function fetchStatusContext() {
+      try {
+        const suffix = currentProjectRoot ? `?cwd=${encodeURIComponent(currentProjectRoot)}` : '';
+        return await fetchJson(`${API_BASE}/api/status${suffix}`);
+      } catch {
+        return null;
+      }
+    }
+
+    async function fetchLocksForProject(projectRoot) {
+      try {
+        const suffix = projectRoot ? `?cwd=${encodeURIComponent(projectRoot)}` : '';
+        const json = await fetchJson(`${API_BASE}/api/locks${suffix}`);
+        return json.locks || [];
+      } catch {
+        return [];
+      }
+    }
+
+    async function fetchRecentActivity(projectFilter) {
+      try {
+        const query = projectFilter
+          ? `?project=${encodeURIComponent(projectFilter)}&days=7&limit=250`
+          : '?days=7&limit=120';
+        const json = await fetchJson(`${API_BASE}/api/changelog${query}`);
+        return json.entries || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function buildActivityByTask(entries) {
+      const latestByTask = new Map();
+      for (const entry of entries) {
+        const blob = `${entry.cmd || ''} ${entry.summary || ''} ${entry.file || ''}`;
+        const ids = blob.match(ID_PATTERN) || [];
+        for (const id of ids) {
+          const existing = latestByTask.get(id);
+          if (!existing || String(entry.ts || '') > String(existing.ts || '')) {
+            latestByTask.set(id, { ts: entry.ts || '', tool: entry.tool || '', agent: entry.agent || '' });
+          }
+        }
+      }
+      return latestByTask;
+    }
+
+    function getEntryTaskIds(entry) {
+      const blob = `${entry.cmd || ''} ${entry.summary || ''} ${entry.file || ''}`;
+      return [...new Set(blob.match(ID_PATTERN) || [])];
+    }
+
+    function buildLineRuntimeMap(lines) {
+      const byLine = new Map(lines.map(line => [line.id, null]));
+      for (const line of lines) {
+        const lineTaskIds = new Set([...line.sequenceTaskIds, ...line.supportTaskIds]);
+        for (const entry of activityEntries) {
+          const taskIds = getEntryTaskIds(entry);
+          if (!taskIds.some(id => lineTaskIds.has(id))) continue;
+          const existing = byLine.get(line.id);
+          if (!existing || String(entry.ts || '') > String(existing.ts || '')) {
+            byLine.set(line.id, {
+              ts: entry.ts || '',
+              sid: entry.sid || '',
+              agent: entry.agent || '',
+              tool: entry.tool || '',
+            });
+          }
+        }
+      }
+      return byLine;
+    }
+
+    function isRuntimeActive(runtime) {
+      if (!runtime?.ts) return false;
+      const age = Date.now() - new Date(runtime.ts).getTime();
+      return Number.isFinite(age) && age <= ACTIVE_INSTANCE_WINDOW_MS;
+    }
+
+    function formatRelativeTime(ts) {
+      if (!ts) return '';
+      const diffMs = Date.now() - new Date(ts).getTime();
+      if (!Number.isFinite(diffMs)) return '';
+      const minutes = Math.max(1, Math.round(diffMs / 60000));
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 48) return `${hours}h ago`;
+      const days = Math.round(hours / 24);
+      return `${days}d ago`;
+    }
+
+    /* ─── Pan / zoom ───────────────────────────────────────────────── */
+    function applyTransform() {
+      const vp = document.getElementById('viewport');
+      vp.setAttribute('transform', `translate(${translateX}, ${translateY}) scale(${scale})`);
+    }
+    function fitView() {
+      const svg = document.getElementById('graph');
+      const nodesLayer = document.getElementById('nodes-layer');
+      if (!nodesLayer.children.length) return;
+      const bbox = getLayerBBox();
+      const svgRect = svg.getBoundingClientRect();
+      const pad = 20;
+      const sx = (svgRect.width - pad * 2) / bbox.width;
+      const sy = (svgRect.height - pad * 2) / bbox.height;
+      // Target readability: never shrink below 0.85x (pan instead). Allow 2.2x when small.
+      const READABLE_MIN = 0.85;
+      const idealScale = Math.min(sx, sy, 2.2);
+      scale = Math.max(READABLE_MIN, Math.min(MAX_SCALE, idealScale));
+      // If content is wider than the pane at readable scale, align to the left (show first streams)
+      // instead of centering so the label/gutter is always visible.
+      if (bbox.width * scale > svgRect.width - pad * 2) {
+        translateX = pad - bbox.x * scale;
+      } else {
+        translateX = pad + (svgRect.width - pad * 2 - bbox.width * scale) / 2 - bbox.x * scale;
+      }
+      // Vertical: align top
+      if (bbox.height * scale > svgRect.height - pad * 2) {
+        translateY = pad - bbox.y * scale;
+      } else {
+        translateY = pad + (svgRect.height - pad * 2 - bbox.height * scale) / 2 - bbox.y * scale;
+      }
+      applyTransform();
+    }
+    function getLayerBBox() {
+      const vp = document.getElementById('viewport');
+      // Temporarily remove transform to get natural bbox
+      const prev = vp.getAttribute('transform');
+      vp.removeAttribute('transform');
+      const bbox = vp.getBBox();
+      if (prev) vp.setAttribute('transform', prev);
+      return bbox;
+    }
+    function centerOnNode(id) {
+      const nodeEl = document.querySelector(`.node[data-id="${id}"]`);
+      if (!nodeEl) return;
+      const svg = document.getElementById('graph');
+      const transform = nodeEl.getAttribute('transform') || '';
+      const match = transform.match(/translate\(([-\d.]+),\s*([-\d.]+)\)/);
+      if (!match) return;
+      const nx = parseFloat(match[1]) + NODE_W / 2;
+      const ny = parseFloat(match[2]) + NODE_H / 2;
+      const rect = svg.getBoundingClientRect();
+      translateX = rect.width / 2 - nx * scale;
+      translateY = rect.height / 2 - ny * scale;
+      applyTransform();
+    }
+
+    /* Drag pan */
+    (function wirePan() {
+      const svg = document.getElementById('graph');
+      let isDown = false;
+      let startX = 0, startY = 0, origTX = 0, origTY = 0;
+      svg.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        isDown = true;
+        startX = e.clientX; startY = e.clientY;
+        origTX = translateX; origTY = translateY;
+        svg.classList.add('dragging');
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        translateX = origTX + (e.clientX - startX);
+        translateY = origTY + (e.clientY - startY);
+        applyTransform();
+      });
+      window.addEventListener('mouseup', () => {
+        isDown = false;
+        svg.classList.remove('dragging');
+      });
+      svg.addEventListener('click', (e) => {
+        if (e.target.tagName === 'svg' || e.target.id === 'viewport') {
+          selectNode(null);
+        }
+      });
+      svg.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = svg.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const delta = -e.deltaY * 0.0015;
+        const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * (1 + delta)));
+        // Zoom toward cursor
+        translateX = mx - (mx - translateX) * (newScale / scale);
+        translateY = my - (my - translateY) * (newScale / scale);
+        scale = newScale;
+        applyTransform();
+      }, { passive: false });
+    })();
+
+    /* ─── Data fetch ──────────────────────────────────────────────── */
+    async function fetchAndRender(shouldFit = false) {
+      try {
+        const [status, json] = await Promise.all([
+          fetchStatusContext(),
+          fetchJson(`${API_BASE}/api/master-plan${currentProjectRoot ? `?cwd=${encodeURIComponent(currentProjectRoot)}` : ''}`),
+        ]);
+        rawMarkdown = json.content || '';
+        allTasks = parseMasterPlan(rawMarkdown);
+        currentProjectRoot = status?.project || '';
+        currentProjectFilter = deriveProjectFilter(status);
+        const [locks, recentEntries] = await Promise.all([
+          fetchLocksForProject(currentProjectRoot),
+          fetchRecentActivity(currentProjectFilter),
+        ]);
+        activeLocks = locks;
+        activityEntries = recentEntries;
+        activityByTask = buildActivityByTask(recentEntries);
+        renderGraph();
+        if (shouldFit && currentDeliveryLines.length === 0) requestAnimationFrame(() => requestAnimationFrame(fitView));
+      } catch (err) {
+        console.error('[Flow] Fetch error:', err);
+        showToast('Failed to load MASTER_PLAN.md', 'error');
+      }
+    }
+    function debouncedRefresh() {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => fetchAndRender(false), 300);
+    }
+
+    function startLiveRefresh() {
+      if (liveRefreshTimer) clearInterval(liveRefreshTimer);
+      liveRefreshTimer = setInterval(() => fetchAndRender(false), 15000);
+    }
+
+    /* ─── SSE ─────────────────────────────────────────────────────── */
+    function connectSSE() {
+      if (eventSource) eventSource.close();
+      console.log('[Flow SSE] Connecting…');
+      eventSource = new EventSource(`${API_BASE}/api/events`);
+      eventSource.onopen = () => { reconnectAttempts = 0; };
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'file-changed') {
+            showToast('MASTER_PLAN.md updated', 'success');
+            debouncedRefresh();
+          }
+        } catch (e) {}
+      };
+      eventSource.onerror = () => {
+        if (eventSource) eventSource.close();
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttempts++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+          setTimeout(connectSSE, delay);
+        }
+      };
+    }
+
+    /* ─── Toast ─────────────────────────────────────────────────── */
+    function showToast(msg, variant = '') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = `toast ${variant} visible`;
+      setTimeout(() => el.classList.remove('visible'), 2400);
+    }
+
+    /* ─── Wiring ─────────────────────────────────────────────────── */
+    document.getElementById('refresh').addEventListener('click', () => fetchAndRender(true));
+    document.getElementById('fit-view').addEventListener('click', fitView);
+    document.getElementById('view-mode-lanes').addEventListener('click', () => {
+      if (userViewPreference === 'delivery') return;
+      userViewPreference = 'delivery';
+      renderGraph();
+    });
+    document.getElementById('view-mode-graph').addEventListener('click', () => {
+      if (userViewPreference === 'streams') return;
+      userViewPreference = 'streams';
+      renderGraph();
+    });
+    document.getElementById('zoom-in').addEventListener('click', () => {
+      scale = Math.min(MAX_SCALE, scale * 1.2);
+      applyTransform();
+    });
+    document.getElementById('zoom-out').addEventListener('click', () => {
+      scale = Math.max(MIN_SCALE, scale / 1.2);
+      applyTransform();
+    });
+    document.getElementById('toggle-inferred').addEventListener('click', (e) => {
+      showInferred = !showInferred;
+      e.currentTarget.classList.toggle('on', showInferred);
+      renderGraph();
+    });
+    document.getElementById('toggle-auto-infer').addEventListener('click', (e) => {
+      useInferredForWaves = !useInferredForWaves;
+      e.currentTarget.classList.toggle('on', useInferredForWaves);
+      renderGraph();
+      requestAnimationFrame(() => requestAnimationFrame(fitView));
+    });
+    document.getElementById('toggle-done').addEventListener('click', (e) => {
+      showDone = !showDone;
+      e.currentTarget.classList.toggle('on', showDone);
+      renderGraph();
+      requestAnimationFrame(() => requestAnimationFrame(fitView));
+    });
+    document.getElementById('toggle-rank-labels').addEventListener('click', (e) => {
+      showRankLabels = !showRankLabels;
+      e.currentTarget.classList.toggle('on', showRankLabels);
+      renderGraph();
+    });
+
+    window.addEventListener('message', (event) => {
+      if (event.data?.type === 'tab-activated') {
+        // Re-fit after becoming visible (container may have had 0 dims)
+        requestAnimationFrame(() => requestAnimationFrame(fitView));
+        debouncedRefresh();
+      } else if (event.data?.type === 'switch-project') {
+        currentProjectRoot = event.data.projectRoot || '';
+        fetchAndRender(true);
+      }
+    });
+    window.addEventListener('resize', () => {
+      // keep current transform; just in case, ensure not wildly offscreen
+    });
+    window.addEventListener('beforeunload', () => {
+      if (eventSource) eventSource.close();
+      if (liveRefreshTimer) clearInterval(liveRefreshTimer);
+    });
+
+    function init() {
+      fetchAndRender(true);
+      startLiveRefresh();
+      setTimeout(connectSSE, 1000);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>

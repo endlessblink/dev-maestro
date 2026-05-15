@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server — Watchpost</title>
+    <style>
+        :root {
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-elevated: #21262d;
+            --surface-hover: rgba(255,255,255,0.05);
+
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-subtle: #6e7681;
+
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+            --border-strong: #484f58;
+
+            --brand-primary: #4ECDC4;
+            --brand-subtle: rgba(78,205,196,0.12);
+
+            --status-green: #3fb950;
+            --status-amber: #d29922;
+            --status-red: #f85149;
+
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-full: 9999px;
+            --transition: 150ms cubic-bezier(0.4,0,0.2,1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+            min-height: 100vh;
+            padding: 1.25rem 1.5rem 2rem;
+        }
+
+        /* ── Top bar ── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .subtabs {
+            display: flex;
+            gap: 2px;
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 3px;
+        }
+        .subtab {
+            padding: 0.35rem 0.9rem;
+            border-radius: 5px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .subtab.active { background: var(--surface-elevated); color: var(--text-primary); }
+        .subtab:hover:not(.active) { color: var(--text-secondary); }
+
+        .topbar-spacer { flex: 1; }
+
+        .last-checked { font-size: 12px; color: var(--text-subtle); }
+        .last-checked.stale { color: var(--status-amber); }
+
+        .btn-refresh {
+            display: flex; align-items: center; gap: 0.35rem;
+            padding: 0.3rem 0.7rem;
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            font-size: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .btn-refresh:hover { color: var(--text-primary); border-color: var(--brand-primary); }
+        .btn-refresh.spinning svg { animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Error banner */
+        .error-banner {
+            display: none;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.6rem 1rem;
+            background: rgba(210,153,34,0.1);
+            border: 1px solid rgba(210,153,34,0.3);
+            border-radius: var(--radius-md);
+            color: var(--status-amber);
+            font-size: 13px;
+            margin-bottom: 1rem;
+        }
+        .error-banner.visible { display: flex; }
+
+        /* Tab panels */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ══════════════════ PROJECT-STYLE SERVICES GRID ══════════════════ */
+
+        .service-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* Category sections */
+        .category-section { display: flex; flex-direction: column; gap: 0.75rem; }
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0 0.25rem;
+        }
+        .category-icon { font-size: 13px; }
+        .category-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-subtle);
+        }
+        .category-count {
+            font-size: 10px;
+            color: var(--text-muted);
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 1px 6px;
+        }
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 0.875rem;
+        }
+
+        /* Auto-discovered badge */
+        .auto-badge {
+            position: absolute;
+            bottom: 0.5rem;
+            left: 0.5rem;
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.5);
+            padding: 2px 5px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            backdrop-filter: blur(4px);
+        }
+
+        /* Card — matches .project-card exactly */
+        .service-card {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-subtle);
+            border-left: 3px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: transform 200ms cubic-bezier(0.4,0,0.2,1),
+                        border-color 200ms cubic-bezier(0.4,0,0.2,1),
+                        box-shadow 200ms cubic-bezier(0.4,0,0.2,1);
+        }
+        .service-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(78,205,196,0.25);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(78,205,196,0.1);
+        }
+
+        /* Status left border */
+        .service-card.status-green { border-left-color: var(--status-green); }
+        .service-card.status-amber { border-left-color: var(--status-amber); }
+        .service-card.status-red   { border-left-color: var(--status-red); }
+        .service-card.status-loading { border-left-color: var(--border-medium); }
+
+        /* ── Cover area ── */
+        .card-cover {
+            aspect-ratio: 4/3;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .card-cover-bg {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-cover-bg img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .card-cover-initial {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: rgba(255,255,255,0.22);
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            user-select: none;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Bottom gradient overlay with name */
+        .card-cover-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 0.5rem 0.75rem 0.4rem;
+            background: linear-gradient(transparent, rgba(0,0,0,0.75));
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            z-index: 2;
+        }
+
+        .card-cover-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        /* Status dot in cover overlay */
+        .cover-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .cover-status-dot.green { background: var(--status-green); box-shadow: 0 0 6px rgba(63,185,80,0.7); }
+        .cover-status-dot.amber { background: var(--status-amber); box-shadow: 0 0 6px rgba(210,153,34,0.7); }
+        .cover-status-dot.red   { background: var(--status-red);   box-shadow: 0 0 6px rgba(248,81,73,0.7); }
+        .cover-status-dot.loading { background: var(--border-medium); animation: pulse 1.2s ease-in-out infinite; }
+
+        /* "On VPS" pill — top-right of cover */
+        .vps-pill {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.18rem 0.55rem;
+            background: rgba(0,0,0,0.62);
+            border: 1px solid rgba(78,205,196,0.35);
+            border-radius: var(--radius-full);
+            color: var(--brand-primary);
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            backdrop-filter: blur(6px);
+            z-index: 3;
+            text-transform: uppercase;
+        }
+        .vps-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--status-green);
+            animation: vpsPulse 2.5s ease-in-out infinite;
+        }
+        .vps-dot.down { background: var(--status-red); animation: none; }
+        @keyframes vpsPulse {
+            0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63,185,80,0.5); }
+            50%      { opacity: 0.8; box-shadow: 0 0 0 4px rgba(63,185,80,0); }
+        }
+
+        /* "Linked project" badge — if card shares a local project cover */
+        .linked-badge {
+            position: absolute;
+            top: 0.5rem;
+            left: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.18rem 0.5rem;
+            background: rgba(0,0,0,0.62);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: var(--radius-full);
+            color: rgba(255,255,255,0.65);
+            font-size: 10px;
+            font-weight: 500;
+            backdrop-filter: blur(6px);
+            z-index: 3;
+        }
+
+        @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+
+        /* ── Card body ── */
+        .card-body {
+            padding: 0.6rem 0.75rem 0.65rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .card-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
+        .card-detail {
+            font-size: 11px;
+            color: var(--text-subtle);
+            font-style: italic;
+        }
+
+        .card-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            margin-top: 0.1rem;
+        }
+
+        /* Dashboard link — teal pill */
+        .btn-dash {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.22rem 0.6rem;
+            background: var(--brand-subtle);
+            border: 1px solid rgba(78,205,196,0.3);
+            border-radius: var(--radius-full);
+            color: var(--brand-primary);
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .btn-dash:hover { background: rgba(78,205,196,0.2); border-color: rgba(78,205,196,0.5); }
+        .btn-dash.dimmed { opacity: 0.35; pointer-events: none; }
+
+        /* Icon-only restart & logs buttons */
+        .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.22rem 0.5rem;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            font-size: 11px;
+            cursor: pointer;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+        .btn-icon:hover { color: var(--text-secondary); border-color: var(--border-strong); }
+        .btn-icon.restart:hover { color: var(--status-amber); border-color: var(--status-amber); }
+        .btn-icon.logs-active { color: var(--brand-primary); border-color: rgba(78,205,196,0.4); }
+
+        .restarting-badge {
+            display: none;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 11px;
+            color: var(--status-amber);
+        }
+        .restarting-badge.visible { display: flex; }
+        .restarting-badge svg { animation: spin 0.8s linear infinite; }
+
+        /* Log viewer */
+        .log-viewer {
+            display: none;
+            background: var(--surface-tertiary);
+            border-top: 1px solid var(--border-subtle);
+            padding: 0.6rem 0.75rem;
+        }
+        .log-viewer.visible { display: block; }
+        .log-viewer pre {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
+        /* Skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, var(--surface-secondary) 25%, var(--surface-elevated) 50%, var(--surface-secondary) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+            border-radius: var(--radius-sm);
+        }
+        @keyframes shimmer { to { background-position: -200% 0; } }
+
+        /* ══════════════════ HEALTH TAB ══════════════════ */
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .metric-card {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 1rem 1.1rem;
+        }
+        .metric-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-subtle);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.4rem;
+        }
+        .metric-value {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+        .metric-value .unit { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+        .progress-bar {
+            height: 5px;
+            background: var(--surface-elevated);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 0.35rem;
+        }
+        .progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+        .progress-fill.green { background: var(--status-green); }
+        .progress-fill.amber { background: var(--status-amber); }
+        .progress-fill.red   { background: var(--status-red); }
+        .metric-sub { font-size: 11px; color: var(--text-subtle); }
+        .sparkline { display: block; width: 100%; height: 28px; margin-bottom: 0.3rem; }
+        .info-row {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.55rem 1rem;
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            margin-bottom: 0.5rem;
+        }
+        .info-row-label { font-size: 12px; color: var(--text-subtle); width: 90px; flex-shrink: 0; }
+        .info-row-value { font-size: 13px; color: var(--text-secondary); flex: 1; }
+        .load-dots { display: flex; gap: 0.5rem; }
+        .load-pill {
+            padding: 0.15rem 0.5rem; border-radius: 20px;
+            font-size: 12px; font-weight: 600;
+        }
+        .load-pill.green { background: rgba(63,185,80,0.15); color: var(--status-green); }
+        .load-pill.amber { background: rgba(210,153,34,0.15); color: var(--status-amber); }
+        .load-pill.red   { background: rgba(248,81,73,0.15); color: var(--status-red); }
+        .proc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem; }
+        @media (max-width: 600px) { .proc-grid { grid-template-columns: 1fr; } }
+        .proc-card {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 0.9rem 1rem;
+        }
+        .proc-title { font-size: 11px; font-weight: 600; color: var(--text-subtle); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.6rem; }
+        .proc-row { display: flex; align-items: center; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
+        .proc-row:last-child { border-bottom: none; }
+        .proc-name { color: var(--text-secondary); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .proc-val { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+        .net-badges { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .net-badge { display: flex; align-items: center; gap: 0.3rem; font-size: 13px; color: var(--text-secondary); }
+        .net-badge .arrow { color: var(--text-subtle); }
+    </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+    <div class="subtabs">
+        <button class="subtab active" data-tab="services">Services</button>
+        <button class="subtab" data-tab="health">Health</button>
+    </div>
+    <div class="topbar-spacer"></div>
+    <span class="last-checked" id="lastChecked">—</span>
+    <button class="btn-refresh" id="btnRefresh" title="Refresh">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refresh
+    </button>
+</div>
+
+<!-- Error banner -->
+<div class="error-banner" id="errorBanner">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span id="errorMsg">Cannot reach server</span>
+</div>
+
+<!-- Services tab -->
+<div class="tab-panel active" id="panel-services">
+    <div class="service-grid" id="serviceGrid">
+        <!-- skeleton cards -->
+        <div class="service-card status-loading">
+            <div class="card-cover"><div class="card-cover-bg skeleton" style="width:100%;height:100%;aspect-ratio:4/3"></div></div>
+            <div class="card-body"><div class="skeleton" style="height:12px;width:80%"></div><div class="skeleton" style="height:10px;width:60%;margin-top:6px"></div></div>
+        </div>
+        <div class="service-card status-loading">
+            <div class="card-cover"><div class="card-cover-bg skeleton" style="width:100%;height:100%;aspect-ratio:4/3"></div></div>
+            <div class="card-body"><div class="skeleton" style="height:12px;width:70%"></div><div class="skeleton" style="height:10px;width:55%;margin-top:6px"></div></div>
+        </div>
+        <div class="service-card status-loading">
+            <div class="card-cover"><div class="card-cover-bg skeleton" style="width:100%;height:100%;aspect-ratio:4/3"></div></div>
+            <div class="card-body"><div class="skeleton" style="height:12px;width:75%"></div><div class="skeleton" style="height:10px;width:65%;margin-top:6px"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Health tab -->
+<div class="tab-panel" id="panel-health">
+    <div class="health-grid" id="metricCards">
+        <div class="metric-card"><div class="metric-label">CPU</div><div class="skeleton" style="height:26px;width:80px;margin:8px 0"></div></div>
+        <div class="metric-card"><div class="metric-label">RAM</div><div class="skeleton" style="height:26px;width:100px;margin:8px 0"></div></div>
+        <div class="metric-card"><div class="metric-label">Disk</div><div class="skeleton" style="height:26px;width:80px;margin:8px 0"></div></div>
+    </div>
+    <div id="healthInfo"></div>
+    <div class="proc-grid" id="procGrid"></div>
+</div>
+
+<script>
+// ── State ──
+let activeSubTab = 'services';
+let lastStatusData = null;
+let lastHealthData = null;
+let refreshTimer = null;
+let healthLoaded = false;
+const logsOpen = {};
+
+// ── Sub-tab switching ──
+document.querySelectorAll('.subtab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        activeSubTab = btn.dataset.tab;
+        document.getElementById('panel-' + activeSubTab).classList.add('active');
+        startAutoRefresh();
+        if (activeSubTab === 'health' && !healthLoaded) fetchHealth();
+        else if (activeSubTab === 'services' && !lastStatusData) fetchStatus();
+    });
+});
+
+document.getElementById('btnRefresh').addEventListener('click', () => {
+    if (activeSubTab === 'services') fetchStatus();
+    else fetchHealth();
+});
+
+function startAutoRefresh() {
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => {
+        if (activeSubTab === 'services') fetchStatus();
+        else fetchHealth();
+    }, 30000);
+}
+
+function setTimestamp(ts) {
+    const el = document.getElementById('lastChecked');
+    const d = new Date(ts);
+    el.textContent = 'Last checked ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.classList.remove('stale');
+    setTimeout(() => el.classList.add('stale'), 90000);
+}
+
+function showError(msg) {
+    const el = document.getElementById('errorBanner');
+    document.getElementById('errorMsg').textContent = msg || 'Cannot reach server';
+    el.classList.add('visible');
+}
+function hideError() { document.getElementById('errorBanner').classList.remove('visible'); }
+
+function setRefreshing(on) {
+    document.getElementById('btnRefresh').classList.toggle('spinning', on);
+}
+
+// ══════════════════ SERVICES ══════════════════
+
+async function fetchStatus() {
+    setRefreshing(true);
+    try {
+        const statusRes = await fetch('/api/vps/status');
+        const status = await statusRes.json();
+
+        if (status.error) {
+            showError('Cannot reach server — ' + (status.message || status.error));
+        } else {
+            hideError();
+            lastStatusData = { status };
+            renderServices(status);
+            setTimestamp(status.timestamp);
+        }
+    } catch (e) {
+        showError('Network error: ' + e.message);
+    } finally {
+        setRefreshing(false);
+    }
+}
+
+const CATEGORY_CONFIG = {
+    bots:           { label: 'Bots', icon: '🤖' },
+    apps:           { label: 'Apps', icon: '🚀' },
+    infrastructure: { label: 'Infrastructure', icon: '🛠️' },
+    containers:     { label: 'Containers', icon: '📦' },
+    other:          { label: 'Other', icon: '⚙️' }
+};
+
+function renderServiceCard(svc) {
+    const gradFrom = svc.gradientFrom || '#0d1117';
+    const gradTo = svc.gradientTo || '#21262d';
+    const initial = svc.name.charAt(0).toUpperCase();
+    const coverUrl = `/api/vps/cover/${svc.id}?t=${Date.now()}`;
+
+    return `
+    <div class="service-card status-${svc.status}" id="card-${svc.id}">
+        <div class="card-cover">
+            <div class="card-cover-bg" style="background: linear-gradient(135deg, ${gradFrom} 0%, ${gradTo} 100%)">
+                <img src="${coverUrl}" alt="" onerror="this.style.display='none'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+                <span class="card-cover-initial">${initial}</span>
+            </div>
+
+            <div class="vps-pill">
+                <span class="vps-dot ${svc.status === 'red' ? 'down' : ''}"></span>
+                On VPS
+            </div>
+
+            ${svc.projectAlias ? `
+            <div class="linked-badge">
+                <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                ${esc(svc.projectAlias)}
+            </div>` : ''}
+
+            ${svc.autoDiscovered ? `<div class="auto-badge">auto</div>` : ''}
+
+            <div class="card-cover-overlay">
+                <span class="cover-status-dot ${svc.status}" id="dot-${svc.id}"></span>
+                <span class="card-cover-name">${esc(svc.name)}</span>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <div class="card-desc">${esc(svc.description)}</div>
+            <div class="card-detail" id="detail-${svc.id}">${esc(svc.detail || '')}</div>
+
+            <div class="card-actions">
+                ${svc.dashboardUrl ? `
+                    <a class="btn-dash ${svc.status === 'red' ? 'dimmed' : ''}"
+                       href="${esc(svc.dashboardUrl)}" target="_blank" rel="noopener">
+                        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        ${esc(svc.dashboardLabel || 'Open')}
+                    </a>` : ''}
+
+                ${svc.canRestart ? `
+                    <button class="btn-icon restart" onclick="restartService('${svc.id}','${esc(svc.name)}')" title="Restart">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                        Restart
+                    </button>` : ''}
+
+                <button class="btn-icon" id="logsBtn-${svc.id}" onclick="toggleLogs('${svc.id}')" title="View logs">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    Logs
+                </button>
+
+                <span class="restarting-badge" id="restarting-${svc.id}">
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Restarting…
+                </span>
+            </div>
+        </div>
+
+        <div class="log-viewer" id="logs-${svc.id}">
+            <pre id="logContent-${svc.id}"></pre>
+        </div>
+    </div>`;
+}
+
+function renderServices(data) {
+    const grid = document.getElementById('serviceGrid');
+    if (!data.services || !data.services.length) {
+        grid.innerHTML = '<p style="color:var(--text-subtle);font-size:13px">No services found.</p>';
+        return;
+    }
+
+    // Group by category
+    const groups = {};
+    for (const svc of data.services) {
+        const cat = svc.category || 'other';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(svc);
+    }
+
+    // Render in order
+    const categoryOrder = ['bots', 'apps', 'infrastructure', 'containers', 'other'];
+    let html = '';
+    for (const cat of categoryOrder) {
+        if (!groups[cat] || !groups[cat].length) continue;
+        const cfg = CATEGORY_CONFIG[cat] || { label: cat, icon: '⚙️' };
+        html += `<div class="category-section">
+            <div class="category-header">
+                <span class="category-icon">${cfg.icon}</span>
+                <span class="category-label">${cfg.label}</span>
+                <span class="category-count">${groups[cat].length}</span>
+            </div>
+            <div class="category-grid">
+                ${groups[cat].map(renderServiceCard).join('')}
+            </div>
+        </div>`;
+    }
+    grid.innerHTML = html;
+}
+
+async function restartService(id, name) {
+    if (!confirm(`Restart "${name}"?\n\nThe service will be unavailable for ~30 seconds.`)) return;
+    const badge = document.getElementById('restarting-' + id);
+    if (badge) badge.classList.add('visible');
+    try {
+        const res = await fetch('/api/vps/restart/' + id, { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) showError('Restart failed: ' + (data.error || 'unknown error'));
+        else setTimeout(fetchStatus, 4000);
+    } catch (e) {
+        showError('Restart error: ' + e.message);
+    } finally {
+        if (badge) badge.classList.remove('visible');
+    }
+}
+
+async function toggleLogs(id) {
+    const viewer = document.getElementById('logs-' + id);
+    const btn = document.getElementById('logsBtn-' + id);
+    const content = document.getElementById('logContent-' + id);
+    if (logsOpen[id]) {
+        logsOpen[id] = false;
+        viewer.classList.remove('visible');
+        btn.classList.remove('logs-active');
+        return;
+    }
+    logsOpen[id] = true;
+    viewer.classList.add('visible');
+    btn.classList.add('logs-active');
+    content.textContent = 'Loading…';
+    try {
+        const res = await fetch('/api/vps/logs/' + id);
+        const data = await res.json();
+        content.textContent = data.error ? '⚠ ' + data.error : (data.lines?.join('\n') || '(no output)');
+    } catch (e) {
+        content.textContent = '⚠ ' + e.message;
+    }
+}
+
+// ══════════════════ HEALTH ════════════════════
+
+async function fetchHealth() {
+    setRefreshing(true);
+    try {
+        const res = await fetch('/api/vps/health');
+        const data = await res.json();
+        if (data.error) { showError('Cannot reach server — ' + data.error); }
+        else {
+            hideError();
+            healthLoaded = true;
+            lastHealthData = data;
+            renderHealth(data);
+            setTimestamp(data.timestamp);
+        }
+    } catch (e) { showError('Network error: ' + e.message); }
+    finally { setRefreshing(false); }
+}
+
+function colorClass(pct) {
+    if (pct >= 85) return 'red';
+    if (pct >= 65) return 'amber';
+    return 'green';
+}
+function loadColor(val) {
+    const n = parseFloat(val);
+    if (n >= 3.0) return 'red';
+    if (n >= 1.0) return 'amber';
+    return 'green';
+}
+function formatBytes(bytes) {
+    const b = parseInt(bytes) || 0;
+    if (b > 1e9) return (b / 1e9).toFixed(1) + ' GB';
+    if (b > 1e6) return (b / 1e6).toFixed(1) + ' MB';
+    return (b / 1e3).toFixed(0) + ' KB';
+}
+function buildSparkline(history) {
+    if (!history || history.length < 2) return '';
+    const w = 200, h = 28, pad = 3;
+    const max = Math.max(...history, 1);
+    const pts = history.map((v, i) => {
+        const x = pad + (i / (history.length - 1)) * (w - pad * 2);
+        const y = h - pad - ((v / max) * (h - pad * 2));
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const last = history[history.length - 1] || 0;
+    const col = last >= 85 ? 'var(--status-red)' : last >= 65 ? 'var(--status-amber)' : 'var(--status-green)';
+    return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+    </svg>`;
+}
+
+function renderHealth(d) {
+    const cpuPct = parseInt(d.cpu) || 0;
+    const ramPct = parseInt(d.ram?.pct) || Math.round((d.ram?.used / d.ram?.total) * 100) || 0;
+    const diskPct = parseInt(d.disk?.pct) || 0;
+
+    document.getElementById('metricCards').innerHTML = `
+        <div class="metric-card">
+            <div class="metric-label">CPU Usage</div>
+            <div class="metric-value">${cpuPct}<span class="unit">%</span></div>
+            ${buildSparkline(d.history)}
+            <div class="progress-bar"><div class="progress-fill ${colorClass(cpuPct)}" style="width:${cpuPct}%"></div></div>
+            <div class="metric-sub">Current load</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Memory</div>
+            <div class="metric-value">${ramPct}<span class="unit">%</span></div>
+            <div class="progress-bar"><div class="progress-fill ${colorClass(ramPct)}" style="width:${ramPct}%"></div></div>
+            <div class="metric-sub">${(d.ram?.used/1024).toFixed(1)} / ${(d.ram?.total/1024).toFixed(1)} GB used</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Disk ( / )</div>
+            <div class="metric-value">${diskPct}<span class="unit">%</span></div>
+            <div class="progress-bar"><div class="progress-fill ${colorClass(diskPct)}" style="width:${diskPct}%"></div></div>
+            <div class="metric-sub">${d.disk?.total} total</div>
+        </div>`;
+
+    const loads = d.load || {};
+    document.getElementById('healthInfo').innerHTML = `
+        <div class="info-row">
+            <span class="info-row-label">Load avg</span>
+            <div class="load-dots">
+                <span class="load-pill ${loadColor(loads['1m'])}">${loads['1m'] || '?'} <small style="opacity:0.6">1m</small></span>
+                <span class="load-pill ${loadColor(loads['5m'])}">${loads['5m'] || '?'} <small style="opacity:0.6">5m</small></span>
+                <span class="load-pill ${loadColor(loads['15m'])}">${loads['15m'] || '?'} <small style="opacity:0.6">15m</small></span>
+            </div>
+        </div>
+        <div class="info-row">
+            <span class="info-row-label">Uptime</span>
+            <span class="info-row-value">${esc(d.uptime || 'unknown')}</span>
+        </div>
+        <div class="info-row">
+            <span class="info-row-label">Network</span>
+            <div class="net-badges">
+                <span class="net-badge"><span class="arrow">↑</span> ${formatBytes(d.network?.txBytes)} sent</span>
+                <span class="net-badge"><span class="arrow">↓</span> ${formatBytes(d.network?.rxBytes)} received</span>
+            </div>
+        </div>`;
+
+    document.getElementById('procGrid').innerHTML = `
+        <div class="proc-card">
+            <div class="proc-title">Top by CPU</div>
+            ${(d.topCpu||[]).map(p=>`<div class="proc-row"><span class="proc-name">${esc(p.name)}</span><span class="proc-val">${esc(p.value)}</span></div>`).join('')||'<div class="proc-row" style="color:var(--text-subtle);font-size:11px">No data</div>'}
+        </div>
+        <div class="proc-card">
+            <div class="proc-title">Top by Memory</div>
+            ${(d.topRam||[]).map(p=>`<div class="proc-row"><span class="proc-name">${esc(p.name)}</span><span class="proc-val">${esc(p.value)}</span></div>`).join('')||'<div class="proc-row" style="color:var(--text-subtle);font-size:11px">No data</div>'}
+        </div>`;
+}
+
+function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──
+fetchStatus();
+startAutoRefresh();
+
+window.addEventListener('message', e => {
+    if (e.data?.type === 'tab-activated') {
+        if (activeSubTab === 'services') fetchStatus();
+        else fetchHealth();
+    }
+});
+</script>
+</body>
+</html>
