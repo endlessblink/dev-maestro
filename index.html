@@ -35,6 +35,7 @@
             --color-stats: #06b6d4;
             --color-health: #22c55e;
             --color-changelog: #4ECDC4;
+            --color-flow: #6366f1;
 
             /* Transitions */
             --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -92,6 +93,8 @@
             height: 56px;
             flex-shrink: 0;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15);
+            position: relative;
+            z-index: 50;
         }
 
         .logo {
@@ -189,6 +192,11 @@
             box-shadow: 0 0 8px var(--color-health);
         }
 
+        .tab.active.flow::after {
+            background: var(--color-flow);
+            box-shadow: 0 0 8px var(--color-flow);
+        }
+
         .tab .icon {
             width: 18px;
             height: 18px;
@@ -230,6 +238,11 @@
         .tab.health:hover .icon svg,
         .tab.health.active .icon svg {
             stroke: var(--color-health);
+        }
+
+        .tab.flow:hover .icon svg,
+        .tab.flow.active .icon svg {
+            stroke: var(--color-flow);
         }
 
         .tab.changelog:hover .icon svg,
@@ -371,111 +384,323 @@
         }
 
         /* Project Selector */
-        .project-selector {
+        /* Project switcher — top-right badge + popover */
+        .project-switcher-wrap {
             position: relative;
-            display: flex;
-            align-items: center;
         }
 
-        .project-selector select {
-            appearance: none;
-            -webkit-appearance: none;
-            background: rgba(255, 255, 255, 0.04);
+        .project-switcher-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
+            border-radius: 10px;
             color: var(--text-secondary);
-            font-size: 0.8rem;
-            font-weight: 500;
-            padding: 0.4rem 2rem 0.4rem 0.75rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            font-family: inherit;
             cursor: pointer;
             transition: all var(--transition-normal);
-            max-width: 200px;
-            text-overflow: ellipsis;
-            font-family: inherit;
+            white-space: nowrap;
         }
 
-        .project-selector select:hover {
-            color: var(--brand-primary);
+        .project-switcher-trigger:hover {
+            border-color: rgba(78, 205, 196, 0.35);
             background: rgba(78, 205, 196, 0.08);
-            border-color: rgba(78, 205, 196, 0.2);
+            color: var(--brand-primary);
         }
 
-        .project-selector select:focus {
+        .project-switcher-trigger:focus-visible {
             outline: none;
-            box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.3);
             border-color: var(--brand-primary);
+            box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.25);
         }
 
-        .project-selector select:focus:not(:focus-visible) {
-            box-shadow: none;
-        }
-
-        .project-selector select:focus-visible {
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.3);
+        .project-switcher-trigger[aria-expanded="true"] {
             border-color: var(--brand-primary);
+            background: rgba(78, 205, 196, 0.1);
+            color: var(--text-primary);
         }
 
-        .project-selector select option {
-            background: var(--surface-secondary);
-            color: var(--text-secondary);
+        .project-switcher-trigger[aria-expanded="true"] .project-switcher-caret {
+            transform: rotate(180deg);
         }
 
-        .project-selector::after {
-            content: '';
+        .project-switcher-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--brand-primary);
+            box-shadow: 0 0 6px var(--brand-primary);
+            animation: pulse-dot 2s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.55; }
+        }
+
+        .project-switcher-label {
+            color: var(--text-subtle);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-size: 0.66rem;
+            font-weight: 600;
+        }
+
+        .project-switcher-trigger:hover .project-switcher-label,
+        .project-switcher-trigger[aria-expanded="true"] .project-switcher-label {
+            color: var(--text-muted);
+        }
+
+        .project-switcher-name {
+            color: var(--text-primary);
+            max-width: 18ch;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            letter-spacing: -0.01em;
+        }
+
+        .project-switcher-caret {
+            color: var(--text-muted);
+            transition: transform 180ms ease;
+            flex-shrink: 0;
+        }
+
+        .project-switcher-popover {
             position: absolute;
-            right: 0.6rem;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 0;
-            height: 0;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 5px solid var(--text-muted);
-            pointer-events: none;
+            top: calc(100% + 0.5rem);
+            right: 0;
+            width: 340px;
+            max-height: min(70vh, 520px);
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-medium);
+            border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+            padding: 0.5rem;
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            backdrop-filter: blur(14px) saturate(160%);
+            -webkit-backdrop-filter: blur(14px) saturate(160%);
+            animation: switcher-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1);
         }
 
-        [data-theme="light"] .project-selector select {
-            background: rgba(0, 0, 0, 0.04);
-            border-color: rgba(0, 0, 0, 0.1);
+        .project-switcher-popover[hidden] {
+            display: none;
         }
 
-        [data-theme="light"] .project-selector select:hover {
-            background: rgba(13, 148, 136, 0.08);
-            border-color: rgba(13, 148, 136, 0.2);
+        @keyframes switcher-in {
+            from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+            to { opacity: 1; transform: none; }
         }
 
-        .scan-btn {
-            background: none;
-            border: 1px solid rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.5);
-            cursor: pointer;
-            padding: 4px 6px;
-            border-radius: 6px;
+        .project-switcher-header {
+            padding: 0.25rem 0.25rem 0;
+        }
+
+        .project-switcher-search {
+            width: 100%;
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 0.5rem 0.7rem;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color var(--transition-fast);
+        }
+
+        .project-switcher-search::placeholder {
+            color: var(--text-subtle);
+        }
+
+        .project-switcher-search:focus {
+            border-color: var(--brand-primary);
+        }
+
+        .project-switcher-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            overflow-y: auto;
+            max-height: 340px;
+            padding: 0 0.125rem;
+        }
+
+        .project-switcher-list::-webkit-scrollbar { width: 8px; }
+        .project-switcher-list::-webkit-scrollbar-track { background: transparent; }
+        .project-switcher-list::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 4px;
+        }
+        .project-switcher-list::-webkit-scrollbar-thumb:hover { background: var(--text-subtle); }
+
+        .project-switcher-item {
             display: flex;
             align-items: center;
-            transition: all 0.2s;
-            margin-left: 4px;
+            gap: 0.7rem;
+            padding: 0.55rem 0.6rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 120ms cubic-bezier(0.4, 0, 0.2, 1);
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-align: left;
+            font-family: inherit;
+            color: inherit;
+            position: relative;
         }
-        .scan-btn:hover {
-            color: #60a5fa;
-            border-color: rgba(96,165,250,0.3);
-            background: rgba(96,165,250,0.1);
+
+        .project-switcher-item:hover { background: rgba(78, 205, 196, 0.1); }
+
+        .project-switcher-item.is-active { background: rgba(78, 205, 196, 0.06); }
+
+        .project-switcher-item.is-active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 20%;
+            bottom: 20%;
+            width: 3px;
+            border-radius: 0 2px 2px 0;
+            background: var(--brand-primary);
+            box-shadow: 0 0 8px var(--brand-primary);
         }
-        .scan-btn.scanning {
-            animation: spin 1s linear infinite;
+
+        .project-switcher-item.is-highlighted {
+            background: var(--surface-hover);
+            outline: 1px solid rgba(78, 205, 196, 0.35);
         }
-        @keyframes spin {
-            100% { transform: rotate(360deg); }
+
+        .project-switcher-item.is-archived { opacity: 0.5; }
+        .project-switcher-item.is-disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .project-switcher-item-cover {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            flex-shrink: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            background: linear-gradient(135deg, rgba(78, 205, 196, 0.25), rgba(99, 102, 241, 0.25));
+            letter-spacing: -0.02em;
         }
-        [data-theme="light"] .scan-btn {
-            border-color: rgba(0,0,0,0.15);
-            color: rgba(0,0,0,0.4);
+
+        .project-switcher-item-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
         }
-        [data-theme="light"] .scan-btn:hover {
-            color: #2563eb;
-            border-color: rgba(37,99,235,0.3);
-            background: rgba(37,99,235,0.1);
+
+        .project-switcher-item-body {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .project-switcher-item-name {
+            color: var(--text-primary);
+            font-size: 0.88rem;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .project-switcher-item-meta {
+            color: var(--text-subtle);
+            font-size: 0.72rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .project-switcher-item-meta .dot { opacity: 0.5; margin: 0 0.35rem; }
+
+        .project-switcher-item-check { color: var(--brand-primary); flex-shrink: 0; }
+
+        .project-switcher-empty,
+        .project-switcher-error {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 1.25rem 0.75rem;
+            font-size: 0.82rem;
+        }
+
+        .project-switcher-error { color: #f87171; }
+
+        .project-switcher-retry {
+            display: inline-block;
+            margin-top: 0.5rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-medium);
+            background: var(--surface-tertiary);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all var(--transition-fast);
+        }
+
+        .project-switcher-retry:hover {
+            border-color: var(--brand-primary);
+            color: var(--brand-primary);
+        }
+
+        .project-switcher-footer {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.55rem 0.7rem;
+            margin-top: 0.15rem;
+            border-top: 1px solid var(--border-subtle);
+            padding-top: 0.6rem;
+            border-radius: 0 0 10px 10px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            border-left: none;
+            border-right: none;
+            border-bottom: none;
+        }
+
+        .project-switcher-footer:hover {
+            color: var(--brand-primary);
+            background: rgba(78, 205, 196, 0.06);
+        }
+
+        .project-switcher-footer svg { flex-shrink: 0; stroke: currentColor; }
+
+        .project-switcher-footer-arrow {
+            margin-left: auto;
+            font-size: 0.95rem;
+            transition: transform var(--transition-fast);
+        }
+
+        .project-switcher-footer:hover .project-switcher-footer-arrow {
+            transform: translateX(2px);
         }
 
         /* Project switch notification */
@@ -555,6 +780,18 @@
                 </span>
                 <span>Kanban</span>
             </button>
+            <button class="tab flow" data-panel="flow">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="5" cy="6" r="2.2" />
+                        <circle cx="19" cy="6" r="2.2" />
+                        <circle cx="12" cy="18" r="2.2" />
+                        <path d="M7 7 L10 16" />
+                        <path d="M17 7 L14 16" />
+                    </svg>
+                </span>
+                <span>Flow</span>
+            </button>
             <button class="tab skills" data-panel="skills">
                 <span class="icon">
                     <svg viewBox="0 0 24 24">
@@ -606,16 +843,33 @@
 
         <div class="spacer"></div>
 
-        <div class="project-selector">
-            <select id="project-select" title="Switch project">
-                <option value="">Loading...</option>
-            </select>
-            <button id="project-scan-btn" class="scan-btn" title="Scan for new projects" type="button">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+        <div class="project-switcher-wrap">
+            <button id="active-project-badge" class="project-switcher-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="project-switcher-popover" title="Switch active project">
+                <span class="project-switcher-dot" aria-hidden="true"></span>
+                <span class="project-switcher-label">Active</span>
+                <span id="active-project-badge-name" class="project-switcher-name">—</span>
+                <svg class="project-switcher-caret" viewBox="0 0 20 20" width="12" height="12" fill="none" aria-hidden="true">
+                    <path d="M5 7l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
             </button>
+            <div id="project-switcher-popover" class="project-switcher-popover" role="listbox" aria-label="Switch project" hidden>
+                <div class="project-switcher-header">
+                    <input id="project-switcher-search" class="project-switcher-search" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false" />
+                </div>
+                <div id="project-switcher-list" class="project-switcher-list" role="presentation">
+                    <div class="project-switcher-empty">Loading…</div>
+                </div>
+                <button id="project-switcher-manage" class="project-switcher-footer" type="button">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    <span>Manage all projects</span>
+                    <span class="project-switcher-footer-arrow" aria-hidden="true">→</span>
+                </button>
+            </div>
         </div>
 
         <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode">
@@ -654,6 +908,10 @@
         </div>
         <div id="kanban" class="panel active">
             <iframe src="kanban/index.html" title="Development Kanban"></iframe>
+        </div>
+        <div id="flow" class="panel">
+            <!-- Lazy load so the canvas measures a visible container on first render. -->
+            <iframe data-src="flow/index.html" title="Work Lanes"></iframe>
         </div>
         <div id="skills" class="panel">
             <!-- Lazy load: src set on first tab activation to ensure container has dimensions -->
@@ -771,8 +1029,7 @@
         // Initialize theme on page load
         initTheme();
 
-        // --- Project Selector ---
-        const projectSelect = document.getElementById('project-select');
+        // --- Project Switcher ---
         const projectToast = document.getElementById('project-toast');
         let toastTimer = null;
 
@@ -783,81 +1040,13 @@
             toastTimer = setTimeout(() => projectToast.classList.remove('visible'), 2500);
         }
 
-        async function loadProjects() {
-            try {
-                const res = await fetch('/api/projects');
-                const data = await res.json();
-                const projects = data.projects || [];
+        let activeProjectName = '';
 
-                projectSelect.innerHTML = '';
-
-                if (projects.length === 0) {
-                    const opt = document.createElement('option');
-                    opt.value = '';
-                    opt.textContent = 'No projects';
-                    opt.disabled = true;
-                    projectSelect.appendChild(opt);
-                    return;
-                }
-
-                projects.forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p.name;
-                    opt.textContent = p.name;
-                    if (p.active) opt.selected = true;
-                    projectSelect.appendChild(opt);
-                });
-            } catch (err) {
-                projectSelect.innerHTML = '<option value="" disabled>Error loading</option>';
-            }
+        function setActiveBadge(name) {
+            activeProjectName = name || '';
+            const el = document.getElementById('active-project-badge-name');
+            if (el) el.textContent = activeProjectName || '—';
         }
-
-        projectSelect.addEventListener('change', async () => {
-            const name = projectSelect.value;
-            if (!name) return;
-
-            try {
-                const res = await fetch('/api/projects/' + encodeURIComponent(name) + '/activate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                if (!res.ok) {
-                    const err = await res.json();
-                    showToast('Error: ' + (err.error || 'Failed to switch'));
-                    return;
-                }
-
-                showToast('Switched to ' + name);
-                refreshKanban();
-                broadcastProjectSwitch(name);
-            } catch (err) {
-                showToast('Network error switching project');
-            }
-        });
-
-        // Scan for new projects button
-        const scanBtn = document.getElementById('project-scan-btn');
-        scanBtn.addEventListener('click', async () => {
-            scanBtn.classList.add('scanning');
-            scanBtn.disabled = true;
-            try {
-                const res = await fetch('/api/projects/scan');
-                const data = await res.json();
-                const added = (data.added || []).length;
-                if (added > 0) {
-                    showToast('Found ' + added + ' new project' + (added > 1 ? 's' : ''));
-                    await loadProjects();
-                } else {
-                    showToast('No new projects found');
-                }
-            } catch (err) {
-                showToast('Scan failed');
-            } finally {
-                scanBtn.classList.remove('scanning');
-                scanBtn.disabled = false;
-            }
-        });
 
         function refreshKanban() {
             const kanbanIframe = document.querySelector('#kanban iframe');
@@ -867,13 +1056,33 @@
         }
 
         // Notify ALL loaded iframes about project switch
-        function broadcastProjectSwitch(projectName) {
+        function broadcastProjectSwitch(projectInfo) {
+            const project = typeof projectInfo === 'string' ? { name: projectInfo } : (projectInfo || {});
             document.querySelectorAll('.panel iframe').forEach(iframe => {
                 if (iframe.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'project-switch', project: projectName }, '*');
+                    iframe.contentWindow.postMessage({ type: 'project-switch', project: project.name }, '*');
+                    iframe.contentWindow.postMessage({
+                        type: 'switch-project',
+                        project: project.name,
+                        projectRoot: project.root || '',
+                        masterPlanPath: project.masterPlan || ''
+                    }, '*');
                 }
             });
         }
+
+        window.addEventListener('message', (event) => {
+            if (event.data?.type !== 'activate-and-navigate' || !event.data.target) return;
+            const targetPanel = document.getElementById(event.data.target);
+            if (!targetPanel) return;
+            const targetIframe = targetPanel.querySelector('iframe');
+            const alreadyLoaded = targetIframe && !!targetIframe.src;
+            switchTab(event.data.target);
+            localStorage.setItem('watchpost-tab', event.data.target);
+            if (alreadyLoaded && targetIframe.contentWindow && event.data.taskId) {
+                targetIframe.contentWindow.postMessage({ type: 'focus-task', taskId: event.data.taskId }, '*');
+            }
+        });
 
         // SSE: listen for project-changed events from other clients
         const evtSource = new EventSource('/api/events');
@@ -881,21 +1090,321 @@
             try {
                 const msg = JSON.parse(e.data);
                 if (msg.type === 'project-changed' && msg.project) {
-                    // Update dropdown selection
-                    if (projectSelect.querySelector('option[value="' + msg.project.name + '"]')) {
-                        projectSelect.value = msg.project.name;
-                    } else {
-                        loadProjects();
-                    }
+                    setActiveBadge(msg.project.name);
+                    if (window.reloadProjectSwitcher) window.reloadProjectSwitcher();
                     showToast('Project changed to ' + msg.project.name);
                     refreshKanban();
-                    broadcastProjectSwitch(msg.project.name);
+                    broadcastProjectSwitch(msg.project);
                 }
             } catch (_) {}
         });
 
-        // Load projects on startup
-        loadProjects();
+        // ── Project Switcher init ──────────────────────────────────────────
+        (function initProjectSwitcher() {
+            const trigger = document.getElementById('active-project-badge');
+            const popover = document.getElementById('project-switcher-popover');
+            const search = document.getElementById('project-switcher-search');
+            const list = document.getElementById('project-switcher-list');
+            const manageBtn = document.getElementById('project-switcher-manage');
+            if (!trigger || !popover || !search || !list || !manageBtn) return;
+
+            let projects = null;
+            let activeMasterPlan = '';
+            let filter = '';
+            let highlight = 0;
+            let isOpen = false;
+            let fetching = false;
+
+            function escapeHtml(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
+            function initialOf(name) {
+                const ch = (name || '?').trim().charAt(0).toUpperCase();
+                return ch || '?';
+            }
+
+            function composeMeta(p) {
+                const parts = [];
+                const s = p.taskStats || {};
+                if (s.inProgress) parts.push(`${s.inProgress} active`);
+                if (s.done) parts.push(`${s.done} done`);
+                if (p.commits7d) parts.push(`${p.commits7d} commits · 7d`);
+                if (!parts.length) parts.push(p.archived ? 'archived' : 'no activity');
+                return parts.join(' <span class="dot">·</span> ');
+            }
+
+            function isActiveProject(p) {
+                if (activeMasterPlan && p.masterPlan) return p.masterPlan === activeMasterPlan;
+                return p.name === activeProjectName;
+            }
+
+            function sortProjects(items) {
+                return items.slice().sort((a, b) => {
+                    const aActive = isActiveProject(a) ? 1 : 0;
+                    const bActive = isActiveProject(b) ? 1 : 0;
+                    if (aActive !== bActive) return bActive - aActive;
+                    const aArch = a.archived ? 1 : 0;
+                    const bArch = b.archived ? 1 : 0;
+                    if (aArch !== bArch) return aArch - bArch;
+                    const aT = Date.parse(a.lastActivity || '') || 0;
+                    const bT = Date.parse(b.lastActivity || '') || 0;
+                    return bT - aT;
+                });
+            }
+
+            function applyFilter(items) {
+                if (!filter) return items;
+                const q = filter.toLowerCase();
+                return items.filter(p =>
+                    (p.name && p.name.toLowerCase().includes(q)) ||
+                    (p.root && p.root.toLowerCase().includes(q))
+                );
+            }
+
+            function render() {
+                if (fetching && !projects) {
+                    list.innerHTML = '<div class="project-switcher-empty">Loading…</div>';
+                    return;
+                }
+                if (!projects) {
+                    list.innerHTML = `
+                        <div class="project-switcher-error">
+                            Couldn't load projects.
+                            <br><button class="project-switcher-retry" type="button" data-action="retry">Retry</button>
+                        </div>`;
+                    return;
+                }
+                const filtered = applyFilter(sortProjects(projects));
+                if (!filtered.length) {
+                    list.innerHTML = `<div class="project-switcher-empty">No projects match "${escapeHtml(filter)}"</div>`;
+                    return;
+                }
+                if (highlight >= filtered.length) highlight = 0;
+
+                list.innerHTML = filtered.map((p, i) => {
+                    const isActive = isActiveProject(p);
+                    const isDisabled = !p.masterPlan;
+                    const classes = [
+                        'project-switcher-item',
+                        isActive ? 'is-active' : '',
+                        p.archived ? 'is-archived' : '',
+                        isDisabled ? 'is-disabled' : '',
+                        i === highlight ? 'is-highlighted' : ''
+                    ].filter(Boolean).join(' ');
+
+                    const coverInner = p.coverUrl
+                        ? `<img src="${escapeHtml(p.coverUrl)}" alt="" onerror="this.remove()" />`
+                        : escapeHtml(initialOf(p.name));
+
+                    const checkMark = isActive
+                        ? `<svg class="project-switcher-item-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`
+                        : '';
+
+                    const metaBits = [];
+                    if (isDisabled) metaBits.push('<span style="color:#f59e0b">no MASTER_PLAN.md</span>');
+                    else metaBits.push(composeMeta(p));
+
+                    return `
+                        <button type="button" class="${classes}" role="option" aria-selected="${isActive ? 'true' : 'false'}" data-idx="${i}" ${isDisabled ? 'aria-disabled="true"' : ''}>
+                            <span class="project-switcher-item-cover">${coverInner}</span>
+                            <span class="project-switcher-item-body">
+                                <span class="project-switcher-item-name">${escapeHtml(p.name)}</span>
+                                <span class="project-switcher-item-meta">${metaBits.join('')}</span>
+                            </span>
+                            ${checkMark}
+                        </button>
+                    `;
+                }).join('');
+
+                list.querySelectorAll('.project-switcher-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const idx = Number(el.dataset.idx);
+                        const p = filtered[idx];
+                        if (p) activateProject(p);
+                    });
+                    el.addEventListener('mousemove', () => {
+                        const idx = Number(el.dataset.idx);
+                        if (idx !== highlight) {
+                            highlight = idx;
+                            updateHighlightClasses();
+                        }
+                    });
+                });
+                const retryBtn = list.querySelector('[data-action="retry"]');
+                if (retryBtn) retryBtn.addEventListener('click', loadProjectList);
+
+                const hl = list.querySelector('.is-highlighted');
+                if (hl) hl.scrollIntoView({ block: 'nearest' });
+            }
+
+            function updateHighlightClasses() {
+                const items = list.querySelectorAll('.project-switcher-item');
+                items.forEach((el, i) => {
+                    el.classList.toggle('is-highlighted', i === highlight);
+                });
+                const hl = items[highlight];
+                if (hl) hl.scrollIntoView({ block: 'nearest' });
+            }
+
+            async function loadProjectList() {
+                fetching = true;
+                render();
+                try {
+                    const [enrichedRes, statusRes] = await Promise.all([
+                        fetch('/api/projects/enriched'),
+                        fetch('/api/status').catch(() => null)
+                    ]);
+                    if (!enrichedRes.ok) throw new Error(`HTTP ${enrichedRes.status}`);
+                    const data = await enrichedRes.json();
+                    projects = Array.isArray(data) ? data : [];
+                    if (statusRes && statusRes.ok) {
+                        const status = await statusRes.json();
+                        activeMasterPlan = status.masterPlanPath || '';
+                        const activeProj = projects.find(p => p.masterPlan === activeMasterPlan);
+                        if (activeProj) setActiveBadge(activeProj.name);
+                    }
+                } catch (err) {
+                    projects = null;
+                    console.warn('[project-switcher] Failed to load projects:', err);
+                } finally {
+                    fetching = false;
+                    render();
+                }
+            }
+
+            window.reloadProjectSwitcher = () => {
+                projects = null;
+                if (isOpen) loadProjectList();
+            };
+
+            async function activateProject(p) {
+                if (!p.masterPlan) {
+                    showTransientError(`${p.name} has no MASTER_PLAN.md`);
+                    return;
+                }
+                if (isActiveProject(p)) {
+                    closePopover();
+                    switchTab('kanban');
+                    localStorage.setItem('watchpost-tab', 'kanban');
+                    return;
+                }
+                try {
+                    const res = await fetch('/api/projects/' + encodeURIComponent(p.name) + '/activate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.error || `HTTP ${res.status}`);
+                    }
+                    const data = await res.json();
+                    activeMasterPlan = p.masterPlan;
+                    setActiveBadge(p.name);
+                    projects = null;
+                    closePopover();
+                    showToast('Switched to ' + p.name);
+                    refreshKanban();
+                    broadcastProjectSwitch(data.activated || { name: p.name, root: p.root, masterPlan: p.masterPlan });
+                    switchTab('kanban');
+                    localStorage.setItem('watchpost-tab', 'kanban');
+                } catch (err) {
+                    console.error('[project-switcher] Switch failed:', err);
+                    showTransientError(`Switch failed: ${err.message || err}`);
+                }
+            }
+
+            function showTransientError(msg) {
+                const existing = list.querySelector('.project-switcher-error.transient');
+                if (existing) existing.remove();
+                const div = document.createElement('div');
+                div.className = 'project-switcher-error transient';
+                div.textContent = msg;
+                list.prepend(div);
+                setTimeout(() => div.remove(), 3500);
+            }
+
+            function openPopover() {
+                if (isOpen) return;
+                isOpen = true;
+                popover.hidden = false;
+                trigger.setAttribute('aria-expanded', 'true');
+                filter = '';
+                highlight = 0;
+                search.value = '';
+                if (!projects) loadProjectList(); else render();
+                requestAnimationFrame(() => search.focus());
+            }
+
+            function closePopover() {
+                if (!isOpen) return;
+                isOpen = false;
+                popover.hidden = true;
+                trigger.setAttribute('aria-expanded', 'false');
+            }
+
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (isOpen) closePopover(); else openPopover();
+            });
+
+            popover.addEventListener('click', (e) => { e.stopPropagation(); });
+
+            search.addEventListener('input', () => {
+                filter = search.value;
+                highlight = 0;
+                render();
+            });
+
+            search.addEventListener('keydown', (e) => {
+                const items = list.querySelectorAll('.project-switcher-item');
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (items.length) { highlight = (highlight + 1) % items.length; updateHighlightClasses(); }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (items.length) { highlight = (highlight - 1 + items.length) % items.length; updateHighlightClasses(); }
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const el = items[highlight];
+                    if (el) el.click();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closePopover();
+                    trigger.focus();
+                }
+            });
+
+            manageBtn.addEventListener('click', () => {
+                closePopover();
+                switchTab('projects');
+                localStorage.setItem('watchpost-tab', 'projects');
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!isOpen) return;
+                if (popover.contains(e.target) || trigger.contains(e.target)) return;
+                closePopover();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && isOpen) {
+                    closePopover();
+                    trigger.focus();
+                }
+            });
+
+            document.querySelectorAll('.tab').forEach(t => {
+                t.addEventListener('click', () => { if (isOpen) closePopover(); });
+            });
+
+            window.addEventListener('blur', () => { if (isOpen) closePopover(); });
+
+            // Prime the active badge on startup
+            loadProjectList();
+        })();
     </script>
 </body>
 

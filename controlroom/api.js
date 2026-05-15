@@ -54,8 +54,10 @@ function parseTaskStats(masterPlanPath) {
     const stats = { done: 0, inProgress: 0, planned: 0, paused: 0, review: 0, total: 0 };
     try {
         const content = fs.readFileSync(masterPlanPath, 'utf8');
-        const ID_RE = /(TASK|BUG|ROAD|IDEA|ISSUE|FEATURE|INQUIRY)-\d+/i;
-        const STRIKE_RE = /~~\s*(TASK|BUG|ROAD|IDEA|ISSUE|FEATURE|INQUIRY)-\d+\s*~~/i;
+        // T must come LAST in alternation so longer prefixes (TASK, etc.) win
+        // left-to-right matching first. See flow/index.html ID_PATTERN comment.
+        const ID_RE = /(TASK|BUG|ROAD|IDEA|ISSUE|FEATURE|INQUIRY|T)-\d+/i;
+        const STRIKE_RE = /~~\s*(TASK|BUG|ROAD|IDEA|ISSUE|FEATURE|INQUIRY|T)-\d+\s*~~/i;
         const TABLE_SEPARATOR_RE = /^\s*\|\s*:?-{2,}/;
 
         function classify(text) {
