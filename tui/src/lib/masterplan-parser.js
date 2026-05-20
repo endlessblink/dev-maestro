@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+const TASK_ID_RE_SOURCE = '[A-Z][A-Z0-9]*-\\d+';
+
 /**
  * Parse MASTER_PLAN.md and return a Map of external_ref → description.
  * @param {string} masterPlanPath - absolute path to MASTER_PLAN.md
@@ -49,7 +51,7 @@ export function parseMasterPlanDescriptions(masterPlanPath) {
       const line = lines[i];
 
       // Match task section headers: ### TASK-123 or ### ~~TASK-123~~
-      const headerMatch = line.match(/^###\s+(~~)?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE)-\d+)/);
+      const headerMatch = line.match(new RegExp(`^###\\s+(~~)?(${TASK_ID_RE_SOURCE})`));
       if (headerMatch) {
         saveCurrentTask();
         currentRef = headerMatch[2];
@@ -168,8 +170,8 @@ export function parseMasterPlanTasks(masterPlanPath) {
   }
 
   // ── Parse table rows: | **ID** | **Priority** | **Title/Status** |
-  // Format varies but ID is always (TASK|BUG|FEATURE|...)-NNN
-  const TABLE_RE = /\|\s*(?:~~)?\*?\*?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE|INQUIRY)-\d+)\*?\*?(?:~~)?\s*\|([^|]*)\|([^|]*)\|?/;
+  // Format varies but ID is always PREFIX-NNN.
+  const TABLE_RE = new RegExp(`\\|\\s*(?:~~)?\\*?\\*?(${TASK_ID_RE_SOURCE})\\*?\\*?(?:~~)?\\s*\\|([^|]*)\\|([^|]*)\\|?`);
   for (const line of lines) {
     const m = line.match(TABLE_RE);
     if (!m) continue;
@@ -185,7 +187,13 @@ export function parseMasterPlanTasks(masterPlanPath) {
     let title = '';
     let statusText = '';
 
-    if (/P[0-3]/.test(col2)) {
+    const cells = line.split('|').map(c => c.trim()).filter(Boolean);
+    if (cells.length >= 6 && /P[0-3]/.test(cells[4])) {
+      // ID | Lane | Task | Status | Priority | Deps
+      priority = parsePriority(cells[4]);
+      title = cells[2].replace(/\*\*/g, '').replace(/[📋🔄👀⏸️✅]/g, '').trim();
+      statusText = cells[3];
+    } else if (/P[0-3]/.test(col2)) {
       priority = parsePriority(col2);
       // col3 has the title + status
       title = col3.replace(/\*\*/g, '').replace(/[📋🔄👀⏸️✅]/g, '').trim();
@@ -229,7 +237,7 @@ export function parseMasterPlanTasks(masterPlanPath) {
   }
 
   // ── Also parse ### section headers (they have richer status info)
-  const HEADER_RE = /^###\s+(~~)?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE|INQUIRY)-\d+)(?:~~)?[:\s]+(.+)/;
+  const HEADER_RE = new RegExp(`^###\\s+(~~)?(${TASK_ID_RE_SOURCE})(?:~~)?(?:[:\\s\\-–—]+)(.+)`);
   for (let i = 0; i < lines.length; i++) {
     const hm = lines[i].match(HEADER_RE);
     if (!hm) continue;

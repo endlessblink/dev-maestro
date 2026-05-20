@@ -107,6 +107,878 @@
       "modules": [],
       "source": "auto-discovered",
       "addedAt": "2026-03-07"
+    },
+    {
+      "name": "botson",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/botson",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/bots+automation/botson/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "design-ai-bot",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/design-ai-bot",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/bots+automation/design-ai-bot/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "magic-canvas",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/magic-canvas",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/bots+automation/magic-canvas/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "paper-bot",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/paper-bot",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/bots+automation/paper-bot/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "paper-bot-v2",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/paper-bot-v2",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/bots+automation/paper-bot-v2/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "fine-cut",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/Archive/fine-cut",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/Archive/fine-cut/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "arthouse",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/arthouse",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/arthouse/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "capture-studio-react",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio-react",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio-react/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "capture-studio-react/legacy_v1",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio-react/legacy_v1",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/capture-studio-react/legacy_v1/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "inner-dialouge",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/inner-dialouge",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/inner-dialouge/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "rough-cut-mvp",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/rough-cut-mvp",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/rough-cut-mvp/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "Uatu",
+      "root": "/media/endlessblink/data/my-projects/ai-development/devops/Uatu",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/devops/Uatu/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "port-house",
+      "root": "/media/endlessblink/data/my-projects/ai-development/devops/port-house",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/devops/port-house/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "watchpost",
+      "root": "/media/endlessblink/data/my-projects/ai-development/devops/watchpost",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/devops/watchpost/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "contractor",
+      "root": "/media/endlessblink/data/my-projects/ai-development/freelance/contractor",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/freelance/contractor/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "income-zen",
+      "root": "/media/endlessblink/data/my-projects/ai-development/freelance/income-zen",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/freelance/income-zen/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "Archive/palladio-flow",
+      "root": "/media/endlessblink/data/my-projects/ai-development/freelance/kanopia/Archive/palladio-flow",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/freelance/kanopia/Archive/palladio-flow/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "steady-stream",
+      "root": "/media/endlessblink/data/my-projects/ai-development/freelance/steady-stream",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/freelance/steady-stream/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "Archive/Claude-of-war",
+      "root": "/media/endlessblink/data/my-projects/ai-development/game-dev/Archive/Claude-of-war",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/game-dev/Archive/Claude-of-war/docs/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "Archive/master_plan_demo",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/Archive/master_plan_demo",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/misc/Archive/master_plan_demo/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "Archive/templates",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/master-plan/Archive/templates",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/productivity/master-plan/Archive/templates/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "rtl-tools",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/rtl-tools",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/productivity/rtl-tools/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "bina-bekitzur",
+      "root": "/media/endlessblink/data/my-projects/ai-development/web-dev/bina-bekitzur",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/web-dev/bina-bekitzur/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "bina-ve-ze",
+      "root": "/media/endlessblink/data/my-projects/ai-development/web-dev/bina-ve-ze",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/web-dev/bina-ve-ze/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "worlds-greatest-bot",
+      "root": "/media/endlessblink/data/my-projects/ai-development/bots+automation/worlds-greatest-bot",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "cc-linux-enhancments",
+      "root": "/media/endlessblink/data/my-projects/ai-development/cc-linux-enhancments",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "better-cc-resume",
+      "root": "/media/endlessblink/data/my-projects/ai-development/cc-linux-enhancments/better-cc-resume",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "claude-usage-monitor",
+      "root": "/media/endlessblink/data/my-projects/ai-development/claude-code-tools/claude-usage-monitor",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "paperclip",
+      "root": "/media/endlessblink/data/my-projects/ai-development/claude-code-tools/paperclip",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "time-to-claude",
+      "root": "/media/endlessblink/data/my-projects/ai-development/claude-code-tools/time-to-claude",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "Recordly",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/Recordly",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "rough-cut",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/_archive/2026-05-09/rough-cut",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "rough-cut-lane1-merge-safe",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/_archive/2026-05-09/rough-cut-lane1-merge-safe",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "bina-meatzevet-management-vault",
+      "root": "/media/endlessblink/data/my-projects/ai-development/freelance/bina-meatzevet-management-vault",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/freelance/bina-meatzevet-management-vault/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "linkedin-mcp-server",
+      "root": "/media/endlessblink/data/my-projects/ai-development/mcp-servers/external/linkedin-mcp-server",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "redd",
+      "root": "/media/endlessblink/data/my-projects/ai-development/mcp-servers/external/redd",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "reddit-mcp-server",
+      "root": "/media/endlessblink/data/my-projects/ai-development/mcp-servers/external/reddit-mcp-server",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "artists-signing",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/artists-signing",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "lime-automation-lesson-guy",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/lime-automation-lesson-guy",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "facebook-ads-mcp-server",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/lime-automation-lesson-guy/facebook-ads-mcp-server",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "qwen-multi-angle-no-limit",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/qwen-multi-angle-no-limit",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "remotion-test",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/remotion-test",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "contentforge",
+      "root": "/media/endlessblink/data/my-projects/ai-development/misc/roni-test/contentforge",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "desktop-sdk",
+      "root": "/media/endlessblink/data/my-projects/ai-development/onlyoffice-investigation/desktop-sdk",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "sdkjs",
+      "root": "/media/endlessblink/data/my-projects/ai-development/onlyoffice-investigation/sdkjs",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "frontend-slides",
+      "root": "/media/endlessblink/data/my-projects/ai-development/permanent/skills/frontend-slides",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "master-plan",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/master-plan",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "detailed-canvas",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/obsidian-plugins/detailed-canvas",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "pomo-flow-landing",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/pomo-flow-landing",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "claude-desktop-rtl",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/rtl-tools/claude-desktop-rtl",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "codex-rtl",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/rtl-tools/codex-rtl",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Advanced-ControlNet",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Advanced-ControlNet",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Chibi-Nodes",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Chibi-Nodes",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Crystools",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Crystools",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Custom-Scripts",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Custom-Scripts",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Detail-Daemon",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Detail-Daemon",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-DyPE-Nunchaku",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-DyPE-Nunchaku",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-EulerDiscreteScheduler",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-EulerDiscreteScheduler",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-FreeMemory",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-FreeMemory",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-GGUF",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-GGUF",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Impact-Pack",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Impact-Pack",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Impact-Subpack",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Impact-Subpack",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Inpaint-CropAndStitch",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Inpaint-CropAndStitch",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-KJNodes",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-KJNodes",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Logic",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Logic",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Long-CLIP",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Long-CLIP",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Manager",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Manager",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-MelBandRoFormer",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-MelBandRoFormer",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Olm-DragCrop",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Olm-DragCrop",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-Photopea",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-Photopea",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-QwenImageWanBridge",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-QwenImageWanBridge",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-QwenVL",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-QwenVL",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-TiledDiffusion",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-TiledDiffusion",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-VideoHelperSuite",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-VideoHelperSuite",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-WanVideoWrapper",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-YOLO",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-YOLO",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-nhknodes",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-nhknodes",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-nunchaku",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-nunchaku",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI-segment-anything-2",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI-segment-anything-2",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_Comfyroll_CustomNodes",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_Comfyroll_CustomNodes",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_Custom_Nodes_AlekPet",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_Custom_Nodes_AlekPet",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_Fill-Nodes",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_Fill-Nodes",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_Local_Lora_Gallery",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_Local_Lora_Gallery",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_MaraScott_Nodes",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_MaraScott_Nodes",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_QwenVL-2",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_QwenVL-2",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_UltimateSDUpscale",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_UltimateSDUpscale",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ComfyUI_essentials",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ComfyUI_essentials",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ControlAltAI-Nodes",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/ControlAltAI-Nodes",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "Node-in-Motion",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/Node-in-Motion",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "RES4LYF",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/RES4LYF",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "cg-use-everywhere",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/cg-use-everywhere",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "comfy-image-saver",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/comfy-image-saver",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "comfyui-art-venture",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/comfyui-art-venture",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "comfyui-browser",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/comfyui-browser",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "comfyui-model-linker-desktop",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/comfyui-model-linker-desktop",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "comfyui-reactor-node",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/comfyui-reactor-node",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "comfyui-sam3",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/comfyui-sam3",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "comfyui_controlnet_aux",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/comfyui_controlnet_aux",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "efficiency-nodes-comfyui",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/efficiency-nodes-comfyui",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "save-image-extended-comfyui",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/save-image-extended-comfyui",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "was-node-suite-comfyui",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/was-node-suite-comfyui",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "z-image-utilities",
+      "root": "/media/endlessblink/data/my-projects/open-gen-tools/comfyui-venv5/ComfyUI/custom_nodes/z-image-utilities",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "secured-chain",
+      "root": "/media/endlessblink/data/my-projects/ai-development/devops/secured-chain",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/devops/secured-chain/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-15"
+    },
+    {
+      "name": "ghost-in-the-vault",
+      "root": "/media/endlessblink/data/my-projects/ai-development/productivity/obsidian-plugins/ghost-in-the-vault",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/productivity/obsidian-plugins/ghost-in-the-vault/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-17"
+    },
+    {
+      "name": "personal-brand",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/personal-brand",
+      "masterPlan": "/media/endlessblink/data/my-projects/ai-development/content-creation/personal-brand/MASTER_PLAN.md",
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-18"
+    },
+    {
+      "name": "show-runner",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/show-runner",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-18"
+    },
+    {
+      "name": "video-use",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/video-use",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-18"
+    },
+    {
+      "name": "show-runner/video-use",
+      "root": "/media/endlessblink/data/my-projects/ai-development/content-creation/show-runner/video-use",
+      "masterPlan": null,
+      "modules": [],
+      "source": "auto-discovered",
+      "addedAt": "2026-05-18"
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
@@ -14,6 +14,8 @@ const SUMMARIES_DIR = path.join(DATA_DIR, 'summaries');
 const NOTES_FILE = path.join(DATA_DIR, 'user-notes.json');
 const SETTINGS_FILE = path.join(WATCHPOST_DIR, 'settings.json');
 const CHANGELOG_DIR = path.join(DATA_DIR, 'changelog');
+const GIT_INFO_CACHE_TTL_MS = 5 * 60 * 1000;
+const gitInfoCache = new Map();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -119,28 +121,56 @@ function parseTaskStats(masterPlanPath) {
  */
 function getGitInfo(projectRoot) {
     const info = { lastCommitDate: null, commits7d: 0, recentCommits: [] };
-    try {
-        info.lastCommitDate = execSync('git log -1 --format=%ci', {
-            cwd: projectRoot,
-            encoding: 'utf8',
-            stdio: 'pipe'
-        }).trim() || null;
-    } catch { /* not a git repo or no commits */ }
+    const now = Date.now();
+
+    const cached = projectRoot ? gitInfoCache.get(projectRoot) : null;
+    if (cached && now - cached.cachedAt < GIT_INFO_CACHE_TTL_MS) {
+        return cached.value;
+    }
+
+    if (!projectRoot || !fs.existsSync(path.join(projectRoot, '.git'))) {
+        if (projectRoot) gitInfoCache.set(projectRoot, { cachedAt: now, value: info });
+        return info;
+    }
 
     try {
-        const raw = execSync('git log --since="7 days ago" --oneline --no-merges', {
+        const raw = execFileSync('git', [
+            'log',
+            '--max-count=20',
+            '--format=%ct%x00%ci%x00%h%x00%s',
+            '--no-merges'
+        ], {
             cwd: projectRoot,
             encoding: 'utf8',
-            stdio: 'pipe'
+            stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: 1000
         }).trim();
-        const lines = raw ? raw.split('\n').filter(Boolean) : [];
-        info.commits7d = lines.length;
-        info.recentCommits = lines.slice(0, 20).map(line => {
-            const [hash, ...rest] = line.split(' ');
-            return { hash, message: rest.join(' ') };
-        });
+
+        if (!raw) {
+            gitInfoCache.set(projectRoot, { cachedAt: now, value: info });
+            return info;
+        }
+
+        const cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const recentCommits = [];
+
+        for (const line of raw.split('\n').filter(Boolean)) {
+            const [timestamp, commitDate, hash, message = ''] = line.split('\0');
+            const committedAt = Number(timestamp) * 1000;
+
+            if (!info.lastCommitDate) info.lastCommitDate = commitDate || null;
+            if (Number.isFinite(committedAt) && committedAt >= cutoff) {
+                info.commits7d += 1;
+            }
+            if (hash) {
+                recentCommits.push({ hash, message });
+            }
+        }
+
+        info.recentCommits = recentCommits;
     } catch { /* ok */ }
 
+    gitInfoCache.set(projectRoot, { cachedAt: now, value: info });
     return info;
 }
 

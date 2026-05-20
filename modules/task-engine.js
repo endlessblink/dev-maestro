@@ -21,6 +21,7 @@ function initDb(dbPath) {
       title TEXT NOT NULL,
       status TEXT DEFAULT 'planned',
       priority TEXT DEFAULT 'P2',
+      lane TEXT,
       created_at TEXT,
       updated_at TEXT,
       closed_at TEXT
@@ -40,6 +41,11 @@ function initDb(dbPath) {
     );
   `);
 
+  const columns = db.prepare("PRAGMA table_info(tasks)").all().map(column => column.name);
+  if (!columns.includes('lane')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN lane TEXT');
+  }
+
   return db;
 }
 
@@ -52,13 +58,14 @@ function closeDb() {
 
 // ── MD Parsing ──────────────────────────────────────────────────────
 
-const TASK_HEADER_RE = /^###\s+(~~)?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE)-\d+)(~~)?:\s*(.+?)(?:\s*\(([^)]+)\))?\s*$/;
-const FIELD_RE = /^\*\*([\w \/]+)\*\*[^:]*:\s*(.*)/;
+const TASK_ID_SOURCE = '[A-Z][A-Z0-9]*-\\d+';
+const TASK_HEADER_RE = new RegExp(`^###\\s+(~~)?(${TASK_ID_SOURCE})(~~)?(?:\\s*[:\\-–—]\\s*|\\s+)(.+?)(?:\\s*\\(([^)]+)\\))?\\s*$`);
+const FIELD_RE = /^\*\*([\w \/]+):?\*\*:?\s*(.*)/;
 
 // Table row: | ID | title | priority | status | deps |
 // Handles: bold (**TASK-001**), strikethrough (~~TASK-001~~), combined (~~**TASK-001**~~)
 // Cells may be wrapped in ~~ and/or ** for done tasks
-const TABLE_ROW_RE = /^\|\s*(?:~~)?(?:\*\*)?(?:\`?)?((?:TASK|BUG|FEATURE|ROAD|IDEA|ISSUE)-\d+)(?:\`?)?(?:\*\*)?(?:~~)?\s*\|/;
+const TABLE_ROW_RE = new RegExp('^\\|\\s*(?:~~)?(?:\\*\\*)?(?:`?)?(' + TASK_ID_SOURCE + ')(?:`?)?(?:\\*\\*)?(?:~~)?\\s*\\|');
 
 const STATUS_EMOJI_MAP = {
   '🔄 IN PROGRESS': 'in_progress',
@@ -115,7 +122,7 @@ function parseDeps(value) {
   if (!value) return [];
   return value.split(',')
     .map(s => s.trim())
-    .filter(s => /^(TASK|BUG|FEATURE|ROAD|IDEA|ISSUE)-\d+$/.test(s));
+    .filter(s => new RegExp(`^${TASK_ID_SOURCE}$`).test(s));
 }
 
 function parseMarkdown(mdContent) {
@@ -143,6 +150,7 @@ function parseMarkdown(mdContent) {
         title,
         status: isStrikethrough ? 'done' : parseStatus(emojiStatus, null),
         priority: 'P2',
+        lane: '',
         deps: [],
       };
       continue;
@@ -164,13 +172,23 @@ function parseMarkdown(mdContent) {
 
       let title = '';
       let priority = 'P2';
+      let lane = '';
       let status = isStrikethrough ? 'done' : 'planned';
       let deps = [];
 
       // Clean markdown formatting from a cell value
       const clean = (s) => s.replace(/\*\*/g, '').replace(/~~/g, '').replace(/`/g, '').trim();
 
-      if (cells.length >= 5) {
+      if (cells.length >= 6 && /^P[0-4]$/i.test(clean(cells[4]))) {
+        // Format A1: ID | Lane | Task | Status | Priority | Deps
+        lane = clean(cells[1]);
+        title = clean(cells[2]);
+        priority = parsePriority(clean(cells[4]));
+        const rawStatus = clean(cells[3]);
+        if (!isStrikethrough) status = parseStatus(null, rawStatus);
+        const depStr = clean(cells[5]);
+        if (depStr && depStr !== '-' && depStr !== '—') deps = parseDeps(depStr);
+      } else if (cells.length >= 5) {
         // Format A: ID | Title | Priority | Status | Deps
         title = clean(cells[1]);
         priority = parsePriority(clean(cells[2]));
@@ -214,7 +232,7 @@ function parseMarkdown(mdContent) {
 
       // Skip template/example rows
       if (title && !taskId.includes('XXX')) {
-        tasks.push({ id: taskId, title, status, priority, deps });
+        tasks.push({ id: taskId, title, status, priority, lane, deps });
       }
       continue;
     }
@@ -252,16 +270,28 @@ function parseMarkdown(mdContent) {
 
 function syncFromMarkdown(mdPath) {
   const content = fs.readFileSync(mdPath, 'utf8');
-  const tasks = parseMarkdown(content);
+  const parsedTasks = parseMarkdown(content);
+  const taskMap = new Map();
+  for (const task of parsedTasks) {
+    const existing = taskMap.get(task.id);
+    taskMap.set(task.id, existing ? {
+      ...existing,
+      ...task,
+      deps: task.deps.length > 0 ? task.deps : existing.deps,
+      lane: task.lane || existing.lane,
+    } : task);
+  }
+  const tasks = Array.from(taskMap.values());
   const now = new Date().toISOString();
 
   const upsertTask = db.prepare(`
-    INSERT INTO tasks (id, title, status, priority, created_at, updated_at)
-    VALUES (@id, @title, @status, @priority, @now, @now)
+    INSERT INTO tasks (id, title, status, priority, lane, created_at, updated_at)
+    VALUES (@id, @title, @status, @priority, @lane, @now, @now)
     ON CONFLICT(id) DO UPDATE SET
       title = @title,
       status = @status,
       priority = @priority,
+      lane = @lane,
       updated_at = @now,
       closed_at = CASE WHEN @status = 'done' THEN COALESCE(tasks.closed_at, @now) ELSE NULL END
   `);
@@ -271,7 +301,7 @@ function syncFromMarkdown(mdPath) {
 
   const syncAll = db.transaction(() => {
     for (const task of tasks) {
-      upsertTask.run({ id: task.id, title: task.title, status: task.status, priority: task.priority, now });
+      upsertTask.run({ id: task.id, title: task.title, status: task.status, priority: task.priority, lane: task.lane || '', now });
       deleteDeps.run(task.id);
       for (const dep of task.deps) {
         insertDep.run(task.id, dep);
@@ -403,7 +433,7 @@ function getBlocked() {
 }
 
 function getGraph() {
-  const nodes = db.prepare('SELECT id, title, status, priority FROM tasks').all();
+  const nodes = db.prepare('SELECT id, title, status, priority, lane FROM tasks').all();
   const links = db.prepare('SELECT task_id AS target, depends_on AS source FROM deps').all();
   return { nodes, links };
 }

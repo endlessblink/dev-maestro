@@ -3430,6 +3430,9 @@
       return 'todo';
     }
 
+    const TASK_ID_PATTERN = /^[A-Z][A-Z0-9]*-\d+$/;
+    const TASK_ID_CAPTURE = '([A-Z][A-Z0-9]*-\\d+)';
+
     // Parse MASTER_PLAN.md and extract all sections
     async function parseMasterPlan() {
       try {
@@ -3542,11 +3545,12 @@
           // \s+              - At least one space
           // (?:~~)?          - Optional strikethrough start
           // (?:.*?)          - Non-greedy match for any chars (emojis like ✅, 🔴, text like "BUG:")
-          // ((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+) - CAPTURE GROUP 1: The ID itself
+          // PREFIX-123 - CAPTURE GROUP 1: The ID itself
           // (?:~~)?          - Optional strikethrough end
-          if (currentSection === 'activeWork' && trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?/)) {
+          const taskHeaderProbe = new RegExp(`^#{3,4}\\s+(?:~~)?(?:.*?)${TASK_ID_CAPTURE}(?:~~)?`);
+          if (currentSection === 'activeWork' && trimmed.match(taskHeaderProbe)) {
             // Save previous task's subtasks before starting new one
-            if (currentItem && currentItem.id?.match(/^(?:TASK|BUG|ISSUE|FEATURE|ROAD)-/)) {
+            if (currentItem && TASK_ID_PATTERN.test(currentItem.id)) {
               const taskIdx = data.activeWork.findIndex(t => t.id === currentItem.id);
               if (taskIdx >= 0) {
                 data.activeWork[taskIdx].subtasks = currentItem.subtasks || [];
@@ -3578,7 +3582,7 @@
               }
             }
 
-            const match = trimmed.match(/^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/);
+            const match = trimmed.match(new RegExp(`^#{3,4}\\s+(?:~~)?(?:.*?)${TASK_ID_CAPTURE}(?:~~)?(?:\\s*[:\\-–—]\\s*|\\s+)\\s*(.+?)(?:\\s*\\(([^)]+)\\))?$`));
             if (match) {
               // Check both parentheses status AND title for status indicators
               // Title might contain "✅ DONE" or similar without parentheses
@@ -3590,7 +3594,7 @@
                 status = parseTaskStatus(titleText);
               }
               // Also check if task ID has strikethrough (~~TASK-XXX~~) - usually means done
-              const hasStrikethrough = trimmed.match(/~~(?:TASK|BUG|ISSUE)-\d+~~/);
+              const hasStrikethrough = new RegExp(`~~${TASK_ID_CAPTURE}~~`).test(trimmed);
               if (status === 'todo' && hasStrikethrough) {
                 status = 'done';
               }
@@ -3752,8 +3756,8 @@
           }
 
           // Parse table headers
-          if (trimmed.startsWith('| ID ') || trimmed.startsWith('|----')) {
-            if (trimmed.startsWith('| ID ')) {
+          if (/^\|\s*ID\s*\|/i.test(trimmed) || trimmed.startsWith('|----')) {
+            if (/^\|\s*ID\s*\|/i.test(trimmed)) {
               tableHeaders = trimmed.split('|').map(h => h.trim().toLowerCase()).filter(h => h);
               // Skip Task Dependency Index tables (column 2 is "status" not "feature/title")
               // These tables track task dependencies, not task definitions
@@ -3769,18 +3773,29 @@
           if (inTable && trimmed.startsWith('|') && !trimmed.startsWith('|--')) {
             const cells = trimmed.split('|').map(c => c.trim()).filter(c => c);
             if (cells.length >= 2) {
+              const columnIndex = (...names) => tableHeaders.findIndex(h => names.some(name => h === name || h.includes(name)));
+              const idIndex = Math.max(0, columnIndex('id'));
+              const titleIndex = columnIndex('task', 'title', 'feature');
+              const laneIndex = columnIndex('lane', 'domain', 'area');
+              const statusIndex = columnIndex('status');
+              const priorityIndex = columnIndex('priority');
+
               // Extract ID (handle strikethrough)
-              const rawId = cells[0];
+              const rawId = cells[idIndex] || cells[0];
               const id = rawId.replace(/[~*`]/g, '').trim();
-              const isDone = rawId.includes('~~') ||
-                cells.some(c => c.includes('DONE') || c.includes('FIXED') || c.includes('✅'));
+              if (!TASK_ID_PATTERN.test(id)) continue;
+
+              const statusCell = statusIndex >= 0 ? cells[statusIndex] || '' : cells.join(' ');
+              const parsedStatus = parseTaskStatus(statusCell);
+              const isDone = rawId.includes('~~') || parsedStatus === 'done';
 
               // Map columns based on headers
               // Detect column order: cells[1] might be priority (P0-P3) or title
-              let titleCell = cells[1] || '';
-              let priorityFromTable = '';
+              let titleCell = titleIndex >= 0 ? cells[titleIndex] || '' : cells[1] || '';
+              let priorityFromTable = priorityIndex >= 0 ? (cells[priorityIndex] || '').replace(/[~*`]/g, '').trim() : '';
+              const laneCell = laneIndex >= 0 ? (cells[laneIndex] || '').replace(/[~*`]/g, '').trim() : '';
               const cell1Clean = titleCell.replace(/[~*`]/g, '').trim();
-              if (/^P[0-4]$/i.test(cell1Clean) && cells.length >= 3) {
+              if (!priorityFromTable && /^P[0-4]$/i.test(cell1Clean) && cells.length >= 3) {
                 // cells[1] is priority, cells[2] is title
                 priorityFromTable = cell1Clean.toUpperCase();
                 titleCell = cells[2] || '';
@@ -3789,8 +3804,9 @@
               const item = {
                 id: id,
                 title: titleCell.replace(/~~/g, '').replace(/\*\*/g, '') || '',
-                status: isDone ? 'done' : 'todo',
+                status: isDone ? 'done' : parsedStatus,
                 priority: priorityFromTable,
+                lane: laneCell,
                 notes: '',
                 section: currentSection,
                 progress: isDone ? 100 : 0  // Set progress based on done status
@@ -3850,7 +3866,7 @@
                 } else {
                   data.issues.push(item);
                 }
-              } else if (id.startsWith('TASK-')) {
+              } else {
                 // Update existing task if present (TASK headers are parsed separately)
                 const existingTask = data.activeWork.find(t => t.id === id);
                 if (existingTask) {
@@ -3860,6 +3876,7 @@
                   }
                   // Merge notes/title if needed
                   if (!existingTask.notes && item.notes) existingTask.notes = item.notes;
+                  if (!existingTask.lane && item.lane) existingTask.lane = item.lane;
                   // TASK-323 FIX: Table parsing is authoritative for done status (strikethrough + DONE markers)
                   if (isDone && existingTask.status !== 'done') {
                     existingTask.status = 'done';
@@ -3874,7 +3891,7 @@
         }
 
         // Finalize last task's subtasks and progress
-        if (currentItem && currentItem.id?.match(/^(?:TASK|BUG|ISSUE)-/)) {
+        if (currentItem && TASK_ID_PATTERN.test(currentItem.id)) {
           const taskIdx = data.activeWork.findIndex(t => t.id === currentItem.id);
           if (taskIdx >= 0) {
             data.activeWork[taskIdx].subtasks = currentItem.subtasks || [];
@@ -4006,11 +4023,59 @@
       return tasks;
     }
 
-    // Render kanban board from MASTER_PLAN.md
+    async function loadTaskApiKanbanData() {
+      if (!CONFIG.useApi) return null;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks/list?t=${Date.now()}`);
+        if (!response.ok) return null;
+
+        const json = await response.json();
+        const tasks = Array.isArray(json.tasks) ? json.tasks : [];
+        if (!tasks.length) return null;
+
+        const statusMap = {
+          planned: 'todo',
+          open: 'todo',
+          in_progress: 'in-progress',
+          review: 'review',
+          paused: 'paused',
+          done: 'done',
+          closed: 'done'
+        };
+
+        return {
+          ideas: [],
+          roadmap: { nearTerm: [], later: [] },
+          activeWork: tasks.map(task => {
+            const status = statusMap[task.status] || 'todo';
+            return {
+              id: task.id,
+              title: task.title,
+              status,
+              priority: task.priority || '',
+              lane: task.lane || '',
+              section: 'activeWork',
+              description: '',
+              subtasks: [],
+              progress: status === 'done' ? 100 : status === 'in-progress' ? 50 : 0
+            };
+          }),
+          bugs: [],
+          issues: [],
+          archive: []
+        };
+      } catch (error) {
+        console.warn('[renderKanban] Native task API unavailable, falling back to MASTER_PLAN parser:', error);
+        return null;
+      }
+    }
+
+    // Render kanban board from MASTER_PLAN.md / native task API
     async function renderKanban() {
       try {
         console.log('[renderKanban] Starting render...');
-        const data = await parseMasterPlan();
+        const data = await loadTaskApiKanbanData() || await parseMasterPlan();
         console.log('[renderKanban] Parsed data:', {
           activeWork: data.activeWork.length,
           bugs: data.bugs.length,
@@ -4117,7 +4182,8 @@
               const typeLabel = task.id.startsWith('BUG-') ? `${ICONS.bug}Bug` :
                 task.id.startsWith('ISSUE-') ? `${ICONS.issue}Issue` :
                   task.id.startsWith('ROAD-') ? `${ICONS.roadmap}Roadmap` :
-                    task.id.startsWith('TASK-') ? `${ICONS.task}Task` : '';
+                    task.id.startsWith('TASK-') ? `${ICONS.task}Task` : `${ICONS.task}${task.id.split('-')[0]}`;
+              const laneLabel = task.lane ? `${ICONS.task}${task.lane}` : '';
 
               // Use task's calculated progress, or default based on status
               const progress = task.progress !== undefined ? task.progress :
@@ -4187,6 +4253,7 @@
               <div class="task-footer">
                 <div class="task-meta">
                   ${typeLabel ? `<span class="task-tags">${typeLabel}</span>` : ''}
+                  ${laneLabel ? `<span class="task-tags">${laneLabel}</span>` : ''}
                 </div>
                 <div class="task-progress" title="Task Progress: ${progress}%">
                   <div class="progress-label">PROGRESS</div>

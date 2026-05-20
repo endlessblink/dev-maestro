@@ -1680,9 +1680,8 @@
   <script>
     /* ─── Constants ────────────────────────────────────────────────── */
     const API_BASE = window.location.origin;
-    // `T` (single letter) is botson's prefix; placed last so longer matches like
-    // TASK / ROAD win first via left-to-right alternation. Don't reorder.
-    const ID_PATTERN = /(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/g;
+    const TASK_ID_SOURCE = '[A-Z][A-Z0-9]*-\\d+';
+    const ID_PATTERN = new RegExp(TASK_ID_SOURCE, 'g');
     const TOP_N_RECOMMENDED = 3;
 
     const STATUS_FILL = {
@@ -1744,7 +1743,7 @@
       const tasks = [];
       let current = null;
 
-      const headerRe = /^#{3,4}\s+(?:~~)?(?:.*?)((?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+)(?:~~)?(?::| - | )?\s*(.+?)(?:\s*\(([^)]+)\))?$/;
+      const headerRe = new RegExp(`^#{3,4}\\s+(?:~~)?(?:.*?)(${TASK_ID_SOURCE})(?:~~)?(?:\\s*[:\\-–—]\\s*|\\s+)\\s*(.+?)(?:\\s*\\(([^)]+)\\))?$`);
 
       // Section tracking: any `###` or `##` header that does NOT contain a task ID
       // is treated as a section/category boundary (e.g. "Recording Infrastructure",
@@ -1773,7 +1772,7 @@
           const sec = trimmed.match(sectionHeaderRe);
           if (sec) {
             const name = sec[1].replace(/~~/g, '').trim();
-            if (!/(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+/.test(name)) {
+            if (!new RegExp(TASK_ID_SOURCE).test(name)) {
               currentSection = name;
             }
           }
@@ -1802,10 +1801,11 @@
           const priorityCol = tableHeaders.findIndex(h => /priority|prio/.test(h));
           const statusCol = tableHeaders.findIndex(h => /status|state/.test(h));
           const depsCol = tableHeaders.findIndex(h => /depend|block|^deps?$/.test(h));
+          const laneCol = tableHeaders.findIndex(h => /lane|domain|area|section/.test(h));
           if (idCol < 0 || priorityCol < 0 || statusCol < 0) continue;
 
           const id = cleanCell(rawCells[idCol]);
-          if (!/^(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+$/.test(id)) continue;
+          if (!new RegExp(`^${TASK_ID_SOURCE}$`).test(id)) continue;
 
           const title = cleanCell(rawCells[titleCol >= 0 ? titleCol : 1]);
           const priority = cleanCell(rawCells[priorityCol]);
@@ -1823,7 +1823,7 @@
             dependsOn: depsIds,
             blocks: [],
             body: '',
-            streamParent: currentSection,
+            streamParent: laneCol >= 0 ? cleanCell(rawCells[laneCol]) || currentSection : currentSection,
           });
           continue;
         } else if (!trimmed.startsWith('|')) {
@@ -1834,7 +1834,7 @@
           if (current) tasks.push(current);
           const parenStatus = headerMatch[3] ? headerMatch[3].toUpperCase() : '';
           const titleText = (headerMatch[2] || '').toUpperCase();
-          const strikethrough = /~~(?:TASK|BUG|ISSUE|FEATURE|ROAD|T)-\d+~~/.test(trimmed);
+          const strikethrough = new RegExp(`~~${TASK_ID_SOURCE}~~`).test(trimmed);
           const id = headerMatch[1];
           current = {
             id,
@@ -4193,6 +4193,53 @@
       }
     }
 
+    async function fetchTaskApiFlowTasks() {
+      try {
+        const graph = await fetchJson(`${API_BASE}/api/tasks/graph?t=${Date.now()}`);
+        const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+        if (!nodes.length) return [];
+
+        const dependsByTask = new Map();
+        for (const link of graph.links || []) {
+          if (!link?.target || !link?.source) continue;
+          if (!dependsByTask.has(link.target)) dependsByTask.set(link.target, []);
+          dependsByTask.get(link.target).push(link.source);
+        }
+
+        const statusMap = {
+          done: 'done',
+          closed: 'done',
+          planned: 'planned',
+          open: 'planned',
+          in_progress: 'in-progress',
+          'in-progress': 'in-progress',
+          review: 'review',
+          paused: 'paused'
+        };
+        const priorityToRank = priority => {
+          const value = String(priority || '').toLowerCase();
+          if (value.startsWith('p0') || value.startsWith('p1') || value.includes('high')) return 'high';
+          if (value.startsWith('p2') || value.includes('medium')) return 'medium';
+          return 'low';
+        };
+
+        return nodes.map(task => ({
+          id: task.id,
+          title: task.title || task.id,
+          status: statusMap[task.status] || 'unknown',
+          priority: priorityToRank(task.priority),
+          dueDate: null,
+          dependsOn: [...new Set(dependsByTask.get(task.id) || [])],
+          blocks: [],
+          body: '',
+          streamParent: task.lane || task.type || 'Tasks',
+        }));
+      } catch (error) {
+        console.warn('[Flow] Native task API unavailable, falling back to MASTER_PLAN parser:', error);
+        return [];
+      }
+    }
+
     function buildActivityByTask(entries) {
       const latestByTask = new Map();
       for (const entry of entries) {
@@ -4354,12 +4401,14 @@
     /* ─── Data fetch ──────────────────────────────────────────────── */
     async function fetchAndRender(shouldFit = false) {
       try {
-        const [status, json] = await Promise.all([
+        const [status, json, apiTasks] = await Promise.all([
           fetchStatusContext(),
           fetchJson(`${API_BASE}/api/master-plan${currentProjectRoot ? `?cwd=${encodeURIComponent(currentProjectRoot)}` : ''}`),
+          fetchTaskApiFlowTasks(),
         ]);
         rawMarkdown = json.content || '';
-        allTasks = parseMasterPlan(rawMarkdown);
+        const parsedTasks = parseMasterPlan(rawMarkdown);
+        allTasks = apiTasks.length ? apiTasks : parsedTasks;
         currentProjectRoot = status?.project || '';
         currentProjectFilter = deriveProjectFilter(status);
         const [locks, recentEntries] = await Promise.all([

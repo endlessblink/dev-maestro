@@ -1993,8 +1993,55 @@ const runBd = (args) => {
     }
 };
 
+function mapNativeTaskStatus(status) {
+    if (status === 'done') return 'closed';
+    if (status === 'planned') return 'open';
+    return status;
+}
+
+function mapNativeTaskToIssue(task) {
+    const prefix = task.id?.match(/^([A-Z][A-Z0-9]*)-/)?.[1]?.toLowerCase() || 'task';
+    return {
+        ...task,
+        status: mapNativeTaskStatus(task.status),
+        issue_type: prefix,
+        external_ref: task.id,
+        dependency_count: 0,
+        dependent_count: 0
+    };
+}
+
+function getNativeTaskFilter(status) {
+    if (!status) return { status: undefined, excludeDone: true };
+    if (status === 'closed') return { status: 'done', excludeDone: false };
+    if (status === 'open') return { status: 'planned', excludeDone: false };
+    return { status, excludeDone: false };
+}
+
+function getNativeIssues(status) {
+    const filter = getNativeTaskFilter(status);
+    const tasks = taskEngine.getTasks(filter.status ? { status: filter.status } : undefined);
+    return (filter.excludeDone ? tasks.filter(task => task.status !== 'done') : tasks).map(mapNativeTaskToIssue);
+}
+
 // GET /api/beads/stats - Project statistics
 app.get('/api/beads/stats', (req, res) => {
+    if (taskEngineReady) {
+        const tasks = taskEngine.getTasks();
+        const ready = taskEngine.getReady().length;
+        const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+        const blocked = taskEngine.getBlocked().length;
+        const done = tasks.filter(t => t.status === 'done').length;
+        return res.json({
+            summary: {
+                total_issues: tasks.length,
+                ready_issues: ready,
+                in_progress_issues: inProgress,
+                blocked_issues: blocked,
+                closed_issues: done
+            }
+        });
+    }
     const stats = runBd('stats');
     res.json(stats || { error: 'Failed to fetch stats' });
 });
@@ -2002,6 +2049,9 @@ app.get('/api/beads/stats', (req, res) => {
 // GET /api/beads/list - All issues (supports ?status=open,in_progress,closed,blocked)
 app.get('/api/beads/list', (req, res) => {
     const status = req.query.status;
+    if (taskEngineReady) {
+        return res.json({ issues: getNativeIssues(status), error: null });
+    }
     const args = status ? `list --limit 0 --status=${status}` : 'list --limit 0';
     const issues = runBd(args);
     res.json({ issues: issues || [], error: issues ? null : 'Failed to fetch issues' });
@@ -2009,6 +2059,9 @@ app.get('/api/beads/list', (req, res) => {
 
 // GET /api/beads/ready - Ready issues (unblocked)
 app.get('/api/beads/ready', (req, res) => {
+    if (taskEngineReady) {
+        return res.json({ issues: taskEngine.getReady().map(mapNativeTaskToIssue), error: null });
+    }
     const issues = runBd('ready');
     res.json({ issues: issues || [], error: issues ? null : 'Failed to fetch ready issues' });
 });
@@ -2021,6 +2074,22 @@ app.get('/api/beads/deps/:id', (req, res) => {
 
 // GET /api/beads/graph - Full dependency graph for D3
 app.get('/api/beads/graph', (req, res) => {
+    if (taskEngineReady) {
+        const graph = taskEngine.getGraph();
+        return res.json({
+            nodes: graph.nodes.map(task => ({
+                id: task.id,
+                title: task.title,
+                status: mapNativeTaskStatus(task.status),
+                priority: task.priority,
+                lane: task.lane,
+                type: task.id?.match(/^([A-Z][A-Z0-9]*)-/)?.[1]?.toLowerCase() || 'task',
+                dependencyCount: 0,
+                dependentCount: 0
+            })),
+            links: graph.links
+        });
+    }
     const issues = runBd('list --limit 0');
     if (!issues) return res.json({ nodes: [], links: [] });
 
