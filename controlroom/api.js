@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,10 @@ const SUMMARIES_DIR = path.join(DATA_DIR, 'summaries');
 const NOTES_FILE = path.join(DATA_DIR, 'user-notes.json');
 const SETTINGS_FILE = path.join(WATCHPOST_DIR, 'settings.json');
 const CHANGELOG_DIR = path.join(DATA_DIR, 'changelog');
+const CLAUDE_PROJECTS_DIR = path.join(process.env.HOME || '', '.claude', 'projects');
+const OPENCODE_STORAGE_DIR = path.join(process.env.HOME || '', '.local', 'share', 'opencode', 'storage');
+const DIRTY_ATTRIBUTION_CACHE_TTL_MS = 2000;
+const dirtyAttributionCache = new Map();
 const GIT_INFO_CACHE_TTL_MS = 5 * 60 * 1000;
 const gitInfoCache = new Map();
 
@@ -351,6 +355,253 @@ function flushHeartbeats() {
         // Disk pressure shouldn't break the in-memory liveness map; the next
         // heartbeat retries the append.
     }
+}
+
+// ─── Session liveness + dirty attribution (recovered TASK-001/002) ───────────
+// Restored from feature tip 84f1606 after the add-only overlay (2c6f94e) dropped
+// these from controlroom/api.js. Purely additive; reuses existing readChangelogEntries.
+function getLiveHeartbeats(cutoffMs, cwd) {
+    loadHeartbeatsFromDisk();
+    const out = [];
+    for (const entry of heartbeats.values()) {
+        if (!Number.isFinite(entry.lastSeenMs) || entry.lastSeenMs < cutoffMs) continue;
+        if (cwd && entry.cwd) {
+            try {
+                if (path.resolve(entry.cwd) !== cwd) continue;
+            } catch {
+                continue;
+            }
+        }
+        out.push(entry);
+    }
+    return out;
+}
+
+function safeJSONStringify(value) {
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return '{}';
+    }
+}
+
+function getProjectNameFromCwd(cwd) {
+    if (!cwd) return 'unknown';
+
+    const projectData = readJSON(PROJECTS_FILE, []);
+    const projects = Array.isArray(projectData)
+        ? projectData
+        : Array.isArray(projectData?.projects)
+            ? projectData.projects
+            : [];
+    let bestMatch = null;
+
+    for (const project of projects) {
+        const root = project.root || project.path;
+        if (!root || !cwd.startsWith(root)) continue;
+        if (!bestMatch || root.length > bestMatch.root.length) {
+            bestMatch = { name: project.name, root };
+        }
+    }
+
+    return bestMatch?.name || path.basename(cwd) || 'unknown';
+}
+
+function getRequestCwd(req) {
+    let queryCwd = null;
+    if (typeof req?.originalUrl === 'string') {
+        const rawQuery = req.originalUrl.split('?')[1] || '';
+        const match = rawQuery.match(/(?:^|&)cwd=([^&]*)/);
+        if (match) {
+            try {
+                queryCwd = decodeURIComponent(match[1]);
+            } catch {
+                queryCwd = match[1];
+            }
+        }
+    }
+
+    if (!queryCwd && typeof req?.query?.cwd === 'string') queryCwd = req.query.cwd;
+    if (!queryCwd && typeof req?.body?.cwd === 'string') queryCwd = req.body.cwd;
+    if (!queryCwd && typeof req?.headers?.['x-watchpost-cwd'] === 'string') queryCwd = req.headers['x-watchpost-cwd'];
+
+    if (!queryCwd) return null;
+
+    try {
+        return path.resolve(queryCwd);
+    } catch {
+        return null;
+    }
+}
+
+function listClaudeSessionFiles(days) {
+    const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const files = [];
+
+    try {
+        const projectDirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true });
+        for (const projectDir of projectDirs) {
+            if (!projectDir.isDirectory()) continue;
+            const fullDir = path.join(CLAUDE_PROJECTS_DIR, projectDir.name);
+            let entries = [];
+            try {
+                entries = fs.readdirSync(fullDir, { withFileTypes: true });
+            } catch {
+                continue;
+            }
+
+            for (const entry of entries) {
+                if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+                const fullPath = path.join(fullDir, entry.name);
+                try {
+                    const stat = fs.statSync(fullPath);
+                    if (stat.mtimeMs >= cutoffMs) files.push(fullPath);
+                } catch {
+                    // Ignore unreadable files.
+                }
+            }
+        }
+    } catch {
+        return [];
+    }
+
+    return files;
+}
+
+function readLiveClaudeEntries(days, projectFilter) {
+    const cutoffIso = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
+    const entries = [];
+    const seen = new Set();
+
+    for (const filePath of listClaudeSessionFiles(days)) {
+        let content = '';
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+        } catch {
+            continue;
+        }
+
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            let row;
+            try {
+                row = JSON.parse(trimmed);
+            } catch {
+                continue;
+            }
+
+            if (row?.type !== 'assistant' || !Array.isArray(row?.message?.content)) continue;
+
+            const ts = row.timestamp || '';
+            if (!ts || ts < cutoffIso) continue;
+
+            const project = getProjectNameFromCwd(row.cwd);
+            if (projectFilter && project !== projectFilter) continue;
+
+            for (const item of row.message.content) {
+                if (item?.type !== 'tool_use' || !item?.name) continue;
+
+                const tid = item.id || `${row.sessionId || 'unknown'}:${item.name}:${ts}`;
+                const dedupeKey = `${row.sessionId || 'unknown'}:${tid}`;
+                if (seen.has(dedupeKey)) continue;
+                seen.add(dedupeKey);
+
+                const input = item.input || {};
+                entries.push({
+                    ts,
+                    sid: row.sessionId || null,
+                    tid,
+                    tool: item.name,
+                    event: 'ToolUse',
+                    project,
+                    cwd: row.cwd || null,
+                    file: input.file_path || null,
+                    cmd: input.command || null,
+                    summary: safeJSONStringify(input),
+                    agent: row.slug || 'claude',
+                    branch: row.gitBranch || null
+                });
+            }
+        }
+    }
+
+    return entries;
+}
+
+function readOpenCodeEntries(days, projectFilter) {
+    const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const sessionDirs = path.join(OPENCODE_STORAGE_DIR, 'session');
+    const messageDirs = path.join(OPENCODE_STORAGE_DIR, 'message');
+    const sessionCwds = new Map();
+    const entries = [];
+
+    try {
+        for (const projectDir of fs.readdirSync(sessionDirs, { withFileTypes: true })) {
+            if (!projectDir.isDirectory()) continue;
+            const projectSessionDir = path.join(sessionDirs, projectDir.name);
+            for (const sessionFile of fs.readdirSync(projectSessionDir, { withFileTypes: true })) {
+                if (!sessionFile.isFile() || !sessionFile.name.endsWith('.json')) continue;
+                const session = readJSON(path.join(projectSessionDir, sessionFile.name), null);
+                if (session?.id && session?.directory) sessionCwds.set(session.id, session.directory);
+            }
+        }
+    } catch {
+        return entries;
+    }
+
+    try {
+        for (const dir of fs.readdirSync(messageDirs, { withFileTypes: true })) {
+            if (!dir.isDirectory()) continue;
+            const sessionId = dir.name;
+            const sessionCwd = sessionCwds.get(sessionId) || null;
+            const project = getProjectNameFromCwd(sessionCwd);
+            if (projectFilter && project !== projectFilter) continue;
+
+            for (const messageFile of fs.readdirSync(path.join(messageDirs, dir.name), { withFileTypes: true })) {
+                if (!messageFile.isFile() || !messageFile.name.endsWith('.json')) continue;
+                const fullPath = path.join(messageDirs, dir.name, messageFile.name);
+                let stat;
+                try {
+                    stat = fs.statSync(fullPath);
+                } catch {
+                    continue;
+                }
+                if (stat.mtimeMs < cutoffMs) continue;
+
+                const message = readJSON(fullPath, null);
+                const diffs = Array.isArray(message?.summary?.diffs) ? message.summary.diffs : [];
+                if (diffs.length === 0) continue;
+
+                const seenMs = message?.time?.completed || message?.time?.created || stat.mtimeMs;
+                if (seenMs < cutoffMs) continue;
+                const cwd = message?.path?.cwd || sessionCwd;
+
+                for (const diff of diffs) {
+                    if (!diff?.file) continue;
+                    entries.push({
+                        ts: new Date(seenMs).toISOString(),
+                        sid: message.sessionID || sessionId,
+                        tid: message.id || null,
+                        tool: 'opencode.summary',
+                        event: 'DiffSummary',
+                        project,
+                        cwd,
+                        file: diff.file,
+                        cmd: null,
+                        summary: message?.summary?.title || null,
+                        agent: message?.agent || message?.providerID || 'opencode',
+                        branch: null
+                    });
+                }
+            }
+        }
+    } catch {
+        return entries;
+    }
+
+    return entries;
 }
 
 // ─── Route mount ─────────────────────────────────────────────────────────────
@@ -1331,6 +1582,177 @@ Start by reviewing the recent changes and pick up the next task.`;
 
     // ── 17. GET /api/changelog/projects ───────────────────────────────────
 
+    function getCombinedChangelogEntries(days, projectFilter) {
+        const projects = projectFilter ? [projectFilter] : listChangelogProjects();
+        let entries = [];
+
+        for (const proj of projects) {
+            entries = entries.concat(readChangelogEntries(proj, days));
+        }
+
+        return entries
+            .concat(readLiveClaudeEntries(days, projectFilter))
+            .concat(readOpenCodeEntries(days, projectFilter));
+    }
+
+    function parseGitPorcelain(raw) {
+        return raw.split('\n')
+            .filter(Boolean)
+            .map(line => {
+                const filePart = line.slice(3);
+                const renamedPath = filePart.includes(' -> ') ? filePart.split(' -> ').pop() : filePart;
+                return renamedPath.trim().replace(/^"|"$/g, '');
+            })
+            .filter(Boolean);
+    }
+
+    function toRelativeChangelogFile(entryFile, cwd) {
+        if (!entryFile || typeof entryFile !== 'string') return null;
+        const normalized = entryFile.replace(/\\/g, '/');
+        if (path.isAbsolute(entryFile)) {
+            const relative = path.relative(cwd, entryFile);
+            if (relative.startsWith('..') || path.isAbsolute(relative)) return normalized;
+            return relative.replace(/\\/g, '/');
+        }
+        return normalized.replace(/^\.\//, '');
+    }
+
+    function collectTaskTags(entry) {
+        const text = [entry.summary, entry.cmd, entry.file]
+            .filter(Boolean)
+            .join(' ');
+        const matches = text.match(/\b(?:TASK|BUG|ROAD|IDEA|ISSUE|FEAT)-\d+\b/g) || [];
+        return [...new Set(matches)];
+    }
+
+    function getDirtyAttribution(cwd, days) {
+        return new Promise((resolve, reject) => {
+            execFile('git', ['-C', cwd, 'status', '--porcelain'], { timeout: 3000 }, (error, stdout) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+
+                const files = parseGitPorcelain(stdout);
+                const project = getProjectNameFromCwd(cwd);
+                const entries = getCombinedChangelogEntries(days, project);
+                const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+
+                resolve(files.map(file => {
+                    const sessionsById = new Map();
+                    let lastClaudeEditMs = null;
+
+                    for (const entry of entries) {
+                        if (toRelativeChangelogFile(entry.file, cwd) !== file) continue;
+                        const seenMs = entry.ts ? Date.parse(entry.ts) : NaN;
+                        if (!Number.isFinite(seenMs) || seenMs < cutoffMs) continue;
+
+                        const sid = entry.sid || 'unknown';
+                        const current = sessionsById.get(sid) || {
+                            sid,
+                            agent: entry.agent || null,
+                            lastSeenMs: 0,
+                            edits: 0,
+                            tasks: new Set()
+                        };
+
+                        current.lastSeenMs = Math.max(current.lastSeenMs, seenMs);
+                        current.edits += 1;
+                        for (const tag of collectTaskTags(entry)) current.tasks.add(tag);
+                        sessionsById.set(sid, current);
+                        lastClaudeEditMs = Math.max(lastClaudeEditMs || 0, seenMs);
+                    }
+
+                    let fileMtimeMs = null;
+                    try {
+                        fileMtimeMs = fs.statSync(path.join(cwd, file)).mtimeMs;
+                    } catch {
+                        fileMtimeMs = null;
+                    }
+
+                    const sessions = [...sessionsById.values()].map(session => ({
+                        ...session,
+                        tasks: [...session.tasks]
+                    })).sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+
+                    return {
+                        file,
+                        sessions,
+                        lastClaudeEditMs,
+                        fileMtimeMs,
+                        verdict: sessions.length === 0 ? 'manual' : sessions.length === 1 ? 'agent' : 'shared'
+                    };
+                }));
+            });
+        });
+    }
+
+    function getActiveSessions(minutes, cwd) {
+        const days = minutes / (24 * 60);
+        const cutoffMs = Date.now() - (minutes * 60 * 1000);
+        const project = cwd ? getProjectNameFromCwd(cwd) : null;
+        const entries = getCombinedChangelogEntries(days, project);
+        const sessionsById = new Map();
+
+        for (const entry of entries) {
+            const seenMs = entry.ts ? Date.parse(entry.ts) : NaN;
+            if (!Number.isFinite(seenMs) || seenMs < cutoffMs) continue;
+            if (cwd && entry.cwd) {
+                try {
+                    if (path.resolve(entry.cwd) !== cwd) continue;
+                } catch {
+                    continue;
+                }
+            }
+
+            const sid = entry.sid || 'unknown';
+            const current = sessionsById.get(sid) || {
+                sid,
+                agent: entry.agent || null,
+                lastSeenMs: 0,
+                toolCalls: 0,
+                distinctFiles: new Set(),
+                taskTags: new Set()
+            };
+
+            current.lastSeenMs = Math.max(current.lastSeenMs, seenMs);
+            current.toolCalls += 1;
+            if (entry.file) current.distinctFiles.add(toRelativeChangelogFile(entry.file, entry.cwd || cwd || '') || entry.file);
+            for (const tag of collectTaskTags(entry)) current.taskTags.add(tag);
+            sessionsById.set(sid, current);
+        }
+
+        // Merge heartbeat-only sessions: warm-but-quiet sessions (waiting on
+        // user input, between tool calls) won't show up in the changelog scan
+        // but are still alive via /api/sessions/heartbeat.
+        for (const hb of getLiveHeartbeats(cutoffMs, cwd)) {
+            const sid = hb.sid;
+            const existing = sessionsById.get(sid);
+            if (existing) {
+                if (hb.lastSeenMs > existing.lastSeenMs) existing.lastSeenMs = hb.lastSeenMs;
+                if (!existing.agent && hb.agent) existing.agent = hb.agent;
+                if (hb.activeTaskId) existing.taskTags.add(hb.activeTaskId);
+            } else {
+                const synthetic = {
+                    sid,
+                    agent: hb.agent || null,
+                    lastSeenMs: hb.lastSeenMs,
+                    toolCalls: 0,
+                    distinctFiles: new Set(),
+                    taskTags: new Set()
+                };
+                if (hb.activeTaskId) synthetic.taskTags.add(hb.activeTaskId);
+                sessionsById.set(sid, synthetic);
+            }
+        }
+
+        return [...sessionsById.values()].map(session => ({
+            ...session,
+            distinctFiles: session.distinctFiles.size,
+            taskTags: [...session.taskTags]
+        })).sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+    }
+
     app.get('/api/changelog/projects', (req, res) => {
         res.json(listChangelogProjects());
     });
@@ -1412,6 +1834,42 @@ Start by reviewing the recent changes and pick up the next task.`;
     // express.json() is applied per-route: the global body parser in server.js
     // is registered AFTER these routes are mounted, so a route added here only
     // sees req.body if it parses the body itself (same pattern as scan-paths).
+    app.get('/api/dirty-attribution', async (req, res) => {
+        const cwd = getRequestCwd(req);
+        if (!cwd) {
+            res.status(400).json({ error: 'Missing cwd query parameter' });
+            return;
+        }
+
+        const days = Math.min(parseFloat(req.query.days) || 1, 90);
+        const cacheKey = `${cwd}:${days}`;
+        const cached = dirtyAttributionCache.get(cacheKey);
+        if (cached && Date.now() - cached.createdAtMs < DIRTY_ATTRIBUTION_CACHE_TTL_MS) {
+            res.json(cached.files);
+            return;
+        }
+
+        try {
+            const files = await getDirtyAttribution(cwd, days);
+            dirtyAttributionCache.set(cacheKey, { createdAtMs: Date.now(), files });
+            res.json(files);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to compute dirty attribution', detail: error.message });
+        }
+    });
+
+    app.get('/api/active-sessions', (req, res) => {
+        const minutes = Math.min(parseFloat(req.query.minutes) || 30, 24 * 60);
+        const cwd = getRequestCwd(req);
+
+        try {
+            res.json(getActiveSessions(minutes, cwd));
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to compute active sessions', detail: error.message });
+        }
+    });
+
+
     app.post('/api/sessions/heartbeat', express.json(), (req, res) => {
         const body = req.body || {};
         const sid = typeof body.sid === 'string' ? body.sid.trim() : '';

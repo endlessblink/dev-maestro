@@ -82,6 +82,11 @@ get_task_stats() {
 }
 
 start_server() {
+  # Never leave two instances: clear any existing listener on $PORT first.
+  if [ -n "$(port_pids)" ]; then
+    echo -e "  ${DIM}Existing server on :${PORT} — restarting…${RST}"
+    stop_server
+  fi
   cd "$DIR"
   WATCHPOST_CWD="${WATCHPOST_CWD:-$(pwd)}" node server.js > /tmp/watchpost-server.log 2>&1 &
   local pid=$!
@@ -120,16 +125,52 @@ start_tui() {
   exec node "$DIR/tui/src/index.js"
 }
 
-stop_server() {
-  if is_server_running; then
-    local pid=$(lsof -ti:${PORT} 2>/dev/null)
-    if [ -n "$pid" ]; then
-      kill "$pid" 2>/dev/null
-      echo -e "  ${BYEL}■${RST} Dashboard stopped"
-    fi
+# Return PIDs *listening* on $PORT — must exclude client connections (a browser
+# tab or curl with an open SSE stream also shows up on the port otherwise, and
+# we'd kill the wrong process). lsof -sTCP:LISTEN / ss listener parse do this.
+port_pids() {
+  if command -v lsof &>/dev/null; then
+    lsof -ti:${PORT} -sTCP:LISTEN 2>/dev/null
+  elif command -v ss &>/dev/null; then
+    ss -tlnpH "sport = :${PORT}" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2
   else
-    echo -e "  ${DIM}Dashboard is not running${RST}"
+    pgrep -f "node server.js" 2>/dev/null
   fi
+}
+
+stop_server() {
+  local pids
+  pids=$(port_pids)
+  if [ -z "$pids" ]; then
+    echo -e "  ${DIM}Dashboard is not running${RST}"
+    return 0
+  fi
+
+  kill $pids 2>/dev/null            # SIGTERM (unquoted: there may be several PIDs)
+
+  # Poll up to ~6s for the port to actually free. The server drains open SSE
+  # connections on shutdown, so it does not exit instantly — printing "stopped"
+  # before the port frees was the old bug.
+  local i
+  for i in $(seq 1 12); do
+    sleep 0.5
+    [ -z "$(port_pids)" ] && { echo -e "  ${BYEL}■${RST} Dashboard stopped"; return 0; }
+  done
+
+  # Still bound → force-kill survivors.
+  local survivors
+  survivors=$(port_pids)
+  if [ -n "$survivors" ]; then
+    kill -9 $survivors 2>/dev/null
+    sleep 0.5
+    if [ -z "$(port_pids)" ]; then
+      echo -e "  ${BYEL}■${RST} Dashboard force-stopped (SIGKILL)"
+      return 0
+    fi
+    echo -e "  ${BRED}✗${RST} Could not free port ${PORT} (PIDs: $survivors)"
+    return 1
+  fi
+  echo -e "  ${BYEL}■${RST} Dashboard stopped"
 }
 
 # ─── ASCII Logo ──────────────────────────────────────────────────────────────
@@ -392,6 +433,7 @@ show_help() {
   bline "  ${BCYN}both${RST}          Dashboard + TUI"
   bline "  ${BCYN}status${RST}        Server info + task stats"
   bline "  ${BCYN}stop${RST}          Stop dashboard server"
+  bline "  ${BCYN}restart${RST}       Stop then start the server"
   bline "  ${BCYN}install${RST}       Install/configure a project"
   bline "  ${BCYN}archive${RST}       Archive done tasks"
   bline "  ${BCYN}discover${RST}      Scan for new projects"
@@ -428,6 +470,10 @@ case "${1:-}" in
     ;;
   stop)
     stop_server
+    ;;
+  restart)
+    stop_server
+    start_server || exit 1
     ;;
   archive)
     shift
