@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 const { execFileSync } = require('child_process');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
@@ -256,6 +257,100 @@ function findCoverFile(name) {
         if (fs.existsSync(candidate)) return { filePath: candidate, ext };
     }
     return null;
+}
+
+// ─── Session heartbeat (recovered: TASK-003 + TASK-1771) ──────────────────────
+// SessionStart/Stop hooks POST {sid, cwd, activeTaskId?, agent?} to
+// /api/sessions/heartbeat so warm-but-quiet Claude/Codex sessions still register
+// as alive. Persisted to date-stamped JSONL under ~/.watchpost/data/heartbeats/
+// so a Watchpost restart doesn't blank-slate liveness. No auth: Watchpost is
+// local-only by design; any localhost process can write — accepted dev risk.
+// (Lost in the add-only branch overlay 2c6f94e; restored from commit 84f1606.)
+const LEGACY_HEARTBEATS_FILE = path.join(DATA_DIR, 'heartbeats.jsonl');
+const HEARTBEATS_DIR = path.join(DATA_DIR, 'heartbeats');
+const HEARTBEAT_FLUSH_DEBOUNCE_MS = 500;
+const HEARTBEAT_REPLAY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const heartbeats = new Map();
+const pendingHeartbeatSids = new Set();
+let heartbeatFlushTimer = null;
+let heartbeatsLoaded = false;
+
+function getCurrentHeartbeatFile() {
+    const today = new Date().toISOString().slice(0, 10);
+    return path.join(HEARTBEATS_DIR, `${today}.jsonl`);
+}
+
+function getReplayHeartbeatSources() {
+    // The 24h window can span midnight, so today + yesterday is the minimum
+    // coverage. Include the legacy single-file path for backward compat.
+    const sources = [LEGACY_HEARTBEATS_FILE];
+    const seenDates = new Set();
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    for (let offset = 0; offset <= HEARTBEAT_REPLAY_WINDOW_MS; offset += oneDayMs) {
+        const date = new Date(now - offset).toISOString().slice(0, 10);
+        if (seenDates.has(date)) continue;
+        seenDates.add(date);
+        sources.push(path.join(HEARTBEATS_DIR, `${date}.jsonl`));
+    }
+    return sources;
+}
+
+function loadHeartbeatsFromDisk() {
+    if (heartbeatsLoaded) return;
+    heartbeatsLoaded = true;
+
+    const cutoffMs = Date.now() - HEARTBEAT_REPLAY_WINDOW_MS;
+    for (const file of getReplayHeartbeatSources()) {
+        let content = '';
+        try {
+            content = fs.readFileSync(file, 'utf8');
+        } catch {
+            continue;
+        }
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            let row;
+            try {
+                row = JSON.parse(trimmed);
+            } catch {
+                continue;
+            }
+            if (!row || typeof row.sid !== 'string' || !Number.isFinite(row.lastSeenMs)) continue;
+            if (row.lastSeenMs < cutoffMs) continue;
+            const existing = heartbeats.get(row.sid);
+            if (existing && existing.lastSeenMs >= row.lastSeenMs) continue;
+            heartbeats.set(row.sid, row);
+        }
+    }
+}
+
+function scheduleHeartbeatFlush() {
+    if (heartbeatFlushTimer) return;
+    heartbeatFlushTimer = setTimeout(flushHeartbeats, HEARTBEAT_FLUSH_DEBOUNCE_MS);
+    if (typeof heartbeatFlushTimer.unref === 'function') heartbeatFlushTimer.unref();
+}
+
+function flushHeartbeats() {
+    heartbeatFlushTimer = null;
+    if (pendingHeartbeatSids.size === 0) return;
+
+    const lines = [];
+    for (const sid of pendingHeartbeatSids) {
+        const entry = heartbeats.get(sid);
+        if (entry) lines.push(JSON.stringify(entry));
+    }
+    pendingHeartbeatSids.clear();
+    if (lines.length === 0) return;
+
+    try {
+        fs.mkdirSync(HEARTBEATS_DIR, { recursive: true });
+        fs.appendFileSync(getCurrentHeartbeatFile(), lines.join('\n') + '\n');
+    } catch {
+        // Disk pressure shouldn't break the in-memory liveness map; the next
+        // heartbeat retries the append.
+    }
 }
 
 // ─── Route mount ─────────────────────────────────────────────────────────────
@@ -1311,6 +1406,42 @@ Start by reviewing the recent changes and pick up the next task.`;
             byDay,
             sessions: sessionIds.size
         });
+    });
+
+    // ── POST /api/sessions/heartbeat (recovered TASK-003) ──────────────────
+    // express.json() is applied per-route: the global body parser in server.js
+    // is registered AFTER these routes are mounted, so a route added here only
+    // sees req.body if it parses the body itself (same pattern as scan-paths).
+    app.post('/api/sessions/heartbeat', express.json(), (req, res) => {
+        const body = req.body || {};
+        const sid = typeof body.sid === 'string' ? body.sid.trim() : '';
+        const cwdRaw = typeof body.cwd === 'string' ? body.cwd.trim() : '';
+        if (!sid || !cwdRaw) {
+            res.status(400).json({ error: 'sid and cwd are required strings' });
+            return;
+        }
+
+        let resolvedCwd;
+        try {
+            resolvedCwd = path.resolve(cwdRaw);
+        } catch {
+            res.status(400).json({ error: 'cwd is not a resolvable path' });
+            return;
+        }
+
+        loadHeartbeatsFromDisk();
+        const entry = {
+            sid,
+            cwd: resolvedCwd,
+            activeTaskId: typeof body.activeTaskId === 'string' && body.activeTaskId ? body.activeTaskId : null,
+            agent: typeof body.agent === 'string' && body.agent ? body.agent : null,
+            lastSeenMs: Date.now()
+        };
+        heartbeats.set(sid, entry);
+        pendingHeartbeatSids.add(sid);
+        scheduleHeartbeatFlush();
+
+        res.json({ ok: true, sid, lastSeenMs: entry.lastSeenMs });
     });
 
 };
