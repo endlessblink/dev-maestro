@@ -839,6 +839,17 @@
                 </span>
                 <span>Agent Log</span>
             </button>
+            <button class="tab vps" data-panel="vps">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="2" y="3" width="20" height="6" rx="1" />
+                        <rect x="2" y="13" width="20" height="6" rx="1" />
+                        <line x1="6" y1="6" x2="6" y2="6" />
+                        <line x1="6" y1="16" x2="6" y2="16" />
+                    </svg>
+                </span>
+                <span>VPS</span>
+            </button>
         </nav>
 
         <div class="spacer"></div>
@@ -932,6 +943,10 @@
         <div id="changelog" class="panel">
             <!-- Lazy load: src set on first tab activation -->
             <iframe data-src="changelog/index.html" title="Agent Changelog"></iframe>
+        </div>
+        <div id="vps" class="panel">
+            <!-- Lazy load: src set on first tab activation -->
+            <iframe data-src="vps/index.html" title="VPS Monitor"></iframe>
         </div>
     </main>
 

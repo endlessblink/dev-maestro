@@ -8,6 +8,7 @@ const taskEngine = require('./modules/task-engine');
 const projectScanner = require('./modules/project-scanner');
 const changelogEngine = require('./modules/changelog-engine');
 const mountControlRoomRoutes = require('./controlroom/api');
+const mountVpsRoutes = require('./vps/api');
 
 // ============================================================================
 // LOCAL OVERRIDES SYSTEM
@@ -188,6 +189,9 @@ app.use(express.static(__dirname));
 
 // 6. Mount Control Room routes (enriched projects, stats, summaries, covers)
 mountControlRoomRoutes(app);
+
+// 7. Mount VPS monitor routes (/api/vps/status, /api/vps/bots, /api/vps/cover/:id)
+mountVpsRoutes(app);
 
 // Status API - for Claude to detect if Watchpost is running
 app.get('/api/status', (req, res) => {

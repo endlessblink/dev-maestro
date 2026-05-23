@@ -627,10 +627,16 @@ async function fetchStatus() {
         if (status.error) {
             showError('Cannot reach server — ' + (status.message || status.error));
         } else {
-            hideError();
             lastStatusData = { status };
             renderServices(status);
             setTimestamp(status.timestamp);
+            // Degraded mode: SSH discovery timed out but services still rendered
+            // from HTTP health pings — warn instead of blanking the tab.
+            if (status.sshError) {
+                showError('Live SSH unavailable (' + status.sshError + ') — showing health-check status only');
+            } else {
+                hideError();
+            }
         }
     } catch (e) {
         showError('Network error: ' + e.message);

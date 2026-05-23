@@ -166,7 +166,18 @@ function parseDiscovery(stdout) {
 }
 
 // Compute display status for a bots.json-registered service
-function computeStatus(bot, discovery, ping) {
+function computeStatus(bot, discovery, ping, sshOk = true) {
+    // SSH discovery unavailable: fall back to the HTTP health ping so bots with a
+    // health endpoint still report status. Bots without a ping URL are unknown.
+    if (!sshOk) {
+        if (bot.httpPingUrl) {
+            return ping.ok
+                ? { status: 'green', detail: 'Health check OK (SSH down)' }
+                : { status: 'red', detail: 'Health check failed (SSH down)' };
+        }
+        return { status: 'unknown', detail: 'SSH unavailable' };
+    }
+
     const { docker, systemd, systemd2, staticdir } = discovery;
     let running = false;
 
@@ -245,18 +256,23 @@ module.exports = function(app) {
         const bots = loadBots();
         const timestamp = new Date().toISOString();
 
-        let sshResult;
+        let sshResult = null;
+        let sshError = null;
         try {
-            sshResult = await sshRun('bash -s', buildDiscoveryScript(bots), 15000);
+            // 30s budget: the discovery script (docker ps -a, top -bn1, …) can
+            // exceed 15s when the VPS is under load — better slow than blank.
+            sshResult = await sshRun('bash -s', buildDiscoveryScript(bots), 30000);
         } catch (err) {
-            return res.json({
-                error: err.message.includes('timeout') ? 'timeout' : 'ssh_failed',
-                message: err.message.slice(0, 200),
-                timestamp
-            });
+            sshError = err.message.includes('timeout') ? 'timeout' : 'ssh_failed';
         }
 
-        const discovery = parseDiscovery(sshResult.stdout);
+        const sshOk = !!sshResult;
+        // Graceful degradation: when SSH discovery is unavailable, keep serving the
+        // registered services via their HTTP health pings instead of blanking the
+        // whole tab. Empty discovery => computeStatus falls back to the ping result.
+        const discovery = sshOk
+            ? parseDiscovery(sshResult.stdout)
+            : { docker: {}, systemd: {}, systemd2: {}, staticdir: {}, resources: {} };
 
         // Parallel HTTP pings for bots with a pingUrl
         const pings = {};
@@ -273,7 +289,7 @@ module.exports = function(app) {
 
         // Registered services (from bots.json — enriched with name/description/cover/dashboard)
         const registeredServices = bots.map(bot => {
-            const { status, detail } = computeStatus(bot, discovery, pings[bot.id] || { ok: true });
+            const { status, detail } = computeStatus(bot, discovery, pings[bot.id] || { ok: true }, sshOk);
             return {
                 id: bot.id,
                 name: bot.name,
@@ -316,6 +332,7 @@ module.exports = function(app) {
         res.json({
             services: [...registeredServices, ...autoServices],
             resources: discovery.resources,
+            sshError,
             timestamp
         });
     });
