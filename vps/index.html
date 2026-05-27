@@ -388,6 +388,7 @@
         }
         .btn-icon:hover { color: var(--text-secondary); border-color: var(--border-strong); }
         .btn-icon.restart:hover { color: var(--status-amber); border-color: var(--status-amber); }
+        .btn-icon.update:hover { color: var(--brand-primary); border-color: var(--brand-primary); }
         .btn-icon.logs-active { color: var(--brand-primary); border-color: rgba(78,205,196,0.4); }
 
         .restarting-badge {
@@ -699,9 +700,15 @@ function renderServiceCard(svc) {
                     </a>` : ''}
 
                 ${svc.canRestart ? `
-                    <button class="btn-icon restart" onclick="restartService('${svc.id}','${esc(svc.name)}')" title="Restart">
+                    <button class="btn-icon restart" onclick="restartService('${jsArg(svc.id)}','${jsArg(svc.name)}')" title="Restart">
                         <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                         Restart
+                    </button>` : ''}
+
+                ${svc.canUpdateWaha ? `
+                    <button class="btn-icon update" onclick="updateService('${jsArg(svc.id)}','${jsArg(svc.name)}')" title="Pull latest WAHA image and recreate WAHA only">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        ${esc(svc.updateLabel || 'Update WAHA')}
                     </button>` : ''}
 
                 <button class="btn-icon" id="logsBtn-${svc.id}" onclick="toggleLogs('${svc.id}')" title="View logs">
@@ -712,6 +719,10 @@ function renderServiceCard(svc) {
                 <span class="restarting-badge" id="restarting-${svc.id}">
                     <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                     Restarting…
+                </span>
+                <span class="restarting-badge" id="updating-${svc.id}">
+                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Updating…
                 </span>
             </div>
         </div>
@@ -768,6 +779,32 @@ async function restartService(id, name) {
         else setTimeout(fetchStatus, 4000);
     } catch (e) {
         showError('Restart error: ' + e.message);
+    } finally {
+        if (badge) badge.classList.remove('visible');
+    }
+}
+
+async function updateService(id, name) {
+    const warning = [
+        `Update WAHA for "${name}"?`,
+        '',
+        'This pulls the latest WAHA image, backs up waha-sessions, and recreates only the WAHA container.',
+        'The existing WhatsApp session should stay linked unless WhatsApp invalidates it.'
+    ].join('\n');
+    if (!confirm(warning)) return;
+
+    const badge = document.getElementById('updating-' + id);
+    if (badge) badge.classList.add('visible');
+    try {
+        const res = await fetch('/api/vps/update/' + id, { method: 'POST' });
+        const data = await res.json();
+        if (!data.ok) {
+            showError('WAHA update failed: ' + (data.error || data.output || 'unknown error'));
+        } else {
+            setTimeout(fetchStatus, 5000);
+        }
+    } catch (e) {
+        showError('WAHA update error: ' + e.message);
     } finally {
         if (badge) badge.classList.remove('visible');
     }
@@ -909,6 +946,10 @@ function renderHealth(d) {
 
 function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function jsArg(s) {
+    return esc(String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n'));
 }
 
 // ── Init ──

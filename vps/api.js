@@ -300,6 +300,8 @@ module.exports = function(app) {
                 dashboardUrl: bot.dashboardUrl,
                 dashboardLabel: bot.dashboardLabel,
                 canRestart: bot.canRestart,
+                canUpdateWaha: !!bot.updateCommand,
+                updateLabel: bot.updateLabel || 'Update WAHA',
                 icon: bot.icon,
                 gradientFrom: bot.gradientFrom,
                 gradientTo: bot.gradientTo,
@@ -446,6 +448,27 @@ printf '{"cpu":%s,"ram":{"used":%s,"total":%s,"pct":%s},"disk":{"pct":%s,"total"
         try {
             const result = await sshRun(restartCommand, null, 30000);
             res.json({ ok: true, service: serviceId, output: (result.stdout + result.stderr).slice(0, 500) });
+        } catch (err) {
+            res.json({ ok: false, service: serviceId, error: err.message.slice(0, 300) });
+        }
+    });
+
+    // POST /api/vps/update/:service
+    // Registered services can opt into this with a narrow updateCommand in bots.json.
+    // Keep this separate from restart so image pulls and session backups remain explicit.
+    app.post('/api/vps/update/:service', async (req, res) => {
+        const bots = loadBots();
+        const serviceId = req.params.service;
+        const bot = bots.find(b => b.id === serviceId);
+
+        if (!bot || !bot.updateCommand) {
+            return res.status(400).json({ error: 'This service has no update action configured' });
+        }
+
+        try {
+            const result = await sshRun(bot.updateCommand, null, 180000);
+            const output = (result.stdout + result.stderr).slice(0, 2000);
+            res.json({ ok: result.code === 0, service: serviceId, output, code: result.code });
         } catch (err) {
             res.json({ ok: false, service: serviceId, error: err.message.slice(0, 300) });
         }

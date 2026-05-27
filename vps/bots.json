@@ -9,6 +9,8 @@
     "dashboardUrl": "http://84.46.253.137:3049/dashboard",
     "dashboardLabel": "Bot Dashboard",
     "restartCommand": "cd /opt/worlds-greatest-bot && docker compose restart discord-bot",
+    "updateCommand": "cd /opt/worlds-greatest-bot && set -e; mkdir -p backups; if [ -d waha-sessions ]; then tar -czf backups/waha-sessions-$(date +%Y%m%d-%H%M%S).tar.gz waha-sessions; fi; docker compose pull waha; docker compose up -d waha; sleep 5; docker compose ps waha",
+    "updateLabel": "Update WAHA",
     "logsCommand": "docker logs --tail=20 worlds-greatest-bot 2>&1",
     "icon": "music",
     "canRestart": true,
