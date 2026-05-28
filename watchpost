@@ -88,8 +88,9 @@ start_server() {
     stop_server
   fi
   cd "$DIR"
-  WATCHPOST_CWD="${WATCHPOST_CWD:-$(pwd)}" node server.js > /tmp/watchpost-server.log 2>&1 &
+  nohup setsid env WATCHPOST_CWD="${WATCHPOST_CWD:-$(pwd)}" node server.js > /tmp/watchpost-server.log 2>&1 < /dev/null &
   local pid=$!
+  disown "$pid" 2>/dev/null || true
 
   # Animated spinner while waiting
   local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'

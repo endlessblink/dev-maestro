@@ -7,6 +7,7 @@ require('dotenv').config();
 const taskEngine = require('./modules/task-engine');
 const projectScanner = require('./modules/project-scanner');
 const changelogEngine = require('./modules/changelog-engine');
+const { resolveMasterPlanPath } = require('./modules/master-plan-path');
 const mountControlRoomRoutes = require('./controlroom/api');
 const mountVpsRoutes = require('./vps/api');
 
@@ -119,6 +120,16 @@ const broadcastLog = (message) => {
     });
 };
 
+// Helper to resolve the active Master Plan path.
+const getMasterPlanResolution = () => resolveMasterPlanPath({
+    envPath: process.env.MASTER_PLAN_PATH,
+    localConfig,
+    rootDir: __dirname,
+    existsSync: fs.existsSync
+});
+
+const getMasterPlanPath = () => getMasterPlanResolution().path;
+
 
 // Enable CORS
 app.use(cors());
@@ -196,18 +207,17 @@ mountVpsRoutes(app);
 // Status API - for Claude to detect if Watchpost is running
 app.get('/api/status', (req, res) => {
     const pkg = require('./package.json');
-    const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
-    const masterPlanPath = process.env.MASTER_PLAN_PATH
-        ? path.resolve(process.env.MASTER_PLAN_PATH)
-        : defaultPath;
+    const masterPlanResolution = getMasterPlanResolution();
 
     res.json({
         running: true,
         name: 'Watchpost',
         version: pkg.version,
         port: PORT,
-        project: path.dirname(masterPlanPath),
-        masterPlanPath: masterPlanPath,
+        project: path.dirname(masterPlanResolution.path),
+        masterPlanPath: masterPlanResolution.path,
+        masterPlanSource: masterPlanResolution.source,
+        masterPlanExists: masterPlanResolution.exists,
         uptime: process.uptime(),
         url: `http://localhost:${PORT}`
     });
@@ -421,12 +431,8 @@ app.post('/api/config/reload', (req, res) => {
 
 // API Endpoint to get MASTER_PLAN.md content
 app.get('/api/master-plan', (req, res) => {
-    // Default to ../docs/MASTER_PLAN.md relative to this script
-    const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
-    // Allow override via env var, resolving relative to CWD or using absolute path
-    const masterPlanPath = process.env.MASTER_PLAN_PATH
-        ? path.resolve(process.env.MASTER_PLAN_PATH)
-        : defaultPath;
+    const masterPlanResolution = getMasterPlanResolution();
+    const masterPlanPath = masterPlanResolution.path;
 
     console.log(`[API] Fetching MASTER_PLAN.md from: ${masterPlanPath}`);
 
@@ -436,10 +442,11 @@ app.get('/api/master-plan', (req, res) => {
             return res.status(500).json({
                 error: 'Failed to read MASTER_PLAN.md',
                 details: err.message,
-                path: masterPlanPath
+                path: masterPlanPath,
+                source: masterPlanResolution.source
             });
         }
-        res.json({ content: data });
+        res.json({ content: data, path: masterPlanPath, source: masterPlanResolution.source });
     });
 });
 
@@ -664,14 +671,6 @@ app.post('/api/projects/:name/activate', async (req, res) => {
     }
     res.json(response);
 });
-
-// Helper to get Master Plan path
-const getMasterPlanPath = () => {
-    const defaultPath = path.join(__dirname, '../docs/MASTER_PLAN.md');
-    return process.env.MASTER_PLAN_PATH
-        ? path.resolve(process.env.MASTER_PLAN_PATH)
-        : defaultPath;
-};
 
 // ============================================================================
 // NATIVE TASK ENGINE (SQLite)

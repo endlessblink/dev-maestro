@@ -74,4 +74,11 @@ describe('Project switcher regression coverage', () => {
         expect(html).toContain("type: 'activate-and-navigate'");
         expect(html).toContain("target: 'kanban'");
     });
+
+    it('keeps the launcher server detached after the shell exits', () => {
+        const launcher = readRepoFile('watchpost');
+
+        expect(launcher).toContain('nohup setsid env WATCHPOST_CWD=');
+        expect(launcher).toContain('disown "$pid"');
+    });
 });

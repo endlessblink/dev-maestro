@@ -17,3 +17,4 @@ local/
 # SQLite databases
 .maestro/
 *.sqlite
+.omx/
