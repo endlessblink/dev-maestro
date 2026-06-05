@@ -24,6 +24,44 @@ These four tasks together close the "who's working on what right now?" gap in Wa
 
 ---
 
+## Security & Infrastructure
+
+### Active Tasks
+
+| ID        | Title                                                                  | Priority | Status | Dependencies |
+| --------- | ---------------------------------------------------------------------- | -------- | ------ | ------------ |
+| TASK-1774 | Rotate & retire exposed Anytype + Notion API tokens (post-consolidation) | P2     | TODO   | -            |
+
+### TASK-1774: Rotate & retire exposed Anytype + Notion API tokens
+
+**Priority:** P2 | **Status:** TODO
+
+#### Problem
+
+On 2026-06-04 an AgentShield audit found the Anytype and Notion API tokens stored in plaintext across the agent harness configs. They were **consolidated** to a single canonical source (`~/.config/agent-secrets.env`, chmod 600, sourced from `~/.bashrc`/`~/.profile`) and the live configs now reference env vars — but the tokens were **NOT rotated**. The same (still-valid) tokens remain in ~100 un-scrubbable session-log / history files (`~/.claude/projects/**`, `~/.codex/sessions/**`, VS Code & Antigravity history). Consolidation stops new leaks; only rotation retires the existing exposure.
+
+#### Scope
+
+1. Regenerate both tokens in their dashboards: Notion (integration → refresh secret) and Anytype (app → API key).
+2. Update the canonical env file `~/.config/agent-secrets.env` with the new values (the CLI tools — Claude Code, OpenCode — pick them up automatically via `${VAR}` / `{env:VAR}`).
+3. Update the two literal holdouts by hand (GUI-launched, don't read shell env): `~/.config/Claude/claude_desktop_config.json` and `~/.codex/config.toml`.
+4. Delete the stale backups that still hold the OLD literal token: `~/.claude/settings.json.bak-*`, `~/.config/opencode/opencode.json.bak-*`, `~/.codex/config.toml.bak-*`.
+5. Optionally move secrets into Doppler (see `~/.claude/knowledge/doppler-setup.md`) instead of the plaintext env file.
+
+#### Key files / refs
+
+- Canonical source: `~/.config/agent-secrets.env`
+- Consumers + full context: memory `claude-config-hardening.md` and `agentshield-audit.md`
+- Re-audit afterward: `npx -y ecc-agentshield@<ver> scan` (static only — never `--opus`).
+
+#### Verification
+
+- After rotation, the OLD token no longer authenticates (Notion/Anytype API returns 401 for it).
+- A fresh terminal → `claude` / `opencode` → Notion + Anytype MCP tools still respond (new token works via env).
+- `grep -rlF "<old-token>"` against the live configs returns nothing (logs excluded — those are expected to retain it).
+
+---
+
 ## Active Work
 
 ### TASK-001: API: Add `/api/dirty-attribution?cwd=` for git-vs-changelog join
