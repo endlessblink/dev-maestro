@@ -16,6 +16,7 @@ const NOTES_FILE = path.join(DATA_DIR, 'user-notes.json');
 const SETTINGS_FILE = path.join(WATCHPOST_DIR, 'settings.json');
 const CHANGELOG_DIR = path.join(DATA_DIR, 'changelog');
 const CLAUDE_PROJECTS_DIR = path.join(process.env.HOME || '', '.claude', 'projects');
+const CODEX_SESSIONS_DIR = path.join(process.env.HOME || '', '.codex', 'sessions');
 const OPENCODE_STORAGE_DIR = path.join(process.env.HOME || '', '.local', 'share', 'opencode', 'storage');
 const DIRTY_ATTRIBUTION_CACHE_TTL_MS = 2000;
 const dirtyAttributionCache = new Map();
@@ -377,6 +378,88 @@ function getLiveHeartbeats(cutoffMs, cwd) {
     return out;
 }
 
+function getOmxSessionIdsByPid(cwd) {
+    const byPid = new Map();
+    if (!cwd) return byPid;
+
+    const logsDir = path.join(cwd, '.omx', 'logs');
+    let files = [];
+    try {
+        files = fs.readdirSync(logsDir, { withFileTypes: true })
+            .filter(entry => entry.isFile() && entry.name.endsWith('.jsonl'))
+            .map(entry => path.join(logsDir, entry.name));
+    } catch {
+        return byPid;
+    }
+
+    for (const filePath of files) {
+        let content = '';
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+        } catch {
+            continue;
+        }
+
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            let row;
+            try {
+                row = JSON.parse(trimmed);
+            } catch {
+                continue;
+            }
+            if (row?.event !== 'session_start' || !row.pid || !row.session_id) continue;
+            byPid.set(String(row.pid), String(row.session_id));
+        }
+    }
+
+    return byPid;
+}
+
+function getLiveAgentProcesses(cwd) {
+    const procDir = '/proc';
+    const out = [];
+    const omxSessionIdsByPid = getOmxSessionIdsByPid(cwd);
+
+    let entries = [];
+    try {
+        entries = fs.readdirSync(procDir, { withFileTypes: true });
+    } catch {
+        return out;
+    }
+
+    for (const entry of entries) {
+        if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
+        const pid = entry.name;
+        let procCwd = '';
+        let cmdline = '';
+
+        try {
+            procCwd = fs.realpathSync(path.join(procDir, pid, 'cwd'));
+            if (cwd && path.resolve(procCwd) !== cwd) continue;
+            cmdline = fs.readFileSync(path.join(procDir, pid, 'cmdline'), 'utf8').replace(/\0/g, ' ').trim();
+        } catch {
+            continue;
+        }
+
+        const argv0 = cmdline.split(/\s+/)[0] || '';
+        const isCodex = cmdline.includes('@openai/codex') && cmdline.includes('/bin/codex');
+        const isClaude = path.basename(argv0) === 'claude';
+        if (!isCodex && !isClaude) continue;
+
+        out.push({
+            sid: omxSessionIdsByPid.get(pid) || `pid:${pid}`,
+            agent: isCodex ? 'codex' : 'claude',
+            lastSeenMs: Date.now(),
+            cwd: procCwd,
+            source: 'process'
+        });
+    }
+
+    return out;
+}
+
 function safeJSONStringify(value) {
     try {
         return JSON.stringify(value);
@@ -522,6 +605,133 @@ function readLiveClaudeEntries(days, projectFilter) {
                     summary: safeJSONStringify(input),
                     agent: row.slug || 'claude',
                     branch: row.gitBranch || null
+                });
+            }
+        }
+    }
+
+    return entries;
+}
+
+function listCodexSessionFiles(days) {
+    const cutoffMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const files = [];
+
+    function walk(dir, depth = 0) {
+        if (depth > 4) return;
+        let entries = [];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(fullPath, depth + 1);
+                continue;
+            }
+            if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+            try {
+                const stat = fs.statSync(fullPath);
+                if (stat.mtimeMs >= cutoffMs) files.push(fullPath);
+            } catch {
+                // Ignore unreadable files.
+            }
+        }
+    }
+
+    walk(CODEX_SESSIONS_DIR);
+    return files;
+}
+
+function getCodexSummary(row) {
+    const payload = row?.payload || {};
+    const type = payload.type || row?.type || '';
+
+    if (typeof payload.message === 'string') return payload.message.slice(0, 1000);
+    if (typeof payload.output === 'string') return payload.output.slice(0, 1000);
+    if (typeof payload.text === 'string') return payload.text.slice(0, 1000);
+    if (type === 'patch_apply_end' && payload.changes) return safeJSONStringify({ changes: payload.changes }).slice(0, 1000);
+    if (payload.item?.type) return safeJSONStringify(payload.item).slice(0, 1000);
+    return safeJSONStringify(payload).slice(0, 1000);
+}
+
+function getCodexChangedFiles(row) {
+    const changes = row?.payload?.changes;
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes)) return [];
+    return Object.keys(changes).filter(Boolean);
+}
+
+function readCodexEntries(days, projectFilter) {
+    const cutoffIso = new Date(Date.now() - (days * 24 * 60 * 60 * 1000)).toISOString();
+    const entries = [];
+    const seen = new Set();
+
+    for (const filePath of listCodexSessionFiles(days)) {
+        let content = '';
+        try {
+            content = fs.readFileSync(filePath, 'utf8');
+        } catch {
+            continue;
+        }
+
+        let sid = path.basename(filePath, '.jsonl');
+        let cwd = null;
+        let project = 'unknown';
+        let branch = null;
+
+        for (const line of content.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            let row;
+            try {
+                row = JSON.parse(trimmed);
+            } catch {
+                continue;
+            }
+
+            if (row?.type === 'session_meta') {
+                const payload = row.payload || {};
+                sid = payload.session_id || payload.id || sid;
+                cwd = payload.cwd || cwd;
+                branch = payload.git_branch || payload.gitBranch || branch;
+                project = getProjectNameFromCwd(cwd);
+                continue;
+            }
+
+            const ts = row.timestamp || row.payload?.timestamp || '';
+            if (!ts || ts < cutoffIso) continue;
+            if (projectFilter && project !== projectFilter) continue;
+
+            const payloadType = row.payload?.type || row.type || '';
+            if (payloadType === 'token_count') continue;
+
+            const changedFiles = getCodexChangedFiles(row);
+            const files = changedFiles.length ? changedFiles : [null];
+            const summary = getCodexSummary(row);
+
+            for (const changedFile of files) {
+                const tid = `${sid}:${payloadType || row.type}:${ts}:${changedFile || ''}`;
+                if (seen.has(tid)) continue;
+                seen.add(tid);
+
+                entries.push({
+                    ts,
+                    sid,
+                    tid,
+                    tool: `codex.${payloadType || row.type || 'event'}`,
+                    event: payloadType || row.type || 'CodexEvent',
+                    project,
+                    cwd,
+                    file: changedFile,
+                    cmd: null,
+                    summary,
+                    agent: 'codex',
+                    branch,
+                    source: 'codex'
                 });
             }
         }
@@ -1592,6 +1802,7 @@ Start by reviewing the recent changes and pick up the next task.`;
 
         return entries
             .concat(readLiveClaudeEntries(days, projectFilter))
+            .concat(readCodexEntries(days, projectFilter))
             .concat(readOpenCodeEntries(days, projectFilter));
     }
 
@@ -1621,7 +1832,7 @@ Start by reviewing the recent changes and pick up the next task.`;
         const text = [entry.summary, entry.cmd, entry.file]
             .filter(Boolean)
             .join(' ');
-        const matches = text.match(/\b(?:TASK|BUG|ROAD|IDEA|ISSUE|FEAT)-\d+\b/g) || [];
+        const matches = text.match(/\b(?:TASK|BUG|ROAD|IDEA|ISSUE|FEATURE|FEAT|T)-\d+\b/g) || [];
         return [...new Set(matches)];
     }
 
@@ -1709,6 +1920,8 @@ Start by reviewing the recent changes and pick up the next task.`;
             const current = sessionsById.get(sid) || {
                 sid,
                 agent: entry.agent || null,
+                source: entry.source || null,
+                cwd: entry.cwd || null,
                 lastSeenMs: 0,
                 toolCalls: 0,
                 distinctFiles: new Set(),
@@ -1717,6 +1930,8 @@ Start by reviewing the recent changes and pick up the next task.`;
 
             current.lastSeenMs = Math.max(current.lastSeenMs, seenMs);
             current.toolCalls += 1;
+            if (!current.source && entry.source) current.source = entry.source;
+            if (!current.cwd && entry.cwd) current.cwd = entry.cwd;
             if (entry.file) current.distinctFiles.add(toRelativeChangelogFile(entry.file, entry.cwd || cwd || '') || entry.file);
             for (const tag of collectTaskTags(entry)) current.taskTags.add(tag);
             sessionsById.set(sid, current);
@@ -1736,6 +1951,8 @@ Start by reviewing the recent changes and pick up the next task.`;
                 const synthetic = {
                     sid,
                     agent: hb.agent || null,
+                    source: 'heartbeat',
+                    cwd: hb.cwd || cwd || null,
                     lastSeenMs: hb.lastSeenMs,
                     toolCalls: 0,
                     distinctFiles: new Set(),
@@ -1744,6 +1961,27 @@ Start by reviewing the recent changes and pick up the next task.`;
                 if (hb.activeTaskId) synthetic.taskTags.add(hb.activeTaskId);
                 sessionsById.set(sid, synthetic);
             }
+        }
+
+        for (const proc of getLiveAgentProcesses(cwd)) {
+            const existing = sessionsById.get(proc.sid);
+            if (existing) {
+                if (proc.lastSeenMs > existing.lastSeenMs) existing.lastSeenMs = proc.lastSeenMs;
+                if (!existing.agent && proc.agent) existing.agent = proc.agent;
+                if (!existing.source) existing.source = proc.source || 'process';
+                if (!existing.cwd && proc.cwd) existing.cwd = proc.cwd;
+                continue;
+            }
+            sessionsById.set(proc.sid, {
+                sid: proc.sid,
+                agent: proc.agent || null,
+                source: proc.source || 'process',
+                cwd: proc.cwd || cwd || null,
+                lastSeenMs: proc.lastSeenMs,
+                toolCalls: 0,
+                distinctFiles: new Set(),
+                taskTags: new Set()
+            });
         }
 
         return [...sessionsById.values()].map(session => ({
@@ -1765,13 +2003,7 @@ Start by reviewing the recent changes and pick up the next task.`;
         const limit = Math.min(parseInt(req.query.limit, 10) || 500, 2000);
         const projectFilter = req.query.project || null;
 
-        const projects = projectFilter ? [projectFilter] : listChangelogProjects();
-        let entries = [];
-
-        for (const proj of projects) {
-            const projEntries = readChangelogEntries(proj, days);
-            entries = entries.concat(projEntries);
-        }
+        let entries = getCombinedChangelogEntries(days, projectFilter);
 
         // Apply tool filter
         if (toolFilter) {

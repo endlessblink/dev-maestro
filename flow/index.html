@@ -795,6 +795,41 @@
       overflow-x: auto;
       padding: 4px 2px 2px;
     }
+    .flow-agent-tracks {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+    }
+    .flow-agent-track {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.025);
+      padding: 8px 10px;
+      color: var(--text-secondary);
+      font-size: 11.5px;
+    }
+    .flow-agent-track strong {
+      color: var(--text-primary);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .flow-agent-track span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .flow-agent-track small {
+      flex: 0 0 auto;
+      color: var(--text-subtle);
+      font-size: 10.5px;
+    }
     .flow-arrow {
       flex: 0 0 auto;
       width: 42px;
@@ -1722,6 +1757,7 @@
     let activeLocks = [];
     let activityByTask = new Map();
     let activityEntries = [];
+    let liveSessions = [];
     let liveRefreshTimer = null;
     const ACTIVE_INSTANCE_WINDOW_MS = 90 * 60 * 1000;
 
@@ -2712,7 +2748,8 @@
           ? (currentTask.unfinishedBlockerIds || []).filter(id => lineTaskToLineId.get(id) !== line.id)
           : [];
         const blockingLineIds = (line.dependsOnLineIds || []).filter(depId => !doneByLineId.get(depId));
-        const runtime = runtimeByLine.get(line.id) || null;
+        const sessionTracks = runtimeByLine.get(line.id) || [];
+        const runtime = sessionTracks[0] || null;
         const lockOwner = getLineOwner({ currentTaskId: currentTask?.id || null });
         const owner = lockOwner || (isRuntimeActive(runtime) && runtime?.sid
           ? {
@@ -2740,11 +2777,12 @@
           owner,
           activity,
           runtime,
+          sessionTracks,
           // Derived lines (auto-prioritized for projects with no explicit delivery
           // lines or sprints) are treated as live by default — otherwise they get
           // hidden in the collapsed "Other Planned Flows" section and the user sees
           // an empty Active Instances panel.
-          isLiveInstance: Boolean(lockOwner) || isRuntimeActive(runtime) || line.source === 'derived-priority',
+          isLiveInstance: Boolean(lockOwner) || sessionTracks.some(isRuntimeActive) || line.source === 'derived-priority',
           supportTasks: line.supportTaskIds.map(id => taskById.get(id)).filter(task => task && task.status !== 'done'),
         };
       });
@@ -2981,6 +3019,43 @@
       }).join('')}</div>`;
     }
 
+    function formatSessionName(track) {
+      const agent = track.agent || 'agent';
+      const id = String(track.sid || '').replace(/^pid:/, '');
+      const shortId = id ? id.slice(0, 8) : '?';
+      return `${agent} ${shortId}`;
+    }
+
+    function renderAgentTracks(tracks) {
+      const activeTracks = (tracks || []).filter(isRuntimeActive);
+      if (activeTracks.length === 0) return '';
+      return `
+        <div class="flow-agent-tracks" aria-label="Live agent tracks">
+          ${activeTracks.map(track => `
+            <div class="flow-agent-track" title="${escapeAttr(`${formatSessionName(track)} ${track.tool || track.source || ''}`)}">
+              <span><strong>${escapeHtml(track.agent || 'agent')}</strong> ${escapeHtml(String(track.sid || '').replace(/^pid:/, '').slice(0, 8) || '?')}</span>
+              <small>${escapeHtml(formatRelativeTime(track.ts || track.lastSeenMs || ''))}</small>
+            </div>`).join('')}
+        </div>`;
+    }
+
+    function renderUnassignedAgentRow(tracks) {
+      return `
+        <article class="flow-row upnext">
+          <div class="flow-row-top">
+            <div class="flow-row-meta">
+              <div class="flow-row-labels">
+                <span class="flow-row-name">Unassigned live agents</span>
+                <span class="flow-row-state ready">No task tag</span>
+                <span class="flow-row-owner">${tracks.length} instance${tracks.length === 1 ? '' : 's'}</span>
+              </div>
+              <div class="flow-row-hint">Live in this repo, but no current task ID was found in recent activity.</div>
+            </div>
+          </div>
+          ${renderAgentTracks(tracks)}
+        </article>`;
+    }
+
     function renderCurrentFlowRow(line, taskById) {
       // Render the full declared Sequence from the current step onward, so users
       // see the whole queued flow — not just current+next. Horizontal scroll
@@ -3012,6 +3087,10 @@
         };
       });
       const nextTask = upcoming[1] || null;
+      const activeTrackCount = (line.sessionTracks || []).filter(isRuntimeActive).length;
+      const ownerLabel = activeTrackCount > 0
+        ? `${activeTrackCount} instance${activeTrackCount === 1 ? '' : 's'}`
+        : (line.owner ? `Instance ${line.owner.session_short}` : 'Instance open');
 
       return `
         <article class="flow-row current ${line.state === 'blocked' ? 'blocked' : ''}">
@@ -3020,7 +3099,7 @@
               <div class="flow-row-labels">
                 <span class="flow-row-name">${escapeHtml(line.name)}</span>
                 <span class="flow-row-state ${line.state}">${lineStateLabel(line)}</span>
-                <span class="flow-row-owner ${line.owner ? '' : 'unclaimed'}">${line.owner ? `Instance ${line.owner.session_short}` : 'Instance open'}</span>
+                <span class="flow-row-owner ${line.owner || activeTrackCount > 0 ? '' : 'unclaimed'}">${ownerLabel}</span>
               </div>
               <div class="flow-row-hint">${escapeHtml(lineActivityLabel(line))}${nextTask ? '' : ' · Final visible step'}</div>
             </div>
@@ -3030,6 +3109,7 @@
               <button class="flow-btn primary" type="button" data-action="continue-line" data-line-id="${line.id}">Continue</button>
             </div>
           </div>
+          ${renderAgentTracks(line.sessionTracks)}
           ${renderFlowSequence(sequence)}
         </article>`;
     }
@@ -3122,6 +3202,11 @@
       const activeFlows = lineStates.filter(line => line.isLiveInstance);
       const availableFlows = lineStates.filter(line => !line.isLiveInstance);
       const backlogGroups = buildBacklogGroups(lineStates, taskById);
+      const unassignedSessions = buildUnassignedSessionTracks(lines);
+      const activeInstanceCount = activeFlows.reduce((sum, line) => {
+        const activeTracks = (line.sessionTracks || []).filter(isRuntimeActive).length;
+        return sum + Math.max(activeTracks, line.owner ? 1 : 0, line.source === 'derived-priority' ? 1 : 0);
+      }, 0) + unassignedSessions.length;
 
       const lineStatesById = new Map(lineStates.map(line => [line.id, line]));
       if (!selectedLineId || !lineStatesById.has(selectedLineId)) {
@@ -3143,10 +3228,11 @@
                 <h2>Active Instances</h2>
                 <p>These lanes are backed by live rough-cut context from recent logs or active locks.</p>
               </div>
-              <span class="flow-section-count primary">${activeFlows.length}</span>
+              <span class="flow-section-count primary">${activeInstanceCount}</span>
             </div>
             <div class="flow-list">
               ${activeFlows.length > 0 ? activeFlows.map(line => renderCurrentFlowRow(line, taskById)).join('') : '<div class="flow-empty">No active instances from current rough-cut logs or locks.</div>'}
+              ${unassignedSessions.length > 0 ? renderUnassignedAgentRow(unassignedSessions) : ''}
             </div>
           </section>
           ${renderCollapsedFlows(availableFlows, taskById)}
@@ -4193,6 +4279,15 @@
       }
     }
 
+    async function fetchActiveSessions(projectRoot) {
+      try {
+        const suffix = projectRoot ? `?cwd=${encodeURIComponent(projectRoot)}&minutes=1440` : '?minutes=1440';
+        return await fetchJson(`${API_BASE}/api/active-sessions${suffix}`);
+      } catch {
+        return [];
+      }
+    }
+
     async function fetchTaskApiFlowTasks() {
       try {
         const graph = await fetchJson(`${API_BASE}/api/tasks/graph?t=${Date.now()}`);
@@ -4261,24 +4356,76 @@
     }
 
     function buildLineRuntimeMap(lines) {
-      const byLine = new Map(lines.map(line => [line.id, null]));
+      const byLine = new Map(lines.map(line => [line.id, []]));
       for (const line of lines) {
         const lineTaskIds = new Set([...line.sequenceTaskIds, ...line.supportTaskIds]);
         for (const entry of activityEntries) {
           const taskIds = getEntryTaskIds(entry);
           if (!taskIds.some(id => lineTaskIds.has(id))) continue;
-          const existing = byLine.get(line.id);
-          if (!existing || String(entry.ts || '') > String(existing.ts || '')) {
-            byLine.set(line.id, {
+          const tracks = byLine.get(line.id) || [];
+          const sid = entry.sid || 'unknown';
+          const existing = tracks.find(track => track.sid === sid);
+          if (!existing) {
+            tracks.push({
               ts: entry.ts || '',
-              sid: entry.sid || '',
+              sid,
               agent: entry.agent || '',
               tool: entry.tool || '',
+              source: entry.source || 'activity',
             });
+          } else if (String(entry.ts || '') > String(existing.ts || '')) {
+            existing.ts = entry.ts || '';
+            existing.tool = entry.tool || existing.tool || '';
+            existing.agent = entry.agent || existing.agent || '';
           }
         }
+
+        for (const session of liveSessions) {
+          const tags = Array.isArray(session.taskTags) ? session.taskTags : [];
+          if (!tags.some(id => lineTaskIds.has(id))) continue;
+          const tracks = byLine.get(line.id) || [];
+          if (tracks.some(track => track.sid === session.sid)) continue;
+          tracks.push({
+            ts: session.lastSeenMs ? new Date(session.lastSeenMs).toISOString() : '',
+            lastSeenMs: session.lastSeenMs || 0,
+            sid: session.sid || 'unknown',
+            agent: session.agent || '',
+            tool: session.toolCalls ? `${session.toolCalls} calls` : '',
+            source: session.source || 'session',
+            taskTags: tags,
+          });
+        }
+
+        byLine.set(line.id, (byLine.get(line.id) || []).sort((a, b) => {
+          const ta = a.lastSeenMs || Date.parse(a.ts || '') || 0;
+          const tb = b.lastSeenMs || Date.parse(b.ts || '') || 0;
+          return tb - ta;
+        }));
       }
       return byLine;
+    }
+
+    function buildUnassignedSessionTracks(lines) {
+      const lineTaskIds = new Set();
+      lines.forEach(line => {
+        [...line.sequenceTaskIds, ...line.supportTaskIds].forEach(id => lineTaskIds.add(id));
+      });
+      return (liveSessions || [])
+        .filter(session => {
+          const tags = Array.isArray(session.taskTags) ? session.taskTags : [];
+          return tags.length === 0 || !tags.some(id => lineTaskIds.has(id));
+        })
+        .map(session => ({
+          ts: session.lastSeenMs ? new Date(session.lastSeenMs).toISOString() : '',
+          lastSeenMs: session.lastSeenMs || 0,
+          sid: session.sid || 'unknown',
+          agent: session.agent || '',
+          tool: session.toolCalls ? `${session.toolCalls} calls` : '',
+          source: session.source || 'session',
+          taskTags: session.taskTags || [],
+        }))
+        .filter(isRuntimeActive)
+        .sort((a, b) => (b.lastSeenMs || 0) - (a.lastSeenMs || 0));
     }
 
     function isRuntimeActive(runtime) {
@@ -4411,12 +4558,14 @@
         allTasks = apiTasks.length ? apiTasks : parsedTasks;
         currentProjectRoot = status?.project || '';
         currentProjectFilter = deriveProjectFilter(status);
-        const [locks, recentEntries] = await Promise.all([
+        const [locks, recentEntries, sessions] = await Promise.all([
           fetchLocksForProject(currentProjectRoot),
           fetchRecentActivity(currentProjectFilter),
+          fetchActiveSessions(currentProjectRoot),
         ]);
         activeLocks = locks;
         activityEntries = recentEntries;
+        liveSessions = Array.isArray(sessions) ? sessions : [];
         activityByTask = buildActivityByTask(recentEntries);
         renderGraph();
         if (shouldFit && currentDeliveryLines.length === 0) requestAnimationFrame(() => requestAnimationFrame(fitView));
