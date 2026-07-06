@@ -30,7 +30,14 @@ describe('active agent tracks regression coverage', () => {
         expect(flowSource).toContain('let liveSessions = []');
         expect(flowSource).toContain('function fetchActiveSessions(projectRoot)');
         expect(flowSource).toContain('sessionTracks');
-        expect(flowSource).toContain('function renderAgentTracks(tracks)');
-        expect(flowSource).toContain('function renderUnassignedAgentRow(tracks)');
+        expect(flowSource).toContain('function renderAgentTracks(tracks, taskById)');
+        expect(flowSource).toContain('function renderUnassignedAgentRow(tracks, taskById)');
+    });
+
+    it('renders task descriptions with live agent tracks', () => {
+        expect(flowSource).toContain('function formatTaskLabel(taskId, taskById)');
+        expect(flowSource).toContain('taskLabels');
+        expect(flowSource).toContain('renderAgentTracks(line.sessionTracks, taskById)');
+        expect(flowSource).toContain('renderAgentTracks(tracks, taskById)');
     });
 });

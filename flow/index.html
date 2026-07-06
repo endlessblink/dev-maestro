@@ -813,17 +813,29 @@
       color: var(--text-secondary);
       font-size: 11.5px;
     }
+    .flow-agent-track-main {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
     .flow-agent-track strong {
       color: var(--text-primary);
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
     }
-    .flow-agent-track span {
+    .flow-agent-track span,
+    .flow-agent-task-labels {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .flow-agent-task-labels {
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 1.3;
     }
     .flow-agent-track small {
       flex: 0 0 auto;
@@ -3026,20 +3038,34 @@
       return `${agent} ${shortId}`;
     }
 
-    function renderAgentTracks(tracks) {
+    function formatTaskLabel(taskId, taskById) {
+      const task = taskById?.get(taskId);
+      if (!task) return taskId;
+      return `${taskId} · ${task.title || 'Untitled task'}`;
+    }
+
+    function renderAgentTracks(tracks, taskById) {
       const activeTracks = (tracks || []).filter(isRuntimeActive);
       if (activeTracks.length === 0) return '';
       return `
         <div class="flow-agent-tracks" aria-label="Live agent tracks">
-          ${activeTracks.map(track => `
-            <div class="flow-agent-track" title="${escapeAttr(`${formatSessionName(track)} ${track.tool || track.source || ''}`)}">
-              <span><strong>${escapeHtml(track.agent || 'agent')}</strong> ${escapeHtml(String(track.sid || '').replace(/^pid:/, '').slice(0, 8) || '?')}</span>
+          ${activeTracks.map(track => {
+            const taskLabels = (track.taskTags || [])
+              .map(taskId => formatTaskLabel(taskId, taskById))
+              .slice(0, 2);
+            return `
+            <div class="flow-agent-track" title="${escapeAttr(`${formatSessionName(track)} ${taskLabels.join(' | ') || track.tool || track.source || ''}`)}">
+              <div class="flow-agent-track-main">
+                <span><strong>${escapeHtml(track.agent || 'agent')}</strong> ${escapeHtml(String(track.sid || '').replace(/^pid:/, '').slice(0, 8) || '?')}</span>
+                ${taskLabels.length > 0 ? `<div class="flow-agent-task-labels">${escapeHtml(taskLabels.join(' | '))}</div>` : ''}
+              </div>
               <small>${escapeHtml(formatRelativeTime(track.ts || track.lastSeenMs || ''))}</small>
-            </div>`).join('')}
+            </div>`;
+          }).join('')}
         </div>`;
     }
 
-    function renderUnassignedAgentRow(tracks) {
+    function renderUnassignedAgentRow(tracks, taskById) {
       return `
         <article class="flow-row upnext">
           <div class="flow-row-top">
@@ -3052,7 +3078,7 @@
               <div class="flow-row-hint">Live in this repo, but no current task ID was found in recent activity.</div>
             </div>
           </div>
-          ${renderAgentTracks(tracks)}
+          ${renderAgentTracks(tracks, taskById)}
         </article>`;
     }
 
@@ -3109,7 +3135,7 @@
               <button class="flow-btn primary" type="button" data-action="continue-line" data-line-id="${line.id}">Continue</button>
             </div>
           </div>
-          ${renderAgentTracks(line.sessionTracks)}
+          ${renderAgentTracks(line.sessionTracks, taskById)}
           ${renderFlowSequence(sequence)}
         </article>`;
     }
@@ -3232,7 +3258,7 @@
             </div>
             <div class="flow-list">
               ${activeFlows.length > 0 ? activeFlows.map(line => renderCurrentFlowRow(line, taskById)).join('') : '<div class="flow-empty">No active instances from current rough-cut logs or locks.</div>'}
-              ${unassignedSessions.length > 0 ? renderUnassignedAgentRow(unassignedSessions) : ''}
+              ${unassignedSessions.length > 0 ? renderUnassignedAgentRow(unassignedSessions, taskById) : ''}
             </div>
           </section>
           ${renderCollapsedFlows(availableFlows, taskById)}
@@ -4362,6 +4388,7 @@
         for (const entry of activityEntries) {
           const taskIds = getEntryTaskIds(entry);
           if (!taskIds.some(id => lineTaskIds.has(id))) continue;
+          const scopedTaskIds = taskIds.filter(id => lineTaskIds.has(id));
           const tracks = byLine.get(line.id) || [];
           const sid = entry.sid || 'unknown';
           const existing = tracks.find(track => track.sid === sid);
@@ -4372,11 +4399,13 @@
               agent: entry.agent || '',
               tool: entry.tool || '',
               source: entry.source || 'activity',
+              taskTags: scopedTaskIds,
             });
           } else if (String(entry.ts || '') > String(existing.ts || '')) {
             existing.ts = entry.ts || '';
             existing.tool = entry.tool || existing.tool || '';
             existing.agent = entry.agent || existing.agent || '';
+            existing.taskTags = [...new Set([...(existing.taskTags || []), ...scopedTaskIds])];
           }
         }
 
