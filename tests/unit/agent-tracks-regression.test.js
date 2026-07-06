@@ -35,9 +35,21 @@ describe('active agent tracks regression coverage', () => {
     });
 
     it('renders task descriptions with live agent tracks', () => {
+        expect(flowSource).toContain('function mergeTaskDetails(apiTasks, parsedTasks)');
+        expect(flowSource).toContain('mergeTaskDetails(apiTasks, parsedTasks)');
         expect(flowSource).toContain('function formatTaskLabel(taskId, taskById)');
         expect(flowSource).toContain('taskLabels');
         expect(flowSource).toContain('renderAgentTracks(line.sessionTracks, taskById)');
         expect(flowSource).toContain('renderAgentTracks(tracks, taskById)');
+    });
+
+    it('renders each live agent as its own flow row', () => {
+        expect(flowSource).toContain('function buildActiveInstanceRows(lineStates, taskById)');
+        expect(flowSource).toContain('function renderAgentFlowRow(instance, taskById)');
+        expect(flowSource).toContain('activeInstances.map(instance => renderAgentFlowRow(instance, taskById))');
+    });
+
+    it('does not block the default lane renderer on the graph layout CDN', () => {
+        expect(flowSource).toContain('<script async src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1.1.4/dist/dagre.min.js"></script>');
     });
 });

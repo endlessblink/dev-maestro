@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Watchpost — Feature Flow</title>
-  <script src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1.1.4/dist/dagre.min.js"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1.1.4/dist/dagre.min.js"></script>
   <style>
     :root {
       --surface-primary: #000000;
@@ -683,12 +683,88 @@
       opacity: 0.94;
       background: linear-gradient(180deg, rgba(22, 24, 30, 0.95), rgba(18, 20, 26, 0.9));
     }
+    .flow-row.agent-flow {
+      border-radius: 10px;
+      border-color: rgba(255, 255, 255, 0.08);
+      border-left: 2px solid rgba(99, 102, 241, 0.72);
+      background: linear-gradient(180deg, rgba(17, 19, 25, 0.98), rgba(12, 14, 19, 0.96));
+      padding: 14px 16px 16px;
+      gap: 12px;
+    }
     .flow-row-top {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
       flex-wrap: wrap;
+    }
+    .flow-instance-top {
+      display: grid;
+      grid-template-columns: minmax(150px, 0.42fr) minmax(260px, 1fr) auto;
+      gap: 14px;
+      align-items: start;
+    }
+    .flow-instance-agent {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .flow-instance-agent-code {
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .flow-instance-agent-sub {
+      color: var(--text-subtle);
+      font-size: 11.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .flow-instance-task {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .flow-instance-task-kicker {
+      color: var(--text-subtle);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .flow-instance-task-title {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      text-align: left;
+      font: inherit;
+      color: var(--text-primary);
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.35;
+      cursor: pointer;
+    }
+    .flow-instance-task-title:hover {
+      color: #c7d2fe;
+    }
+    .flow-instance-task-detail {
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+      max-width: 78ch;
+    }
+    .flow-instance-meta {
+      display: flex;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 150px;
     }
     .flow-row-meta {
       display: flex;
@@ -841,6 +917,14 @@
       flex: 0 0 auto;
       color: var(--text-subtle);
       font-size: 10.5px;
+    }
+    @media (max-width: 900px) {
+      .flow-instance-top {
+        grid-template-columns: 1fr;
+      }
+      .flow-instance-meta {
+        justify-content: flex-start;
+      }
     }
     .flow-arrow {
       flex: 0 0 auto;
@@ -1963,6 +2047,26 @@
       return 'unknown';
     }
 
+    function isGenericTaskTitle(title) {
+      return /^(BUG|TASK|FEATURE|ROAD|IDEA|ISSUE)$/i.test(String(title || '').trim());
+    }
+
+    function mergeTaskDetails(apiTasks, parsedTasks) {
+      if (!apiTasks.length) return parsedTasks;
+      const parsedById = new Map(parsedTasks.map(task => [task.id, task]));
+      return apiTasks.map(task => {
+        const parsed = parsedById.get(task.id);
+        if (!parsed) return task;
+        return {
+          ...task,
+          title: isGenericTaskTitle(task.title) && parsed.title ? parsed.title : (task.title || parsed.title),
+          body: parsed.body || task.body || '',
+          streamParent: task.streamParent || parsed.streamParent || '',
+          dueDate: parsed.dueDate || task.dueDate || null,
+        };
+      });
+    }
+
     /* ─── Edge extraction ──────────────────────────────────────────── */
     // Edges come from three signals, in order of trust:
     //   1. Explicit **Depends-on:** / **Blocks:** lines → solid
@@ -3082,6 +3186,112 @@
         </article>`;
     }
 
+    function getTaskExcerpt(task) {
+      const lines = String(task?.body || '')
+        .split('\n')
+        .map(line => line.replace(/[*_`#>-]/g, '').trim())
+        .filter(line => line && !/^type:|^priority:|^status:|^lane:|^depends/i.test(line));
+      const text = lines.find(line => line.length > 24) || '';
+      return text.length > 180 ? text.slice(0, 177).trimEnd() + '...' : text;
+    }
+
+    function getTrackTaskIds(track, line, taskById) {
+      const lineTaskIds = new Set([...(line.sequenceTaskIds || []), ...(line.supportTaskIds || [])]);
+      return [...new Set(track.taskTags || [])]
+        .filter(id => lineTaskIds.has(id) && taskById.has(id));
+    }
+
+    function getTrackPrimaryTaskId(track, line, taskById) {
+      const taskIds = getTrackTaskIds(track, line, taskById);
+      return taskIds.find(id => taskById.get(id)?.status !== 'done') || taskIds[0] || line.currentTaskId;
+    }
+
+    function buildAgentSequence(line, primaryTaskId, taskById) {
+      const sequenceTasks = (line.sequenceTaskIds || [])
+        .map(id => taskById.get(id))
+        .filter(Boolean);
+      const startIdx = primaryTaskId
+        ? Math.max(0, sequenceTasks.findIndex(task => task.id === primaryTaskId))
+        : 0;
+      const upcoming = startIdx >= 0 ? sequenceTasks.slice(startIdx) : sequenceTasks;
+      if (upcoming.length > 0 && upcoming[0]?.id === primaryTaskId) {
+        return upcoming.map((task, index) => ({
+          task,
+          state: index === 0 ? 'in-progress' : (index === 1 ? 'planned' : 'upcoming'),
+        }));
+      }
+      const primaryTask = primaryTaskId ? taskById.get(primaryTaskId) : null;
+      return primaryTask
+        ? [{ task: primaryTask, state: 'in-progress' }]
+        : [];
+    }
+
+    function buildActiveInstanceRows(lineStates, taskById) {
+      const rows = [];
+      for (const line of lineStates) {
+        const tracks = (line.sessionTracks || []).filter(isRuntimeActive);
+        if (tracks.length === 0 && line.isLiveInstance) {
+          const primaryTaskId = line.currentTaskId;
+          rows.push({
+            line,
+            track: null,
+            primaryTaskId,
+            sequence: buildAgentSequence(line, primaryTaskId, taskById),
+          });
+          continue;
+        }
+
+        for (const track of tracks) {
+          const primaryTaskId = getTrackPrimaryTaskId(track, line, taskById);
+          rows.push({
+            line,
+            track,
+            primaryTaskId,
+            sequence: buildAgentSequence(line, primaryTaskId, taskById),
+          });
+        }
+      }
+      return rows.sort((a, b) => {
+        const ta = a.track?.lastSeenMs || Date.parse(a.track?.ts || '') || 0;
+        const tb = b.track?.lastSeenMs || Date.parse(b.track?.ts || '') || 0;
+        return tb - ta;
+      });
+    }
+
+    function renderAgentFlowRow(instance, taskById) {
+      const { line, track, primaryTaskId, sequence } = instance;
+      const task = primaryTaskId ? taskById.get(primaryTaskId) : null;
+      const agentName = track ? formatSessionName(track) : (line.owner ? `Instance ${line.owner.session_short}` : line.name);
+      const lastSeen = track ? formatRelativeTime(track.ts || track.lastSeenMs || '') : lineActivityLabel(line);
+      const taskTitle = task ? `${task.id} - ${task.title || 'Untitled task'}` : 'No task selected';
+      const detail = getTaskExcerpt(task);
+      const stateClass = task?.status === 'in-progress' ? 'in-progress'
+        : task?.status === 'paused' ? 'blocked'
+        : line.state;
+      const stateLabel = task?.status ? statusLabel(task.status) : lineStateLabel(line);
+
+      return `
+        <article class="flow-row agent-flow ${line.state === 'blocked' ? 'blocked' : ''}">
+          <div class="flow-instance-top">
+            <div class="flow-instance-agent">
+              <div class="flow-instance-agent-code">${escapeHtml(agentName)}</div>
+              <div class="flow-instance-agent-sub">${escapeHtml(lastSeen || 'live')}</div>
+            </div>
+            <div class="flow-instance-task">
+              <div class="flow-instance-task-kicker">${escapeHtml(line.name)}</div>
+              <button class="flow-instance-task-title" type="button" data-id="${escapeAttr(task?.id || '')}">${escapeHtml(taskTitle)}</button>
+              ${detail ? `<div class="flow-instance-task-detail">${escapeHtml(detail)}</div>` : ''}
+            </div>
+            <div class="flow-instance-meta">
+              <span class="flow-row-state ${stateClass}">${stateLabel}</span>
+              ${task?.priority ? `<span class="flow-row-owner">${escapeHtml(task.priority)}</span>` : ''}
+              ${track?.source ? `<span class="flow-row-owner">${escapeHtml(track.source)}</span>` : ''}
+            </div>
+          </div>
+          ${renderFlowSequence(sequence)}
+        </article>`;
+    }
+
     function renderCurrentFlowRow(line, taskById) {
       // Render the full declared Sequence from the current step onward, so users
       // see the whole queued flow — not just current+next. Horizontal scroll
@@ -3229,10 +3439,8 @@
       const availableFlows = lineStates.filter(line => !line.isLiveInstance);
       const backlogGroups = buildBacklogGroups(lineStates, taskById);
       const unassignedSessions = buildUnassignedSessionTracks(lines);
-      const activeInstanceCount = activeFlows.reduce((sum, line) => {
-        const activeTracks = (line.sessionTracks || []).filter(isRuntimeActive).length;
-        return sum + Math.max(activeTracks, line.owner ? 1 : 0, line.source === 'derived-priority' ? 1 : 0);
-      }, 0) + unassignedSessions.length;
+      const activeInstances = buildActiveInstanceRows(activeFlows, taskById);
+      const activeInstanceCount = activeInstances.length + unassignedSessions.length;
 
       const lineStatesById = new Map(lineStates.map(line => [line.id, line]));
       if (!selectedLineId || !lineStatesById.has(selectedLineId)) {
@@ -3257,7 +3465,7 @@
               <span class="flow-section-count primary">${activeInstanceCount}</span>
             </div>
             <div class="flow-list">
-              ${activeFlows.length > 0 ? activeFlows.map(line => renderCurrentFlowRow(line, taskById)).join('') : '<div class="flow-empty">No active instances from current rough-cut logs or locks.</div>'}
+              ${activeInstances.length > 0 ? activeInstances.map(instance => renderAgentFlowRow(instance, taskById)).join('') : '<div class="flow-empty">No active instances from current rough-cut logs or locks.</div>'}
               ${unassignedSessions.length > 0 ? renderUnassignedAgentRow(unassignedSessions, taskById) : ''}
             </div>
           </section>
@@ -4584,7 +4792,7 @@
         ]);
         rawMarkdown = json.content || '';
         const parsedTasks = parseMasterPlan(rawMarkdown);
-        allTasks = apiTasks.length ? apiTasks : parsedTasks;
+        allTasks = mergeTaskDetails(apiTasks, parsedTasks);
         currentProjectRoot = status?.project || '';
         currentProjectFilter = deriveProjectFilter(status);
         const [locks, recentEntries, sessions] = await Promise.all([
