@@ -66,4 +66,12 @@ describe('active agent tracks regression coverage', () => {
         expect(flowSource).toContain('data-action="assign-session-task"');
         expect(flowSource).toContain('async function assignSessionTask(sid, taskId)');
     });
+
+    it('uses poster-style visual hierarchy for each agent track', () => {
+        expect(flowSource).toContain('agent-track-poster');
+        expect(flowSource).toContain('agent-track-ribbon');
+        expect(flowSource).toContain('agent-track-headline');
+        expect(flowSource).toContain('agent-track-slash');
+        expect(flowSource).toContain('agent-track-sequence');
+    });
 });

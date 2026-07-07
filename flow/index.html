@@ -684,12 +684,171 @@
       background: linear-gradient(180deg, rgba(22, 24, 30, 0.95), rgba(18, 20, 26, 0.9));
     }
     .flow-row.agent-flow {
-      border-radius: 10px;
-      border-color: rgba(255, 255, 255, 0.08);
-      border-left: 2px solid rgba(99, 102, 241, 0.72);
-      background: linear-gradient(180deg, rgba(17, 19, 25, 0.98), rgba(12, 14, 19, 0.96));
-      padding: 14px 16px 16px;
-      gap: 12px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      border-color: rgba(255, 255, 255, 0.1);
+      background:
+        linear-gradient(115deg, rgba(15, 23, 42, 0.98) 0%, rgba(10, 13, 19, 0.98) 42%, rgba(18, 20, 27, 0.96) 100%);
+      padding: 0;
+      gap: 0;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .flow-row.agent-flow::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(132deg, rgba(244, 114, 43, 0.18), transparent 28%),
+        repeating-linear-gradient(132deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 28px);
+      opacity: 0.75;
+    }
+    .flow-row.agent-flow.needs-assignment::before {
+      background:
+        linear-gradient(132deg, rgba(245, 158, 11, 0.16), transparent 30%),
+        repeating-linear-gradient(132deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 28px);
+    }
+    .agent-track-poster {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(170px, 0.34fr) minmax(320px, 1fr) auto;
+      gap: 20px;
+      align-items: stretch;
+      min-height: 174px;
+      padding: 22px 24px 20px;
+    }
+    .agent-track-ribbon {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 0;
+      padding: 2px 0 4px;
+    }
+    .agent-track-ribbon::after {
+      content: '';
+      position: absolute;
+      right: -10px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+    }
+    .agent-track-agent {
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0.09em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .agent-track-agent-meta {
+      color: var(--text-subtle);
+      font-size: 11px;
+      line-height: 1.45;
+      margin-top: 8px;
+    }
+    .agent-track-owner-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 50%;
+      color: #f4a261;
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .agent-track-main {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+      min-width: 0;
+    }
+    .agent-track-copy {
+      min-width: 0;
+    }
+    .agent-track-kicker {
+      color: rgba(226, 232, 240, 0.54);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.2em;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .agent-track-headline {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      margin-top: 9px;
+      text-align: left;
+      color: var(--text-primary);
+      font: inherit;
+      font-size: clamp(22px, 3.1vw, 36px);
+      font-weight: 950;
+      letter-spacing: 0;
+      line-height: 1.02;
+      cursor: pointer;
+      max-width: 18ch;
+      overflow-wrap: anywhere;
+    }
+    .agent-track-headline:hover {
+      color: #f8d8bd;
+    }
+    .agent-track-headline.static {
+      cursor: default;
+    }
+    .agent-track-detail {
+      margin-top: 12px;
+      max-width: 76ch;
+      color: rgba(203, 213, 225, 0.76);
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+    .agent-track-slash {
+      align-self: flex-start;
+      display: inline-flex;
+      max-width: min(640px, 100%);
+      background: #f4e0c9;
+      color: #101823;
+      clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 100%, 0% 100%);
+      padding: 11px 48px 11px 16px;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      line-height: 1.25;
+      text-transform: uppercase;
+    }
+    .agent-track-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .agent-track-meta {
+      position: relative;
+      display: flex;
+      align-content: flex-start;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-width: 170px;
+      max-width: 230px;
+    }
+    .agent-track-sequence {
+      position: relative;
+      padding: 0 22px 20px;
+    }
+    .agent-track-sequence .flow-sequence {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 16px;
     }
     .flow-row-top {
       display: flex;
@@ -771,7 +930,7 @@
       gap: 8px;
       align-items: center;
       flex-wrap: wrap;
-      margin-top: 4px;
+      margin-top: 0;
     }
     .flow-task-select {
       min-width: min(360px, 100%);
@@ -942,6 +1101,25 @@
       font-size: 10.5px;
     }
     @media (max-width: 900px) {
+      .agent-track-poster {
+        grid-template-columns: 1fr;
+        min-height: 0;
+        padding: 18px;
+      }
+      .agent-track-ribbon::after {
+        display: none;
+      }
+      .agent-track-headline {
+        max-width: none;
+        font-size: 24px;
+      }
+      .agent-track-meta {
+        justify-content: flex-start;
+        max-width: none;
+      }
+      .agent-track-sequence {
+        padding: 0 18px 18px;
+      }
       .flow-instance-top {
         grid-template-columns: 1fr;
       }
@@ -3240,18 +3418,24 @@
       const agentName = formatSessionName(track);
       const lastSeen = formatRelativeTime(track.ts || track.lastSeenMs || '') || 'live';
       const detail = 'No task tag or saved assignment exists for this live session.';
+      const initials = String(track.agent || 'agent').slice(0, 2).toUpperCase();
 
       return `
         <article class="flow-row agent-flow needs-assignment">
-          <div class="flow-instance-top">
-            <div class="flow-instance-agent">
-              <div class="flow-instance-agent-code">${escapeHtml(agentName)}</div>
-              <div class="flow-instance-agent-sub">${escapeHtml(lastSeen)}</div>
+          <div class="agent-track-poster">
+            <div class="agent-track-ribbon">
+              <div>
+                <div class="agent-track-agent">${escapeHtml(agentName)}</div>
+                <div class="agent-track-agent-meta">${escapeHtml(lastSeen)}<br>${escapeHtml(track.source || 'live session')}</div>
+              </div>
+              <div class="agent-track-owner-mark">${escapeHtml(initials)}</div>
             </div>
-            <div class="flow-instance-task">
-              <div class="flow-instance-task-kicker">Assignment required</div>
-              <div class="flow-instance-task-title">No task assigned</div>
-              <div class="flow-instance-task-detail">${escapeHtml(detail)}</div>
+            <div class="agent-track-main">
+              <div class="agent-track-copy">
+                <div class="agent-track-kicker">Assignment required</div>
+                <div class="agent-track-headline static">No task assigned</div>
+                <div class="agent-track-detail">${escapeHtml(detail)}</div>
+              </div>
               <div class="flow-assignment-controls">
                 <select class="flow-task-select" data-session-task-select data-session-sid="${escapeAttr(track.sid || '')}">
                   ${renderTaskAssignmentOptions(taskById)}
@@ -3259,12 +3443,12 @@
                 <button class="flow-btn primary" type="button" data-action="assign-session-task" data-session-sid="${escapeAttr(track.sid || '')}" data-session-agent="${escapeAttr(track.agent || '')}">Assign</button>
               </div>
             </div>
-            <div class="flow-instance-meta">
+            <div class="agent-track-meta">
               <span class="flow-row-state ready">No task tag</span>
               ${track?.source ? `<span class="flow-row-owner">${escapeHtml(track.source)}</span>` : ''}
             </div>
           </div>
-          ${renderFlowSequence([{ fallbackText: 'Needs assignment', state: 'planned' }])}
+          <div class="agent-track-sequence">${renderFlowSequence([{ fallbackText: 'Needs assignment', state: 'planned' }])}</div>
         </article>`;
     }
 
@@ -3351,26 +3535,34 @@
         : task?.status === 'paused' ? 'blocked'
         : line.state;
       const stateLabel = task?.status ? statusLabel(task.status) : lineStateLabel(line);
+      const agentInitials = String(track?.agent || agentName || 'agent').slice(0, 2).toUpperCase();
+      const sourceLabel = track?.source || track?.tool || 'live';
 
       return `
         <article class="flow-row agent-flow ${line.state === 'blocked' ? 'blocked' : ''}">
-          <div class="flow-instance-top">
-            <div class="flow-instance-agent">
-              <div class="flow-instance-agent-code">${escapeHtml(agentName)}</div>
-              <div class="flow-instance-agent-sub">${escapeHtml(lastSeen || 'live')}</div>
+          <div class="agent-track-poster">
+            <div class="agent-track-ribbon">
+              <div>
+                <div class="agent-track-agent">${escapeHtml(agentName)}</div>
+                <div class="agent-track-agent-meta">${escapeHtml(lastSeen || 'live')}<br>${escapeHtml(sourceLabel)}</div>
+              </div>
+              <div class="agent-track-owner-mark">${escapeHtml(agentInitials)}</div>
             </div>
-            <div class="flow-instance-task">
-              <div class="flow-instance-task-kicker">${escapeHtml(line.name)}</div>
-              <button class="flow-instance-task-title" type="button" data-id="${escapeAttr(task?.id || '')}">${escapeHtml(taskTitle)}</button>
-              ${detail ? `<div class="flow-instance-task-detail">${escapeHtml(detail)}</div>` : ''}
+            <div class="agent-track-main">
+              <div class="agent-track-copy">
+                <div class="agent-track-kicker">${escapeHtml(line.name)}</div>
+                <button class="agent-track-headline" type="button" data-id="${escapeAttr(task?.id || '')}">${escapeHtml(taskTitle)}</button>
+                ${detail ? `<div class="agent-track-detail">${escapeHtml(detail)}</div>` : ''}
+              </div>
+              ${task ? `<div class="agent-track-slash">${escapeHtml(task.title || task.id)}</div>` : ''}
             </div>
-            <div class="flow-instance-meta">
+            <div class="agent-track-meta">
               <span class="flow-row-state ${stateClass}">${stateLabel}</span>
               ${task?.priority ? `<span class="flow-row-owner">${escapeHtml(task.priority)}</span>` : ''}
               ${track?.source ? `<span class="flow-row-owner">${escapeHtml(track.source)}</span>` : ''}
             </div>
           </div>
-          ${renderFlowSequence(sequence)}
+          <div class="agent-track-sequence">${renderFlowSequence(sequence)}</div>
         </article>`;
     }
 
