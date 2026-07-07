@@ -52,4 +52,18 @@ describe('active agent tracks regression coverage', () => {
     it('does not block the default lane renderer on the graph layout CDN', () => {
         expect(flowSource).toContain('<script async src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1.1.4/dist/dagre.min.js"></script>');
     });
+
+    it('persists explicit task assignments for live sessions without task tags', () => {
+        expect(apiSource).toContain('const SESSION_ASSIGNMENTS_FILE');
+        expect(apiSource).toContain('function applySessionAssignments(sessions, cwd)');
+        expect(apiSource).toContain("app.post('/api/session-assignments'");
+        expect(apiSource).toContain('assignmentSource');
+    });
+
+    it('renders untagged live agents as assignable per-agent rows instead of a bucket', () => {
+        expect(flowSource).toContain('function renderUnassignedAgentFlowRow(track, taskById)');
+        expect(flowSource).toContain('unassignedSessions.map(track => renderUnassignedAgentFlowRow(track, taskById))');
+        expect(flowSource).toContain('data-action="assign-session-task"');
+        expect(flowSource).toContain('async function assignSessionTask(sid, taskId)');
+    });
 });

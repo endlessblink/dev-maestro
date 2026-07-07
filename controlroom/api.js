@@ -22,6 +22,7 @@ const DIRTY_ATTRIBUTION_CACHE_TTL_MS = 2000;
 const dirtyAttributionCache = new Map();
 const GIT_INFO_CACHE_TTL_MS = 5 * 60 * 1000;
 const gitInfoCache = new Map();
+const SESSION_ASSIGNMENTS_FILE = path.join(DATA_DIR, 'session-assignments.json');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,53 @@ function readJSON(filePath, fallback) {
 function writeJSON(filePath, data) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+function normalizeTaskId(taskId) {
+    const value = String(taskId || '').trim().toUpperCase();
+    return /^[A-Z][A-Z0-9]*-\d+$/.test(value) ? value : '';
+}
+
+function sessionAssignmentKey(cwd) {
+    try {
+        return path.resolve(cwd || '');
+    } catch {
+        return String(cwd || '');
+    }
+}
+
+function readSessionAssignmentState() {
+    const state = readJSON(SESSION_ASSIGNMENTS_FILE, { projects: {} });
+    if (!state || typeof state !== 'object') return { projects: {} };
+    if (!state.projects || typeof state.projects !== 'object') state.projects = {};
+    return state;
+}
+
+function writeSessionAssignmentState(state) {
+    writeJSON(SESSION_ASSIGNMENTS_FILE, state);
+}
+
+function getSessionAssignments(cwd) {
+    const key = sessionAssignmentKey(cwd);
+    const state = readSessionAssignmentState();
+    const assignments = state.projects[key];
+    return assignments && typeof assignments === 'object' ? assignments : {};
+}
+
+function applySessionAssignments(sessions, cwd) {
+    const assignments = getSessionAssignments(cwd);
+    return sessions.map(session => {
+        const assignment = assignments[session.sid];
+        const assignedTaskId = normalizeTaskId(assignment?.taskId);
+        if (!assignedTaskId) return session;
+
+        return {
+            ...session,
+            taskTags: [...new Set([...(session.taskTags || []), assignedTaskId])],
+            assignedTaskId,
+            assignmentSource: 'manual'
+        };
+    });
 }
 
 /**
@@ -1984,11 +2032,14 @@ Start by reviewing the recent changes and pick up the next task.`;
             });
         }
 
-        return [...sessionsById.values()].map(session => ({
+        const sessions = [...sessionsById.values()].map(session => ({
             ...session,
             distinctFiles: session.distinctFiles.size,
             taskTags: [...session.taskTags]
-        })).sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+        }));
+
+        return applySessionAssignments(sessions, cwd)
+            .sort((a, b) => b.lastSeenMs - a.lastSeenMs);
     }
 
     app.get('/api/changelog/projects', (req, res) => {
@@ -2098,6 +2149,63 @@ Start by reviewing the recent changes and pick up the next task.`;
             res.json(getActiveSessions(minutes, cwd));
         } catch (error) {
             res.status(500).json({ error: 'Failed to compute active sessions', detail: error.message });
+        }
+    });
+
+    app.get('/api/session-assignments', (req, res) => {
+        const cwd = getRequestCwd(req);
+        if (!cwd) {
+            res.status(400).json({ error: 'cwd is required' });
+            return;
+        }
+
+        try {
+            const assignments = getSessionAssignments(cwd);
+            res.json(Object.values(assignments));
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to load session assignments', detail: error.message });
+        }
+    });
+
+    app.post('/api/session-assignments', express.json(), (req, res) => {
+        const cwd = getRequestCwd(req);
+        const body = req.body || {};
+        const sid = typeof body.sid === 'string' ? body.sid.trim() : '';
+        const taskId = normalizeTaskId(body.taskId);
+
+        if (!cwd) {
+            res.status(400).json({ error: 'cwd is required' });
+            return;
+        }
+        if (!sid) {
+            res.status(400).json({ error: 'sid is required' });
+            return;
+        }
+        if (body.taskId && !taskId) {
+            res.status(400).json({ error: 'taskId must look like TASK-123 or T-123' });
+            return;
+        }
+
+        try {
+            const key = sessionAssignmentKey(cwd);
+            const state = readSessionAssignmentState();
+            if (!state.projects[key]) state.projects[key] = {};
+
+            if (!taskId) {
+                delete state.projects[key][sid];
+            } else {
+                state.projects[key][sid] = {
+                    sid,
+                    taskId,
+                    agent: typeof body.agent === 'string' ? body.agent.trim() : '',
+                    assignedAtMs: Date.now()
+                };
+            }
+
+            writeSessionAssignmentState(state);
+            res.json({ ok: true, sid, taskId: taskId || null, assignmentSource: 'manual' });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to save session assignment', detail: error.message });
         }
     });
 
