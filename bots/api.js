@@ -711,4 +711,4 @@ module.exports = function mountBotsRoutes(app) {
     });
 };
 
-module.exports.helpers = { buildCatalog, renderMarkdown, discoverManifests, scoreMatch, AGENT_INDEX_PATH };
+module.exports.helpers = { buildCatalog, renderMarkdown, discoverManifests, scoreMatch, personaNameFromPrompt, AGENT_INDEX_PATH };
