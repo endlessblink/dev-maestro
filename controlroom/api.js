@@ -864,6 +864,10 @@ function readOpenCodeEntries(days, projectFilter) {
 
 // ─── Route mount ─────────────────────────────────────────────────────────────
 
+// Shared with the Bots tab (bots/api.js) — reuses the cached git lookup and the
+// projects.json registry rather than re-implementing either.
+const sharedHelpers = { getGitInfo, loadProjects, findProject, detectTechStack };
+
 module.exports = function mountControlRoomRoutes(app) {
 
     // Ensure data directories exist at startup
@@ -2243,3 +2247,5 @@ Start by reviewing the recent changes and pick up the next task.`;
     });
 
 };
+
+module.exports.helpers = sharedHelpers;

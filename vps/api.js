@@ -225,6 +225,58 @@ function autoGradient(name) {
     };
 }
 
+// ─── Shared discovery snapshot ────────────────────────────────────────────────
+// The Bots tab needs the same SSH discovery the VPS tab does. Rather than open a
+// second SSH round-trip per request, both go through this TTL-cached snapshot.
+const SNAPSHOT_TTL_MS = 20000;
+let snapshotCache = null;      // { at, value }
+let snapshotInFlight = null;   // dedupes concurrent callers
+
+async function getDiscoverySnapshot(options) {
+    const opts = options || {};
+    const now = Date.now();
+
+    if (!opts.force && snapshotCache && now - snapshotCache.at < SNAPSHOT_TTL_MS) {
+        return snapshotCache.value;
+    }
+    if (snapshotInFlight) return snapshotInFlight;
+
+    snapshotInFlight = (async () => {
+        const bots = loadBots();
+        let sshResult = null;
+        let sshError = null;
+        try {
+            // 30s budget: the discovery script (docker ps -a, top -bn1, …) can
+            // exceed 15s when the VPS is under load — better slow than blank.
+            sshResult = await sshRun('bash -s', buildDiscoveryScript(bots), 30000);
+        } catch (err) {
+            sshError = err.message.includes('timeout') ? 'timeout' : 'ssh_failed';
+        }
+
+        const sshOk = !!sshResult;
+        const discovery = sshOk
+            ? parseDiscovery(sshResult.stdout)
+            : { docker: {}, systemd: {}, systemd2: {}, staticdir: {}, resources: {} };
+
+        const pings = {};
+        await Promise.all(
+            bots
+                .filter(b => b.httpPingUrl)
+                .map(async b => { pings[b.id] = await httpPing(b.httpPingUrl, 4000); })
+        );
+
+        const value = { bots, discovery, pings, sshOk, sshError, timestamp: new Date().toISOString() };
+        snapshotCache = { at: Date.now(), value };
+        return value;
+    })();
+
+    try {
+        return await snapshotInFlight;
+    } finally {
+        snapshotInFlight = null;
+    }
+}
+
 module.exports = function(app) {
 
     // GET /api/vps/bots — return registry (no SSH needed)
@@ -253,34 +305,11 @@ module.exports = function(app) {
 
     // GET /api/vps/status — live discovery via SSH + HTTP pings
     app.get('/api/vps/status', async (req, res) => {
-        const bots = loadBots();
-        const timestamp = new Date().toISOString();
-
-        let sshResult = null;
-        let sshError = null;
-        try {
-            // 30s budget: the discovery script (docker ps -a, top -bn1, …) can
-            // exceed 15s when the VPS is under load — better slow than blank.
-            sshResult = await sshRun('bash -s', buildDiscoveryScript(bots), 30000);
-        } catch (err) {
-            sshError = err.message.includes('timeout') ? 'timeout' : 'ssh_failed';
-        }
-
-        const sshOk = !!sshResult;
-        // Graceful degradation: when SSH discovery is unavailable, keep serving the
-        // registered services via their HTTP health pings instead of blanking the
-        // whole tab. Empty discovery => computeStatus falls back to the ping result.
-        const discovery = sshOk
-            ? parseDiscovery(sshResult.stdout)
-            : { docker: {}, systemd: {}, systemd2: {}, staticdir: {}, resources: {} };
-
-        // Parallel HTTP pings for bots with a pingUrl
-        const pings = {};
-        await Promise.all(
-            bots
-                .filter(b => b.httpPingUrl)
-                .map(async b => { pings[b.id] = await httpPing(b.httpPingUrl, 4000); })
-        );
+        // Graceful degradation: when SSH discovery is unavailable, the snapshot still
+        // carries HTTP health pings, so registered services report status instead of
+        // blanking the whole tab. Empty discovery => computeStatus falls back to ping.
+        const snapshot = await getDiscoverySnapshot({ force: req.query.refresh === '1' });
+        const { bots, discovery, pings, sshOk, sshError, timestamp } = snapshot;
 
         // Track which Docker containers are claimed by bots.json entries
         const claimedContainers = new Set(
@@ -473,4 +502,15 @@ printf '{"cpu":%s,"ram":{"used":%s,"total":%s,"pct":%s},"disk":{"pct":%s,"total"
             res.json({ ok: false, service: serviceId, error: err.message.slice(0, 300) });
         }
     });
+};
+
+// Shared with the Bots tab (bots/api.js) so both surfaces use one SSH path.
+module.exports.helpers = {
+    sshRun,
+    httpPing,
+    loadBots,
+    computeStatus,
+    getDiscoverySnapshot,
+    VPS_HOST,
+    VPS_USER
 };

@@ -36,6 +36,7 @@
             --color-health: #22c55e;
             --color-changelog: #4ECDC4;
             --color-flow: #6366f1;
+            --color-bots: #ec4899;
 
             /* Transitions */
             --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -248,6 +249,11 @@
         .tab.changelog:hover .icon svg,
         .tab.changelog.active .icon svg {
             stroke: var(--color-changelog);
+        }
+
+        .tab.bots:hover .icon svg,
+        .tab.bots.active .icon svg {
+            stroke: var(--color-bots);
         }
 
         .spacer {
@@ -850,6 +856,17 @@
                 </span>
                 <span>VPS</span>
             </button>
+            <button class="tab bots" data-panel="bots">
+                <span class="icon">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="4" y="8" width="16" height="12" rx="2" />
+                        <line x1="12" y1="4" x2="12" y2="8" />
+                        <circle cx="9" cy="14" r="1" />
+                        <circle cx="15" cy="14" r="1" />
+                    </svg>
+                </span>
+                <span>Bots</span>
+            </button>
         </nav>
 
         <div class="spacer"></div>
@@ -947,6 +964,10 @@
         <div id="vps" class="panel">
             <!-- Lazy load: src set on first tab activation -->
             <iframe data-src="vps/index.html" title="VPS Monitor"></iframe>
+        </div>
+        <div id="bots" class="panel">
+            <!-- Lazy load: src set on first tab activation -->
+            <iframe data-src="bots/index.html" title="Bots & Personas"></iframe>
         </div>
     </main>
 

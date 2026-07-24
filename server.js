@@ -8,8 +8,10 @@ const taskEngine = require('./modules/task-engine');
 const projectScanner = require('./modules/project-scanner');
 const changelogEngine = require('./modules/changelog-engine');
 const { resolveMasterPlanPath } = require('./modules/master-plan-path');
+const { resolveBindHost } = require('./modules/network-access');
 const mountControlRoomRoutes = require('./controlroom/api');
 const mountVpsRoutes = require('./vps/api');
+const mountBotsRoutes = require('./bots/api');
 
 // ============================================================================
 // LOCAL OVERRIDES SYSTEM
@@ -101,6 +103,9 @@ const healthScanner = require('./scripts/health-scanner');
 const app = express();
 // Use port from: 1) env var, 2) local config, 3) default 6010
 const PORT = process.env.PORT || localConfig.port || 6010;
+// Keep the control plane local by default. Remote access should proxy through
+// an authenticated private network such as Tailscale Serve.
+const HOST = resolveBindHost({ localConfig });
 
 
 // Cache for health scan results
@@ -203,6 +208,9 @@ mountControlRoomRoutes(app);
 
 // 7. Mount VPS monitor routes (/api/vps/status, /api/vps/bots, /api/vps/cover/:id)
 mountVpsRoutes(app);
+
+// 8. Mount Bots catalog routes (/api/bots, /api/bots/index.md, /api/bots/resolve)
+mountBotsRoutes(app);
 
 // Status API - for Claude to detect if Watchpost is running
 app.get('/api/status', (req, res) => {
@@ -1001,8 +1009,23 @@ app.post('/api/task/:id', (req, res, next) => {
 
 // POST /api/task/add - Add a new task to MASTER_PLAN.md
 app.post('/api/task/add', (req, res) => {
-    const { title, type = 'TASK', priority = 'Medium', description = '' } = req.body;
-    const masterPlanPath = getMasterPlanPath();
+    const { title, type = 'TASK', priority = 'Medium', description = '', project } = req.body;
+
+    // Optional per-request target: route the task into a named tracked project's
+    // MASTER_PLAN without changing the globally-active project (no side effects,
+    // no race). Omit `project` to use the active project as before.
+    let masterPlanPath;
+    if (project) {
+        const match = readProjects().projects.find(p => p.name === project);
+        if (!match || !match.masterPlan) {
+            return res.status(400).json({
+                error: `Project "${project}" not found or has no MASTER_PLAN. Use a name from GET /api/projects.`
+            });
+        }
+        masterPlanPath = match.masterPlan;
+    } else {
+        masterPlanPath = getMasterPlanPath();
+    }
 
     if (!title) {
         return res.status(400).json({ error: 'Missing required field: title' });
@@ -3767,12 +3790,13 @@ app.get('/api/changelog/events', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
     const url = `http://localhost:${PORT}`;
     // Cyan + underline + OSC 8 hyperlink for maximum terminal compatibility
     // OSC 8: \x1b]8;;URL\x1b\\ ... \x1b]8;;\x1b\\
     // Cyan: \x1b[36m, Underline: \x1b[4m, Reset: \x1b[0m
     console.log(`Watchpost running at \x1b]8;;${url}\x1b\\\x1b[36m\x1b[4m${url}\x1b[0m\x1b]8;;\x1b\\`);
+    console.log(`Listening on ${HOST}:${PORT}`);
     console.log(`Serving static files from: ${__dirname}`);
 
     // BUG-1113: Clean up stale worktrees on startup (older than 24h)

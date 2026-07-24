@@ -1,111 +1,50 @@
-# Dev Maestro
+# Watchpost — Developer Guide & API Reference
 
-Dev Maestro is an orchestration dashboard and task management system for AI-assisted development projects. It provides a web dashboard, terminal UI, Claude Code skill integration, and agent management via the "Happy" system.
+Watchpost is a local AI orchestration dashboard that tracks tasks, health, changelogs, and dependencies across all projects.
 
-## Finding MASTER_PLAN.md
+## Project Scope
+- Server installation: `~/.watchpost/`
+- Projects registry: `~/.watchpost/projects.json`
+- Changelog DB (all sessions): `~/.watchpost/data/changelog.db`
+- Per-project task DB: `.watchpost/db.sqlite` (in project root)
 
-**Rule: Always read `.env` first** when looking for tasks, bugs, or MASTER_PLAN.md.
+## Command Line Interface (CLI)
+`watchpost` is available at `~/.local/bin/watchpost`.
+Commands: `tui`, `dashboard`, `status`, `stop`, `install`, `archive`, `discover`, `help`.
 
-The `MASTER_PLAN_PATH` variable in `.env` points to the active project's plan file. This is an absolute path to an external project — Dev Maestro manages projects, it doesn't contain them.
+## Key API Endpoints (port 6010)
 
-Resolution order:
-1. `MASTER_PLAN_PATH` environment variable
-2. `projects.json` registry (match CWD to registered project roots)
-3. `.env` file in this directory (`MASTER_PLAN_PATH=...`)
-4. Relative paths: `docs/MASTER_PLAN.md`, `MASTER_PLAN.md`
+Always pass the current repository path as the `cwd` query parameter to scope commands:
+`curl -sG --data-urlencode "cwd=$(pwd)" http://localhost:6010/api/status`
 
-## Key Files
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/discover` | GET | Full API manifest with all endpoints, CLI commands, and data locations |
+| `/api/status` | GET | Active project, server health, uptime |
+| `/api/projects` | GET | All registered projects with paths and MASTER_PLAN locations |
+| `/api/master-plan` | GET | Parsed MASTER_PLAN.md for the current repo |
+| `/api/next-id` | GET | Next available task ID for the current repo |
+| `/api/beads/ready` | GET | Tasks with all deps resolved — ready to work on |
+| `/api/beads/graph` | GET | Full dependency graph |
+| `/api/health/quick` | GET | Quick project health assessment |
+| `/api/health/report/json` | GET | Detailed health report (machine-readable) |
+| `/api/skills` | GET | Available Claude Code skills |
+| `/api/task/add` | POST | Add a new task |
+| `/api/task/:id/status` | POST | Update task status |
+| `/api/beads/claim/:id` | POST | Claim a task (sets IN PROGRESS) |
+| `/api/beads/close/:id` | POST | Close a task (sets DONE) |
+| `/api/bots` | GET | Bot catalog — manifests + live runtime + live personas + git + drift. `?refresh=1` bypasses cache |
+| `/api/bots/index.md` | GET | Agent-readable fleet index; also rewrites `~/.claude/knowledge/bot-fleet.md` |
+| `/api/bots/resolve?q=` | GET | Alias lookup — "diet bot" → the bot that serves it, with its live prompt |
+| `/api/bots/personas` | GET | Live persona map plus personas no manifest claims |
 
-| File | Purpose |
-|------|---------|
-| `server.js` | Express API server (port 6010) — serves dashboard + REST API |
-| `index.html` | Dashboard web UI (kanban board, health scanner, agent view) |
-| `.env` | Configuration — `MASTER_PLAN_PATH`, `PORT`, memory safeguards |
-| `projects.json` | Multi-project registry (name, root, masterPlan path, modules) |
-| `local/config.json` | Local overrides for port, auto-update, update branch |
-| `tui/` | Terminal UI (React/Ink) — card view, project-aware |
-| `modules/` | Agent management modules (`happy-manager.js`, `happy-safety.js`) |
-| `plugins/` | Plugin system |
-| `scripts/` | Setup and health scanner scripts |
-| `skills/` | Claude Code skill definitions |
-| `data/` | Audit logs and operational data |
+## Bots catalog
 
-## REST API Endpoints
+A bot appears in the Bots tab when its repo has `.watchpost/bot.json` (see the
+`bot-fleet` skill in `skills/bot-fleet/` for the schema). Repos outside the scanned
+tree are added via `botManifestRoots` in `local/config.json`. Personas are read from
+each bot's *running* config over SSH, so the catalog contradicts — and beats — any
+stale description in a bot's own repo; those mismatches surface as drift.
 
-### Core
-- `GET /api/status` — Server health and running state
-- `GET /api/config` — Current configuration
-- `POST /api/config/project` — Update project config
-- `POST /api/config/reload` — Reload configuration from disk
-
-### Tasks (from MASTER_PLAN.md)
-- `GET /api/master-plan` — Full parsed MASTER_PLAN.md content
-- `GET /api/next-id` — Get next available task ID
-- `POST /api/task/:id/status` — Update task status
-- `POST /api/task/:id/complexity` — Set task complexity
-- `POST /api/task/:id` — Update task fields
-- `POST /api/task/add` — Add a new task
-
-### Health Scanner
-- `GET /api/health` — Full health scan (async)
-- `GET /api/health/quick` — Quick health check
-- `GET /api/health/cached` — Return last cached scan results
-- `GET /api/health/status` — Health scan status
-- `POST /api/health/scan` — Trigger new health scan
-- `GET /api/health/report` — Human-readable health report
-- `GET /api/health/report/json` — Machine-readable health report
-
-### Skills & Docs
-- `GET /api/skills` — List available Claude Code skills
-- `GET /api/docs` — List documentation files
-
-### Beads (Agent Orchestration)
-- `GET /api/beads/stats` — Dependency statistics
-- `GET /api/beads/list` — List all beads (tasks)
-- `GET /api/beads/ready` — Tasks with all deps resolved
-- `GET /api/beads/deps/:id` — Dependencies for a specific task
-- `GET /api/beads/graph` — Full dependency graph
-- `GET /api/beads/supervisors` — List supervisors
-- `POST /api/beads/claim/:id` — Claim a task (sets IN PROGRESS)
-- `POST /api/beads/close/:id` — Close a task (sets DONE)
-- `POST /api/beads/merge/:id` — Merge completed agent work
-- `GET /api/beads/agents` — List active agents
-- `GET /api/beads/agents/:id/stream` — Stream agent output (SSE)
-- `POST /api/beads/agents/:id/stop` — Stop an agent
-- `POST /api/beads/agents/:id/command` — Send command to agent
-
-### Worktrees
-- `GET /api/cleanup-worktrees` — List worktrees eligible for cleanup
-- `POST /api/cleanup-worktrees` — Clean up stale worktrees
-
-### Happy System (Human-Approval for Agent Tasks)
-- `GET /api/happy/status` — Happy system status
-- `GET /api/happy/sessions` — List all sessions
-- `POST /api/happy/start` — Start a new happy session
-- `POST /api/happy/stop/:id` — Stop a session
-- `GET /api/happy/session/:id` — Get session details
-- `GET /api/happy/session/:id/output` — Get session output
-- `GET /api/happy/stream/:id` — Stream session output (SSE)
-- `GET /api/happy/queue` — Approval queue
-- `POST /api/happy/queue/:id/approve` — Approve a queued action
-- `POST /api/happy/queue/:id/deny` — Deny a queued action
-- `GET /api/happy/queue/stream` — Stream queue updates (SSE)
-- `GET /api/happy/audit` — Audit log
-- `GET /api/happy/config` — Happy system config
-- `POST /api/happy/config` — Update happy system config
-- `POST /api/happy/check` — Check if action requires approval
-- `GET /api/happy/events` — SSE event stream for happy system
-
-### Events
-- `GET /api/events` — Server-sent events stream for dashboard updates
-- `GET /api/deferred` — Deferred task queue
-
-## Architecture Notes
-
-- Dashboard is a single-page HTML app served by Express
-- Server parses MASTER_PLAN.md on startup and watches for changes
-- TUI is a separate Node.js app in `tui/` using React/Ink
-- Projects are registered in `projects.json` and can be switched without restart
-- Local overrides in `local/` directory are preserved across updates
-- Claude binary is auto-discovered (env var → `~/.local/bin` → VS Code extension → `which`)
-- Memory safeguards configured via `MAX_PARALLEL_AGENTS`, `MIN_MEMORY_GB` in `.env`
+## Formatting Rules
+- **Task title rule:** MASTER_PLAN.md summary table titles MUST be max 80 chars. Put file lists, error details, and technical specifics in the `####` detailed section, not the table row. The Watchpost API rejects titles > 80 chars.

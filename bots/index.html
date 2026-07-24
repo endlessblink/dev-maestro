@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bots — Watchpost</title>
+    <style>
+        :root {
+            --surface-primary: #000000;
+            --surface-secondary: #0d1117;
+            --surface-tertiary: #161b22;
+            --surface-elevated: #21262d;
+            --surface-hover: rgba(255,255,255,0.05);
+
+            --text-primary: #e6edf3;
+            --text-secondary: #c9d1d9;
+            --text-muted: #8b949e;
+            --text-subtle: #6e7681;
+
+            --border-subtle: #1a1a1a;
+            --border-medium: #30363d;
+            --border-strong: #484f58;
+
+            --brand-primary: #4ECDC4;
+            --brand-subtle: rgba(78,205,196,0.12);
+
+            --status-green: #3fb950;
+            --status-amber: #d29922;
+            --status-red: #f85149;
+            --status-neutral: #6e7681;
+
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --radius-full: 9999px;
+            --transition: 150ms cubic-bezier(0.4,0,0.2,1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--surface-primary);
+            color: var(--text-secondary);
+            min-height: 100vh;
+            padding: 1.25rem 1.5rem 2rem;
+        }
+
+        /* ── Top bar ── */
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.25rem;
+        }
+
+        h1 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .meta {
+            font-size: 0.75rem;
+            color: var(--text-subtle);
+        }
+
+        .spacer { flex: 1; }
+
+        button {
+            font: inherit;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            background: var(--surface-tertiary);
+            border: 1px solid var(--border-medium);
+            border-radius: var(--radius-sm);
+            padding: 0.35rem 0.7rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        button:hover { background: var(--surface-elevated); color: var(--text-primary); }
+
+        .banner {
+            border: 1px solid var(--border-medium);
+            border-left: 3px solid var(--status-amber);
+            background: var(--surface-secondary);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.8rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        /* ── Platform groups ── */
+        .group { margin-bottom: 1.75rem; }
+
+        .group-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-subtle);
+            margin-bottom: 0.6rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .group-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border-subtle);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+            gap: 0.75rem;
+        }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 0.85rem 0.95rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .card:hover { border-color: var(--border-strong); background: var(--surface-tertiary); }
+        .card.retired { opacity: 0.55; }
+
+        .card-head {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.45rem;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: var(--radius-full);
+            flex-shrink: 0;
+        }
+        .dot.green { background: var(--status-green); }
+        .dot.amber { background: var(--status-amber); }
+        .dot.red { background: var(--status-red); }
+        .dot.local, .dot.unknown, .dot.retired { background: var(--status-neutral); }
+
+        .card-name {
+            font-size: 0.86rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .badge {
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.12rem 0.4rem;
+            border-radius: var(--radius-full);
+            background: var(--brand-subtle);
+            color: var(--brand-primary);
+        }
+        .badge.warn { background: rgba(210,153,34,0.15); color: var(--status-amber); }
+        .badge.muted { background: var(--surface-elevated); color: var(--text-subtle); }
+
+        .card-summary {
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            line-height: 1.45;
+            margin-bottom: 0.55rem;
+        }
+
+        .kv {
+            font-size: 0.71rem;
+            color: var(--text-subtle);
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.15rem;
+        }
+        .kv span:first-child { color: var(--text-subtle); min-width: 4.2rem; }
+        .kv span:last-child { color: var(--text-muted); word-break: break-all; }
+
+        .personas {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+            margin-top: 0.6rem;
+        }
+        .persona-chip {
+            font-size: 0.68rem;
+            padding: 0.15rem 0.45rem;
+            border-radius: var(--radius-full);
+            background: var(--surface-elevated);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-subtle);
+        }
+        .persona-chip.declared { border-style: dashed; color: var(--text-subtle); }
+
+        .drift {
+            margin-top: 0.6rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border-subtle);
+            font-size: 0.7rem;
+            color: var(--status-amber);
+            line-height: 1.5;
+        }
+        .drift.error { color: var(--status-red); }
+
+        /* ── Detail drawer ── */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            display: none;
+            justify-content: flex-end;
+            z-index: 20;
+        }
+        .overlay.open { display: flex; }
+
+        .drawer {
+            width: min(620px, 92vw);
+            height: 100%;
+            overflow-y: auto;
+            background: var(--surface-secondary);
+            border-left: 1px solid var(--border-medium);
+            padding: 1.25rem 1.4rem 3rem;
+        }
+
+        .drawer h2 {
+            font-size: 1rem;
+            color: var(--text-primary);
+            margin-bottom: 0.15rem;
+        }
+
+        .drawer section { margin-top: 1.25rem; }
+        .drawer h3 {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-subtle);
+            margin-bottom: 0.5rem;
+        }
+
+        .prompt {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.71rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            background: var(--surface-primary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.7rem;
+        }
+
+        .commit {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            padding: 0.2rem 0;
+        }
+        .commit code { color: var(--brand-primary); }
+
+        .empty {
+            font-size: 0.8rem;
+            color: var(--text-subtle);
+            padding: 2rem 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>Bots &amp; Personas</h1>
+        <span class="meta" id="meta">Loading…</span>
+        <span class="spacer"></span>
+        <button id="copy-index">Copy agent index</button>
+        <button id="refresh">Refresh</button>
+    </div>
+
+    <div id="banners"></div>
+    <div id="content"><div class="empty">Loading the fleet…</div></div>
+
+    <div class="overlay" id="overlay">
+        <div class="drawer" id="drawer"></div>
+    </div>
+
+    <script>
+        const PLATFORM_LABELS = {
+            telegram: 'Telegram',
+            discord: 'Discord',
+            whatsapp: 'WhatsApp',
+            unknown: 'Unclassified'
+        };
+
+        let catalog = null;
+
+        const escapeHtml = value => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        async function load(force) {
+            document.getElementById('meta').textContent = 'Loading…';
+            try {
+                const res = await fetch('/api/bots' + (force ? '?refresh=1' : ''));
+                catalog = await res.json();
+                render();
+            } catch (err) {
+                document.getElementById('content').innerHTML =
+                    `<div class="empty">Could not load the catalog: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function renderBanners() {
+            const banners = [];
+            if (catalog.sshError) {
+                banners.push(`Runtime status is unavailable this run (${escapeHtml(catalog.sshError)}). Everything else below is still accurate.`);
+            }
+            if (catalog.personaError) {
+                banners.push(`Live persona read failed (${escapeHtml(catalog.personaError)}). Personas shown may be the declared set from each repo.`);
+            }
+            if (catalog.orphanPersonas.length) {
+                banners.push(`${catalog.orphanPersonas.length} persona(s) are configured on a live bot but not declared in any repo manifest.`);
+            }
+            document.getElementById('banners').innerHTML =
+                banners.map(text => `<div class="banner">${text}</div>`).join('');
+        }
+
+        function cardHtml(bot, index) {
+            const driftErrors = bot.drift.filter(d => d.level === 'error');
+            const personaChips = bot.personas.map(persona => `
+                <span class="persona-chip ${persona.source === 'declared' ? 'declared' : ''}"
+                      title="${escapeHtml(persona.source === 'live' ? 'From the running config' : 'Declared in the repo manifest, not confirmed live')}">
+                    ${escapeHtml(persona.name)}${persona.topicId ? ' · ' + escapeHtml(persona.topicId) : ''}
+                </span>`).join('');
+
+            const target = bot.deployment.container || bot.deployment.service || bot.deployment.kind;
+
+            return `
+                <div class="card ${bot.lifecycle === 'retired' ? 'retired' : ''}" data-index="${index}">
+                    <div class="card-head">
+                        <span class="dot ${bot.status}"></span>
+                        <span class="card-name">${escapeHtml(bot.name)}</span>
+                        ${bot.lifecycle !== 'active' ? `<span class="badge muted">${escapeHtml(bot.lifecycle)}</span>` : ''}
+                        ${bot.registryOnly ? '<span class="badge warn">no manifest</span>' : ''}
+                    </div>
+                    ${bot.summary ? `<div class="card-summary">${escapeHtml(bot.summary)}</div>` : ''}
+                    <div class="kv"><span>Runs as</span><span>${escapeHtml(bot.deployment.kind)}${target && target !== bot.deployment.kind ? ' · ' + escapeHtml(target) : ''} (${escapeHtml(bot.statusDetail)})</span></div>
+                    ${bot.project.root ? `<div class="kv"><span>Code</span><span>${escapeHtml(bot.project.root)}</span></div>` : ''}
+                    ${bot.git && bot.git.lastCommitDate ? `<div class="kv"><span>Last commit</span><span>${escapeHtml(bot.git.lastCommitDate.slice(0, 10))} · ${bot.git.commits7d} in 7d</span></div>` : ''}
+                    ${personaChips ? `<div class="personas">${personaChips}</div>` : ''}
+                    ${bot.drift.length ? `<div class="drift ${driftErrors.length ? 'error' : ''}">${bot.drift.map(d => escapeHtml(d.message)).join('<br>')}</div>` : ''}
+                </div>`;
+        }
+
+        function render() {
+            renderBanners();
+
+            const generated = new Date(catalog.timestamp).toLocaleTimeString();
+            document.getElementById('meta').textContent =
+                `${catalog.bots.length} bots · updated ${generated}`;
+
+            const groups = {};
+            catalog.bots.forEach((bot, index) => {
+                const key = bot.platform || 'unknown';
+                (groups[key] = groups[key] || []).push({ bot, index });
+            });
+
+            const order = ['telegram', 'discord', 'whatsapp', 'unknown'];
+            const keys = Object.keys(groups).sort(
+                (a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)
+            );
+
+            document.getElementById('content').innerHTML = keys.map(key => `
+                <div class="group">
+                    <div class="group-title">${escapeHtml(PLATFORM_LABELS[key] || key)}</div>
+                    <div class="grid">${groups[key].map(entry => cardHtml(entry.bot, entry.index)).join('')}</div>
+                </div>`).join('');
+        }
+
+        function openDrawer(bot) {
+            const personaBlocks = bot.personas.length ? bot.personas.map(persona => `
+                <div>
+                    <div class="kv"><span>${escapeHtml(persona.name)}</span><span>${persona.topicId ? 'topic ' + escapeHtml(persona.topicId) : ''} · ${escapeHtml(persona.source)}${persona.allowed === false ? ' · NOT allow-listed' : ''}</span></div>
+                    <div class="prompt">${escapeHtml(persona.prompt || 'No prompt text available.')}</div>
+                </div>`).join('') : '<div class="card-summary">No personas configured.</div>';
+
+            const commits = bot.git && bot.git.recentCommits.length
+                ? bot.git.recentCommits.map(c => `<div class="commit"><code>${escapeHtml(c.hash)}</code> ${escapeHtml(c.message)}</div>`).join('')
+                : '<div class="card-summary">No git history available.</div>';
+
+            document.getElementById('drawer').innerHTML = `
+                <h2>${escapeHtml(bot.name)}</h2>
+                <div class="meta">${escapeHtml(bot.platform)} · ${escapeHtml(bot.lifecycle)} · ${escapeHtml(bot.status)} (${escapeHtml(bot.statusDetail)})</div>
+                ${bot.summary ? `<section><div class="card-summary">${escapeHtml(bot.summary)}</div></section>` : ''}
+
+                <section>
+                    <h3>Where it lives</h3>
+                    <div class="kv"><span>Deployment</span><span>${escapeHtml(bot.deployment.kind)}</span></div>
+                    ${bot.deployment.container ? `<div class="kv"><span>Container</span><span>${escapeHtml(bot.deployment.container)}</span></div>` : ''}
+                    ${bot.deployment.service ? `<div class="kv"><span>Service</span><span>${escapeHtml(bot.deployment.service)}</span></div>` : ''}
+                    ${bot.deployment.host ? `<div class="kv"><span>Host</span><span>${escapeHtml(bot.deployment.host)}</span></div>` : ''}
+                    ${bot.project.root ? `<div class="kv"><span>Code</span><span>${escapeHtml(bot.project.root)}</span></div>` : ''}
+                    ${bot.chats.map(chat => `<div class="kv"><span>Chat</span><span>${escapeHtml(chat.label || 'chat')} (${escapeHtml(chat.id)})</span></div>`).join('')}
+                    ${bot.aliases.length ? `<div class="kv"><span>Also called</span><span>${escapeHtml(bot.aliases.join(', '))}</span></div>` : ''}
+                </section>
+
+                <section>
+                    <h3>Personas${bot.personaSourceKey ? ` — live from ${escapeHtml(bot.personaSourceKey)}` : ''}</h3>
+                    ${personaBlocks}
+                </section>
+
+                ${bot.notes ? `<section><h3>Notes</h3><div class="card-summary">${escapeHtml(bot.notes)}</div></section>` : ''}
+
+                ${bot.drift.length ? `<section><h3>Drift</h3><div class="drift">${bot.drift.map(d => `(${escapeHtml(d.level)}) ${escapeHtml(d.message)}`).join('<br>')}</div></section>` : ''}
+
+                <section>
+                    <h3>Recent commits</h3>
+                    ${commits}
+                </section>`;
+
+            document.getElementById('overlay').classList.add('open');
+        }
+
+        document.getElementById('content').addEventListener('click', event => {
+            const card = event.target.closest('.card');
+            if (card) openDrawer(catalog.bots[Number(card.dataset.index)]);
+        });
+
+        document.getElementById('overlay').addEventListener('click', event => {
+            if (event.target.id === 'overlay') event.target.classList.remove('open');
+        });
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') document.getElementById('overlay').classList.remove('open');
+        });
+
+        document.getElementById('refresh').addEventListener('click', () => load(true));
+
+        document.getElementById('copy-index').addEventListener('click', async event => {
+            const button = event.currentTarget;
+            try {
+                const markdown = await (await fetch('/api/bots/index.md')).text();
+                await navigator.clipboard.writeText(markdown);
+                button.textContent = 'Copied';
+            } catch {
+                button.textContent = 'Copy failed';
+            }
+            setTimeout(() => { button.textContent = 'Copy agent index'; }, 1800);
+        });
+
+        load(false);
+        setInterval(() => load(false), 60000);
+    </script>
+</body>
+</html>
